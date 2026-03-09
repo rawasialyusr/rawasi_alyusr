@@ -48,27 +48,7 @@ export default function EmployeesFinancialPage() {
   async function fetchEmployees() {
     setLoading(true);
     try {
-      // --- أولاً: المزامنة التلقائية للإعاشة قبل عرض البيانات ---
-      const { data: subRecords } = await supabase
-        .from('housing_subsistence')
-        .select('emp_name, amount');
-
-      if (subRecords) {
-        const summary = subRecords.reduce((acc: any, curr: any) => {
-          const name = curr.emp_name?.trim();
-          const amt = parseFloat(curr.amount) || 0;
-          if (name) acc[name] = (acc[name] || 0) + amt;
-          return acc;
-        }, {});
-
-        // تحديث المبالغ في الخلفية (Bulk update simulation)
-        const updatePromises = Object.entries(summary).map(([name, total]) => {
-          return supabase.from('all_emp').update({ housing_and_subsistence: total }).ilike('Emp_Name', name);
-        });
-        await Promise.all(updatePromises);
-      }
-      // --------------------------------------------------
-
+      // 1. جلب البيانات الأساسية للموظفين
       const from = currentPage * pageSize;
       const to = from + pageSize - 1;
 
@@ -81,51 +61,76 @@ export default function EmployeesFinancialPage() {
 
       if (empError) throw empError;
 
-      const [dailyRes, advanceRes, deductionsRes] = await Promise.all([
+      // 2. جلب كافة سجلات الحسابات الفرعية
+      const [dailyRes, advanceRes, deductionsRes, housingRes] = await Promise.all([
         supabase.from('Daily_Report').select('Emp_Name, D_W, Attendance'),
         supabase.from('labor_advance').select('emp_name, amount'),
-        supabase.from('labor_deductions').select('emp_name, amount')
+        supabase.from('labor_deductions').select('emp_name, amount'),
+        supabase.from('housing_subsistence').select('emp_name, amount')
       ]);
 
       const dailyData = dailyRes.data || [];
       const advanceData = advanceRes.data || [];
       const deductionsData = deductionsRes.data || [];
+      const housingData = housingRes.data || [];
 
+      // 3. المعالجة الحسابية الدقيقة لكل موظف
       const processedEmployees = (emps || []).map(emp => {
-  // تنظيف الاسم الأساسي من أي مسافات زائدة
-  const empNameKey = emp.Emp_Name?.trim();
+        const empNameKey = emp.Emp_Name?.trim();
 
-  // تجميع البيانات مع ضمان تحويلها لأرقام وتنظيف أسماء الموظفين في كل جدول
-  const totalAttendance = dailyData
-    .filter(d => d.Emp_Name?.trim() === empNameKey)
-    .reduce((sum, curr) => sum + (Number(curr.Attendance) || 0), 0);
+        // حساب الإعاشة مباشرة من جدولها لضمان الدقة
+        const totalHousing = housingData
+          .filter(h => h.emp_name?.trim() === empNameKey)
+          .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
 
-  const totalEarned = dailyData
-    .filter(d => d.Emp_Name?.trim() === empNameKey)
-    .reduce((sum, curr) => sum + (Number(curr.D_W) || 0), 0);
+        const totalAttendance = dailyData
+          .filter(d => d.Emp_Name?.trim() === empNameKey)
+          .reduce((sum, curr) => sum + (Number(curr.Attendance) || 0), 0);
 
-  const totalAdvanced = advanceData
-    .filter(a => a.emp_name?.trim() === empNameKey)
-    .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
+        const totalEarned = dailyData
+          .filter(d => d.Emp_Name?.trim() === empNameKey)
+          .reduce((sum, curr) => sum + (Number(curr.D_W) || 0), 0);
 
-  const totalDeductionsFromTable = deductionsData
-    .filter(p => p.emp_name?.trim() === empNameKey)
-    .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
+        const totalAdvanced = advanceData
+          .filter(a => a.emp_name?.trim() === empNameKey)
+          .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
 
-  const housingSub = Number(emp.housing_and_subsistence || 0);
+        const totalDeductions = deductionsData
+          .filter(p => p.emp_name?.trim() === empNameKey)
+          .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
 
-  // المعادلة الحسابية النهائية للصافي
-  const net = Number(totalEarned) - (Number(totalAdvanced) + Number(totalDeductionsFromTable) + Number(housingSub));
+        // المعادلة النهائية: المستحق - (السلف + الخصومات + الإعاشة)
+        const net = totalEarned - (totalAdvanced + totalDeductions + totalHousing);
 
-  return {
-    ...emp,
-    total_attendance: totalAttendance,
-    total_earnings: totalEarned,
-    total_received: totalAdvanced,
-    deductions_calculated: totalDeductionsFromTable,
-    net_earnings: net
-  };
-});
+        return {
+          ...emp,
+          total_attendance: totalAttendance,
+          total_earnings: totalEarned,
+          total_received: totalAdvanced,
+          deductions_calculated: totalDeductions,
+          housing_and_subsistence: totalHousing, // نستخدم القيمة المحسوبة فوراً
+          net_earnings: net
+        };
+      });
+
+      setEmployees(processedEmployees);
+      setTotalCount(count || 0);
+
+      // حساب الإجمالية العامة للصفحة
+      const stats = processedEmployees.reduce((acc, curr) => ({
+        earnings: acc.earnings + curr.total_earnings,
+        received: acc.received + curr.total_received,
+        onlyDeductions: acc.onlyDeductions + curr.deductions_calculated,
+        net: acc.net + curr.net_earnings,
+      }), { earnings: 0, received: 0, onlyDeductions: 0, net: 0 });
+      
+      setTotals(stats);
+    } catch (err: any) { 
+      console.error("Error:", err.message); 
+    } finally { 
+      setLoading(false); 
+    }
+  }
 
       setEmployees(processedEmployees);
       setTotalCount(count || 0);
