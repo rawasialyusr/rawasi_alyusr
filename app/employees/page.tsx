@@ -92,23 +92,40 @@ export default function EmployeesFinancialPage() {
       const deductionsData = deductionsRes.data || [];
 
       const processedEmployees = (emps || []).map(emp => {
-        const empNameKey = emp.Emp_Name?.trim();
-        const totalAttendance = dailyData.filter(d => d.Emp_Name?.trim() === empNameKey).reduce((sum, curr) => sum + (Number(curr.Attendance) || 0), 0);
-        const totalEarned = dailyData.filter(d => d.Emp_Name?.trim() === empNameKey).reduce((sum, curr) => sum + (Number(curr.D_W) || 0), 0);
-        const totalAdvanced = advanceData.filter(a => a.emp_name?.trim() === empNameKey).reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
-        const totalDeductionsFromTable = deductionsData.filter(p => p.emp_name?.trim() === empNameKey).reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
-        const housingSub = Number(emp.housing_and_subsistence || 0);
-        const net = totalEarned - (totalAdvanced + totalDeductionsFromTable + housingSub);
+  // تنظيف الاسم الأساسي من أي مسافات زائدة
+  const empNameKey = emp.Emp_Name?.trim();
 
-        return {
-          ...emp,
-          total_attendance: totalAttendance,
-          total_earnings: totalEarned,
-          total_received: totalAdvanced,
-          deductions_calculated: totalDeductionsFromTable,
-          net_earnings: net
-        };
-      });
+  // تجميع البيانات مع ضمان تحويلها لأرقام وتنظيف أسماء الموظفين في كل جدول
+  const totalAttendance = dailyData
+    .filter(d => d.Emp_Name?.trim() === empNameKey)
+    .reduce((sum, curr) => sum + (Number(curr.Attendance) || 0), 0);
+
+  const totalEarned = dailyData
+    .filter(d => d.Emp_Name?.trim() === empNameKey)
+    .reduce((sum, curr) => sum + (Number(curr.D_W) || 0), 0);
+
+  const totalAdvanced = advanceData
+    .filter(a => a.emp_name?.trim() === empNameKey)
+    .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
+
+  const totalDeductionsFromTable = deductionsData
+    .filter(p => p.emp_name?.trim() === empNameKey)
+    .reduce((sum, curr) => sum + (Number(curr.amount) || 0), 0);
+
+  const housingSub = Number(emp.housing_and_subsistence || 0);
+
+  // المعادلة الحسابية النهائية للصافي
+  const net = Number(totalEarned) - (Number(totalAdvanced) + Number(totalDeductionsFromTable) + Number(housingSub));
+
+  return {
+    ...emp,
+    total_attendance: totalAttendance,
+    total_earnings: totalEarned,
+    total_received: totalAdvanced,
+    deductions_calculated: totalDeductionsFromTable,
+    net_earnings: net
+  };
+});
 
       setEmployees(processedEmployees);
       setTotalCount(count || 0);
