@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
+// استيراد الأكشن الجديد
+import { getAllEmployeesAction } from '@/app/actions/add_action_action'; 
 
 export function useAddActionLogic() {
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState('daily');
-  const [allEmployees, setAllEmployees] = useState<any[]>([]); // الاحتفاظ بالقائمة كاملة للبحث
+  const [allEmployees, setAllEmployees] = useState<any[]>([]); 
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -21,8 +23,9 @@ export function useAddActionLogic() {
   useEffect(() => {
     const fetchEmps = async () => {
       try {
-        const res = await fetch('/api/all_emp');
-        const data = await res.json();
+        // تم استبدال fetch بالـ Action مباشرة
+        const data = await getAllEmployeesAction(); 
+        
         const sorted = Array.isArray(data) ? data.sort((a, b) => 
           (a.Emp_Name || a.emp_name || '').localeCompare(b.Emp_Name || b.emp_name || '', 'ar')
         ) : [];
@@ -32,9 +35,10 @@ export function useAddActionLogic() {
     fetchEmps();
   }, []);
 
-  // الفلترة بناءً على ما يكتبه المستخدم
   const filteredEmployees = useMemo(() => {
-    if (!searchTerm) return [];
+    // تعديل بسيط: لو المستخدم فتح القائمة والبحث فاضي، اظهر أول 10 أسماء كمقترح
+    if (!searchTerm) return allEmployees.slice(0, 10); 
+    
     return allEmployees.filter(emp => {
       const name = (emp.Emp_Name || emp.emp_name || '').toLowerCase();
       return name.includes(searchTerm.toLowerCase());
@@ -45,14 +49,12 @@ export function useAddActionLogic() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // ✅ الدالة الجديدة لسحب البيانات تلقائياً عند الاختيار
   const handleSelectEmployee = (emp: any) => {
     const name = emp.Emp_Name || emp.emp_name;
     
     setFormData(prev => ({
       ...prev,
       emp_name: name,
-      // سحب البيانات من سجل الموظف المختار (تأكد من مطابقة أسماء الحقول في الـ API)
       item: emp.Item || emp.item || prev.item,
       sk_level: emp.SK_Level || emp.sk_level || prev.sk_level,
       d_w: emp.D_W || emp.d_w || prev.d_w,
@@ -90,6 +92,6 @@ export function useAddActionLogic() {
     employees: filteredEmployees,
     searchTerm, setSearchTerm, 
     isDropdownOpen, setIsDropdownOpen,
-    handleSelectEmployee // تصدير الدالة للاستخدام في الصفحة
+    handleSelectEmployee 
   };
 }
