@@ -7,10 +7,10 @@ const THEME = {
   sandLight: '#F4F1EE',
   sandDark: '#E6D5C3',
   coffeeMain: '#8C6A5D',
-  coffeeDark: '#2D2421', // جعلته أغمق قليلاً لزيادة الوضوح
+  coffeeDark: '#2D2421',
   goldAccent: '#C5A059',
   white: '#FFFFFF',
-  blackText: '#000000' // لون أسود صريح للنصوص
+  blackText: '#000000'
 };
 
 export default function DynamicActionPage() {
@@ -20,25 +20,23 @@ export default function DynamicActionPage() {
     handleSelectEmployee 
   } = useAddActionLogic();
 
-  // تحسين ستايل العناوين الجانبية
   const labelStyle = { 
     color: THEME.coffeeDark, 
-    fontWeight: '800', // زيادة السمك
+    fontWeight: '800', 
     fontSize: '14px', 
     marginBottom: '8px', 
     display: 'block' 
   };
 
-  // تحسين ستايل خانات الإدخال (تم تعديل اللون للأسود)
   const inputStyle = { 
     width: '100%', 
     padding: '12px', 
     borderRadius: '8px', 
-    border: `2px solid ${THEME.sandDark}`, // زيادة سمك الإطار
+    border: `2px solid ${THEME.sandDark}`, 
     fontWeight: 'bold', 
     outline: 'none',
-    color: '#000000', // ✅ نص أسود صريح للوضوح التام
-    fontSize: '16px', // تكبير الخط قليلاً
+    color: '#000000', 
+    fontSize: '16px', 
     backgroundColor: '#FFFFFF'
   };
 
@@ -58,60 +56,37 @@ export default function DynamicActionPage() {
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
         
-        /* جعل النصوص التوضيحية أغمق (Placeholder) */
-        input::placeholder {
-          color: #666 !important;
-          font-weight: 500;
-        }
-
+        input::placeholder { color: #666 !important; font-weight: 500; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: ${THEME.coffeeMain}; border-radius: 10px; }
         
         .blurred-bg-logo {
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: 600px;
-          height: 600px;
+          position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+          width: 600px; height: 600px;
           background-image: url('${companyLogoUrl}');
-          background-size: contain;
-          background-repeat: no-repeat;
-          background-position: center;
-          filter: blur(80px) opacity(0.04); /* تقليل الشفافية لعدم تشتيت العين */
-          z-index: 0;
-          pointer-events: none;
+          background-size: contain; background-repeat: no-repeat; background-position: center;
+          filter: blur(80px) opacity(0.04); z-index: 0; pointer-events: none;
         }
 
-        .main-content-card {
-          position: relative;
-          z-index: 10;
-        }
-
-        .auto-filled-input {
-          background-color: #f9f4eb !important; /* لون خلفية مميز قليلاً */
-          border-right: 5px solid ${THEME.goldAccent} !important;
-          color: #000000 !important;
-        }
+        .main-content-card { position: relative; z-index: 10; }
+        .auto-filled-input { background-color: #f9f4eb !important; border-right: 5px solid ${THEME.goldAccent} !important; color: #000000 !important; }
       `}</style>
 
       <div className="blurred-bg-logo"></div>
 
       <div className="main-content-card" style={{ maxWidth: '850px', margin: '0 auto', background: '#fff', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 15px 45px rgba(0,0,0,0.15)' }}>
         
-        {/* الهيدر */}
         <div style={{ background: THEME.coffeeDark, padding: '25px', textAlign: 'center', borderBottom: `4px solid ${THEME.goldAccent}` }}>
-          <h2 style={{ color: THEME.goldAccent, margin: 0, fontWeight: 900, letterSpacing: '1px' }}>
+          <h2 style={{ color: THEME.goldAccent, margin: 0, fontWeight: 900 }}>
             {type === 'daily' ? '📝 إضافة يومية' : type === 'advance' ? '💵 صرف سلفة' : type === 'deduction' ? '✂️ تسجيل خصم' : '🏠 مستحقات سكن'}
           </h2>
         </div>
 
-        {/* التابات */}
         <div style={{ display: 'flex', gap: '4px', padding: '12px', background: '#EAE5E0' }}>
           {['daily', 'advance', 'deduction', 'housing'].map(t => (
             <button 
               key={t} 
-              onClick={() => { setType(t); setSearchTerm(''); }} 
+              onClick={() => { setType(t); setSearchTerm(''); setIsDropdownOpen(false); }} 
               style={{ 
                 flex: 1, padding: '14px', border: 'none', borderRadius: '8px', fontWeight: '900', cursor: 'pointer', 
                 backgroundColor: type === t ? THEME.coffeeDark : THEME.sandDark, 
@@ -131,8 +106,8 @@ export default function DynamicActionPage() {
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
-                placeholder="ابحث عن الاسم هنا..."
-                style={{ ...inputStyle, borderRight: `8px solid ${THEME.coffeeMain}`, background: '#FFFFFF' }}
+                placeholder="ابحث عن الموظف..."
+                style={{ ...inputStyle, borderRight: `8px solid ${THEME.coffeeMain}` }}
                 value={searchTerm || formData.emp_name}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -140,32 +115,41 @@ export default function DynamicActionPage() {
                   setIsDropdownOpen(true);
                 }}
                 onFocus={() => setIsDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setIsDropdownOpen(false), 300)} // زيادة وقت التأخير قليلاً
               />
             </div>
 
-            {isDropdownOpen && searchTerm && (
+            {/* القائمة المنسدلة مع Z-Index مرتفع جداً */}
+            {isDropdownOpen && (
               <div className="custom-scrollbar" style={{
-                position: 'absolute', top: '105%', right: 0, left: 0, zIndex: 100,
+                position: 'absolute', top: '105%', right: 0, left: 0, 
+                zIndex: 9999, // تم رفعه لضمان الظهور أونلاين
                 background: 'white', border: `2px solid ${THEME.coffeeMain}`, borderRadius: '10px',
-                maxHeight: '220px', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+                maxHeight: '220px', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
               }}>
                 {employees.length > 0 ? employees.map((emp, i) => (
                   <div
-                    key={i}
-                    onClick={() => handleSelectEmployee(emp)}
-                    style={{ padding: '15px 20px', cursor: 'pointer', borderBottom: `1px solid ${THEME.sandLight}`, fontWeight: 'bold', color: '#000' }}
+                    key={`emp-${i}-${emp.emp_id || i}`}
+                    onMouseDown={(e) => { // استخدام onMouseDown بدل onClick لتجنب الـ Blur
+                        handleSelectEmployee(emp);
+                        setIsDropdownOpen(false);
+                    }}
+                    style={{ padding: '15px 20px', cursor: 'pointer', borderBottom: `1px solid ${THEME.sandLight}`, fontWeight: 'bold', color: '#000', textAlign: 'right' }}
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = THEME.sandLight}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    {emp.Emp_Name || emp.emp_name}
+                    {emp.emp_name || emp.Emp_Name}
                   </div>
                 )) : (
-                  <div style={{ padding: '15px', textAlign: 'center', color: '#666' }}>لا يوجد نتائج</div>
+                  <div style={{ padding: '15px', textAlign: 'center', color: '#666' }}>
+                    {searchTerm ? "لا يوجد نتائج" : "جاري تحميل البيانات..."}
+                  </div>
                 )}
               </div>
             )}
           </div>
 
+          {/* باقي الحقول */}
           <div style={{ gridColumn: 'span 2' }}>
             <label style={labelStyle}>📅 التاريخ</label>
             <input type="date" style={inputStyle} value={formData.date} onChange={(e) => updateField('date', e.target.value)} />
@@ -207,15 +191,11 @@ export default function DynamicActionPage() {
           <button disabled={loading} style={{ 
             gridColumn: 'span 2', padding: '18px', background: THEME.coffeeDark, color: THEME.goldAccent, 
             border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '20px', cursor: 'pointer',
-            boxShadow: '0 5px 15px rgba(0,0,0,0.2)'
+            opacity: loading ? 0.7 : 1
           }}>
             {loading ? '⏳ جاري الحفظ...' : `إعتماد البيانات 🚀`}
           </button>
         </form>
-
-        <div style={{ padding: '15px', textAlign: 'center', color: '#777', fontSize: '13px', background: '#F8F8F8', borderTop: '1px solid #EEE' }}>
-          نظام الإدارة المتكامل • جميع البيانات مشفرة وآمنة
-        </div>
       </div>
     </div>
   );

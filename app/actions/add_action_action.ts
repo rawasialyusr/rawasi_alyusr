@@ -1,30 +1,28 @@
-"use server";
+"use server"; // تأكد إن دي مكتوبة في أول سطر
 
-import { createClient } from '@supabase/supabase-js';
-// 1. إضافة هذا السطر لإجبار Vercel على جلب البيانات في كل مرة (No Cache)
+import { createClient } from '@supabase/supabase-js'; // أو حسب إعدادات السوبابيز عندك
 import { revalidatePath } from 'next/cache';
 
 export async function getAllEmployeesAction() {
-  // 2. تعريف الكلاينت بالداخل لضمان قراءة الـ Env أونلاين
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; // استخدم Service Role للأمان والسرعة أونلاين
+  
+  const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     const { data, error } = await supabase
-      .from('all_emp') 
+      .from('all_emp') // تأكد من اسم الجدول
       .select('*')
       .order('emp_name', { ascending: true });
 
-    if (error) {
-      console.error("Supabase Error:", error.message);
-      return [];
-    }
-
-    // إرجاع البيانات
-    return data || [];
-  } catch (err) {
-    console.error("Action Fatal Error:", err);
+    if (error) throw error;
+    
+    // إجبار Vercel على تحديث البيانات وعدم استخدام كاش قديم
+    revalidatePath('/dynamic_action'); 
+    
+    return data;
+  } catch (error) {
+    console.error("Server Action Error:", error);
     return [];
   }
 }

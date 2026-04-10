@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
-// استيراد الأكشن الجديد
 import { getAllEmployeesAction } from '@/app/actions/add_action_action'; 
 
 export function useAddActionLogic() {
@@ -20,29 +19,42 @@ export function useAddActionLogic() {
 
   const [formData, setFormData] = useState(initialFormState);
 
+  // جلب البيانات عند فتح الصفحة
   useEffect(() => {
     const fetchEmps = async () => {
       try {
-        // تم استبدال fetch بالـ Action مباشرة
+        console.log("جاري جلب الموظفين من السيرفر...");
         const data = await getAllEmployeesAction(); 
         
-        const sorted = Array.isArray(data) ? data.sort((a, b) => 
-          (a.Emp_Name || a.emp_name || '').localeCompare(b.Emp_Name || b.emp_name || '', 'ar')
-        ) : [];
-        setAllEmployees(sorted);
-      } catch (err) { console.error("خطأ:", err); }
+        console.log("البيانات المستلمة:", data); // عشان تشوف الـ Array في المتصفح
+
+        if (data && Array.isArray(data)) {
+          // ترتيب الأسماء أبجدياً مع مراعاة اختلاف حالة الأحرف في سوبابيز
+          const sorted = [...data].sort((a: any, b: any) => {
+            const nameA = a.emp_name || a.Emp_Name || '';
+            const nameB = b.emp_name || b.Emp_Name || '';
+            return nameA.localeCompare(nameB, 'ar');
+          });
+          setAllEmployees(sorted);
+        }
+      } catch (err) { 
+        console.error("خطأ في جلب البيانات:", err); 
+      }
     };
     fetchEmps();
   }, []);
 
+  // تصفية الأسماء بناءً على البحث
   const filteredEmployees = useMemo(() => {
-    // تعديل بسيط: لو المستخدم فتح القائمة والبحث فاضي، اظهر أول 10 أسماء كمقترح
-    if (!searchTerm) return allEmployees.slice(0, 10); 
+    // لو مفيش بحث، اظهر أول 10 كمقترح، لو البحث شغال فلتر الكل
+    const list = searchTerm 
+      ? allEmployees.filter(emp => {
+          const name = (emp.emp_name || emp.Emp_Name || '').toLowerCase();
+          return name.includes(searchTerm.toLowerCase());
+        })
+      : allEmployees.slice(0, 10); 
     
-    return allEmployees.filter(emp => {
-      const name = (emp.Emp_Name || emp.emp_name || '').toLowerCase();
-      return name.includes(searchTerm.toLowerCase());
-    });
+    return list;
   }, [allEmployees, searchTerm]);
 
   const updateField = (field: string, value: any) => {
@@ -50,14 +62,13 @@ export function useAddActionLogic() {
   };
 
   const handleSelectEmployee = (emp: any) => {
-    const name = emp.Emp_Name || emp.emp_name;
-    
+    // دمج ذكي للبيانات: بياخد الاسم والمهنة والمستوى سواء حروف كبيرة أو صغيرة
     setFormData(prev => ({
       ...prev,
-      emp_name: name,
-      item: emp.Item || emp.item || prev.item,
-      sk_level: emp.SK_Level || emp.sk_level || prev.sk_level,
-      d_w: emp.D_W || emp.d_w || prev.d_w,
+      emp_name: emp.emp_name || emp.Emp_Name || '',
+      item: emp.item || emp.Item || prev.item,
+      sk_level: emp.sk_level || emp.SK_Level || prev.sk_level,
+      d_w: emp.d_w || emp.D_W || prev.d_w,
     }));
     
     setSearchTerm('');
@@ -67,6 +78,7 @@ export function useAddActionLogic() {
   const submitAction = async () => {
     if (!formData.emp_name) return alert("⚠️ يرجى اختيار اسم الموظف أولاً");
     setLoading(true);
+    
     const apiMap: Record<string, string> = {
       daily: '/api/daily_report',
       advance: '/api/emp_adv',
@@ -82,9 +94,16 @@ export function useAddActionLogic() {
       });
       if (response.ok) {
         alert('تم الحفظ بنجاح ✅');
+        // إعادة تصغير النموذج بعد الحفظ (تصفير الخانات المتغيرة فقط)
         setFormData(prev => ({ ...prev, amount: '', d_w: '', prod: '', notes: '', reason: '' }));
+      } else {
+        alert('فشل الحفظ في قاعدة البيانات');
       }
-    } catch (err) { alert('حدث خطأ'); } finally { setLoading(false); }
+    } catch (err) { 
+      alert('حدث خطأ في الاتصال بالسيرفر'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return { 
