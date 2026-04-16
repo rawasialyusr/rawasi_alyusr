@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { getFinancialDropdowns, submitJournalEntry } from '../actions/financial_actions';
-import { searchEmployees } from '../actions/all_emp_action';
-import { submitHrAction } from '../actions/add_action_action';
+//import { getFinancialDropdowns, submitJournalEntry } from '../actions/financial_actions';
+//import { searchEmployees } from '../actions/all_emp_action';
+//import { submitHrAction } from '../actions/add_action_action';
 
 const initialFormState = {
   emp_id: '', emp_name: '', date: new Date().toISOString().split('T')[0],
