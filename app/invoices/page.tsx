@@ -49,15 +49,6 @@ const ZatcaQRCode = ({ record }: { record: any }) => {
   );
 };
 
-const ModalField = ({ label, value, onChange, type="text", readOnly=false, hideLabel=false }: any) => (
-  <div style={{ marginBottom: hideLabel ? '0' : '15px' }}>
-    {!hideLabel && <label style={{ display: 'block', fontWeight: 900, fontSize: '14px', color: THEME.primary, marginBottom: '8px' }}>{label}</label>}
-    <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} readOnly={readOnly}
-      style={{ width: '100%', height: '45px', padding: '0 12px', borderRadius: '10px', border: `2px solid ${THEME.border}`, fontWeight: 900, fontSize: '16px', outline: 'none', background: readOnly ? '#f1f5f9' : '#ffffff', color: '#000000' }} 
-      onFocus={(e) => e.target.style.borderColor = THEME.accent} onBlur={(e) => e.target.style.borderColor = THEME.border} />
-  </div>
-);
-
 // 🟢 مكون الإكمال التلقائي الذكي المأمن
 const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, strict = false, isTextArea = false, disabled = false, freeText = false }: any) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -168,8 +159,8 @@ export default function InvoicesPage() {
 
   if (logic.isLoading) return <div style={{padding:'100px', textAlign:'center', fontWeight:900, color: THEME.primary, fontSize: '20px'}}>⏳ جاري تحميل مركز المستخلصات...</div>;
 
-  const projectOptions = logic.projects || [];
   const partnerOptions = logic.partners || [];
+  const projectOptions = logic.projects || [];
   const accountOptions = logic.accounts || [];
   const boqItemsList = logic.boqItems || [];
   const descriptionOptions = Array.from(new Set([...(logic.boqItems||[]).map((b:any)=>b.item_name), ...(logic.historicalDescriptions||[]).map((h:any)=>h.display)].filter(Boolean)));
@@ -359,6 +350,15 @@ export default function InvoicesPage() {
                </div>
             </div>
 
+            {/* 🟢 تمت إضافة حساب توجيه ضمان الأعمال هنا دون حذف أي سطر */}
+            {Number(logic.currentRecord.retention_amount) > 0 && (
+                <div style={{ background: '#f0f9ff', padding: '15px', borderRadius: '15px', border: `2px dashed ${THEME.info}`, marginBottom: '20px' }}>
+                   <UniversalAutocomplete label="🛡️ حساب توجيه ضمان الأعمال (للقيد المحاسبي)" placeholder="ابحث في شجرة الحسابات..." value={logic.currentRecord.retention_account_id} onChange={(val:string)=>{
+                       logic.setCurrentRecord({...logic.currentRecord, retention_account_id: val});
+                   }} options={accountOptions} strict={true} />
+                </div>
+            )}
+
             {Number(logic.currentRecord.material_discount) > 0 && (
                 <div style={{ background: '#fff1f2', padding: '15px', borderRadius: '15px', border: `2px dashed ${THEME.ruby}`, marginBottom: '20px' }}>
                    <UniversalAutocomplete label="🧾 حساب توجيه خصم خامات العميل (للقيد المحاسبي)" placeholder="ابحث في شجرة الحسابات..." value={logic.currentRecord.discount_account_id} onChange={(val:string)=>{
@@ -457,4 +457,4 @@ export default function InvoicesPage() {
       )}
     </div>
   );
-}
+} 
