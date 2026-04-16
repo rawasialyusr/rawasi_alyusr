@@ -36,6 +36,7 @@ export function useInvoicesLogic() {
         discount_account_id: null, 
         retention_percentage: 5, 
         retention_amount: 0,
+        retention_account_id: null, // 🟢 Added field for retention booking account
         tax_amount: 0, 
         total_amount: 0, 
         net_amount: 0, 
@@ -125,26 +126,38 @@ export function useInvoicesLogic() {
         return Array.from(texts).map(t => ({ id: t, display: t }));
     }, [invoices]);
 
+    // 🟢 Updated Calculation Logic according to user requirements
     useEffect(() => {
         if (!currentRecord.lines) return;
         
-        const linesTotal = currentRecord.lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0);
+        // 1. الاجمالي (تجميع البنود: العدد * الكمية)
+        const grossTotal = currentRecord.lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0);
+        
         const materialDiscount = Number(currentRecord.material_discount || 0);
         const retentionPct = Number(currentRecord.retention_percentage || 0);
         
-        const retentionAmt = linesTotal * (retentionPct / 100);
-        const taxableAmount = linesTotal - retentionAmt - materialDiscount;
+        // 2. المبلغ الخاضع للضريبة (الاجمالي - الخامات)
+        const taxableAmount = grossTotal - materialDiscount;
+        
+        // 3. الضريبة كامله (15%) على المبلغ بعد خصم الخامات
         const taxAmt = taxableAmount * 0.15; 
-        const netAmt = taxableAmount + taxAmt;
+        
+        // 4. ضمان الاعمال من الاجمالي قبل احتساب الضريبة والخصم
+        const retentionAmt = grossTotal * (retentionPct / 100);
 
-        if (Math.abs(netAmt - (currentRecord.net_amount || 0)) > 0.01 || Math.abs(linesTotal - (currentRecord.total_amount || 0)) > 0.01) {
+        // 5. الصافي المستحق: (المبلغ الخاضع للضريبة + الضريبة) - ضمان الاعمال
+        const netAmt = (taxableAmount + taxAmt) - retentionAmt;
+
+        if (Math.abs(netAmt - (currentRecord.net_amount || 0)) > 0.01 || Math.abs(grossTotal - (currentRecord.total_amount || 0)) > 0.01) {
             setCurrentRecord((prev: any) => ({
                 ...prev,
-                total_amount: Number(linesTotal.toFixed(2)),
+                total_amount: Number(grossTotal.toFixed(2)),
                 retention_amount: Number(retentionAmt.toFixed(2)),
                 tax_amount: Number(taxAmt.toFixed(2)),
                 net_amount: Number(netAmt.toFixed(2)),
-                discount_account_id: materialDiscount > 0 ? prev.discount_account_id : null 
+                // Reset account IDs if amounts become zero
+                discount_account_id: materialDiscount > 0 ? prev.discount_account_id : null,
+                retention_account_id: retentionAmt > 0 ? prev.retention_account_id : null 
             }));
         }
     }, [currentRecord.lines, currentRecord.material_discount, currentRecord.retention_percentage]);
@@ -174,9 +187,17 @@ export function useInvoicesLogic() {
 
     const handleSaveInvoice = async () => {
         if (!currentRecord.client_name) return alert("يرجى اختيار العميل");
+        
+        // 🟢 Validation for Materials Discount Account
         if (Number(currentRecord.material_discount) > 0 && !currentRecord.discount_account_id) {
             return alert("يرجى اختيار حساب لتوجيه خصم خامات العميل");
         }
+
+        // 🟢 Validation for Retention Account
+        if (Number(currentRecord.retention_amount) > 0 && !currentRecord.retention_account_id) {
+            return alert("يرجى اختيار حساب لتوجيه ضمان الاعمال");
+        }
+        
         setIsSaving(true);
         try {
             const { lines, invoice_lines, projects, ...headerPayload } = currentRecord;
@@ -236,6 +257,7 @@ export function useInvoicesLogic() {
         }
         
         if (field === 'quantity' || field === 'unit_price') {
+            // 🟢 العدد في الكمية (أو الكمية في السعر)
             const q = Number(newLines[index].quantity || 0);
             const p = Number(newLines[index].unit_price || 0);
             newLines[index].total_price = Number((q * p).toFixed(2));
