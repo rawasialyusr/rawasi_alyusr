@@ -36,7 +36,7 @@ export function useInvoicesLogic() {
         discount_account_id: null, 
         retention_percentage: 5, 
         retention_amount: 0,
-        retention_account_id: null, // 🟢 Added field for retention booking account
+        retention_account_id: null, 
         tax_amount: 0, 
         total_amount: 0, 
         net_amount: 0, 
@@ -90,7 +90,7 @@ export function useInvoicesLogic() {
             const [p, pr, boq, it, ac] = await Promise.all([
                 supabase.from('partners').select('id, name'),
                 supabase.from('projects').select('id, "Property", project_code'), 
-                supabase.from('boq_items').select('id, item_code, item_name, unit_of_measure'), // 🟢 جدول المقايسة الصحيح
+                supabase.from('boq_items').select('id, item_code, item_name, unit_of_measure'), 
                 supabase.from('items').select('*'),
                 supabase.from('accounts').select('id, name, code')
             ]);
@@ -126,36 +126,37 @@ export function useInvoicesLogic() {
         return Array.from(texts).map(t => ({ id: t, display: t }));
     }, [invoices]);
 
-    // 🟢 Updated Calculation Logic according to user requirements
+    // 🟢 الحسبة المحاسبية الدقيقة حسب طلبك
     useEffect(() => {
         if (!currentRecord.lines) return;
         
-        // 1. الاجمالي (تجميع البنود: العدد * الكمية)
+        // 1. إجمالي الأعمال (الكمية × السعر)
         const grossTotal = currentRecord.lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0);
         
+        // 2. خصم الخامات ونسبة الضمان
         const materialDiscount = Number(currentRecord.material_discount || 0);
         const retentionPct = Number(currentRecord.retention_percentage || 0);
         
-        // 2. المبلغ الخاضع للضريبة (الاجمالي - الخامات)
+        // 3. الإجمالي الخاضع للضريبة (إجمالي الأعمال - خصم الخامات)
         const taxableAmount = grossTotal - materialDiscount;
-        
-        // 3. الضريبة كامله (15%) على المبلغ بعد خصم الخامات
-        const taxAmt = taxableAmount * 0.15; 
-        
-        // 4. ضمان الاعمال من الاجمالي قبل احتساب الضريبة والخصم
-        const retentionAmt = grossTotal * (retentionPct / 100);
 
-        // 5. الصافي المستحق: (المبلغ الخاضع للضريبة + الضريبة) - ضمان الاعمال
-        const netAmt = (taxableAmount + taxAmt) - retentionAmt;
+        // 4. الضريبة 15% على الخاضع للضريبة (مع التقريب لرقمين عشريين)
+        const taxAmt = Number((taxableAmount * 0.15).toFixed(2)); 
 
+        // 5. ضمان الأعمال كنسبة من الخاضع للضريبة (مع التقريب لرقمين عشريين)
+        const retentionAmt = Number((taxableAmount * (retentionPct / 100)).toFixed(2));
+
+        // 6. الصافي المستحق = (الخاضع للضريبة + الضريبة) - ضمان الأعمال (مع التقريب)
+        const netAmt = Number((taxableAmount + taxAmt - retentionAmt).toFixed(2));
+
+        // تحديث السجل لو فيه أي تغيير في الأرقام
         if (Math.abs(netAmt - (currentRecord.net_amount || 0)) > 0.01 || Math.abs(grossTotal - (currentRecord.total_amount || 0)) > 0.01) {
             setCurrentRecord((prev: any) => ({
                 ...prev,
                 total_amount: Number(grossTotal.toFixed(2)),
-                retention_amount: Number(retentionAmt.toFixed(2)),
-                tax_amount: Number(taxAmt.toFixed(2)),
-                net_amount: Number(netAmt.toFixed(2)),
-                // Reset account IDs if amounts become zero
+                retention_amount: retentionAmt,
+                tax_amount: taxAmt,
+                net_amount: netAmt,
                 discount_account_id: materialDiscount > 0 ? prev.discount_account_id : null,
                 retention_account_id: retentionAmt > 0 ? prev.retention_account_id : null 
             }));
@@ -188,12 +189,10 @@ export function useInvoicesLogic() {
     const handleSaveInvoice = async () => {
         if (!currentRecord.client_name) return alert("يرجى اختيار العميل");
         
-        // 🟢 Validation for Materials Discount Account
         if (Number(currentRecord.material_discount) > 0 && !currentRecord.discount_account_id) {
             return alert("يرجى اختيار حساب لتوجيه خصم خامات العميل");
         }
 
-        // 🟢 Validation for Retention Account
         if (Number(currentRecord.retention_amount) > 0 && !currentRecord.retention_account_id) {
             return alert("يرجى اختيار حساب لتوجيه ضمان الاعمال");
         }
@@ -244,7 +243,6 @@ export function useInvoicesLogic() {
 
         newLines[index][field] = value;
         
-        // 🟢 زيتونة الربط: سحب الوصف والوحدة فور اختيار البند
         if (field === 'item_id') {
             const boqItem = boqItems.find(it => String(it.id) === String(value));
             const standardItem = items.find(it => String(it.id) === String(value));
@@ -257,7 +255,6 @@ export function useInvoicesLogic() {
         }
         
         if (field === 'quantity' || field === 'unit_price') {
-            // 🟢 العدد في الكمية (أو الكمية في السعر)
             const q = Number(newLines[index].quantity || 0);
             const p = Number(newLines[index].unit_price || 0);
             newLines[index].total_price = Number((q * p).toFixed(2));
