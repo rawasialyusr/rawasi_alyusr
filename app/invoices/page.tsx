@@ -4,10 +4,10 @@ import { useInvoicesLogic } from './invoices_logic';
 import { QRCodeSVG } from 'qrcode.react'; 
 
 const THEME = {
-  primary: '#0f172a', accent: '#ca8a04', success: '#059669', slate: '#f8fafc', text: '#111827', border: '#cbd5e1', ruby: '#e11d48'
+  primary: '#0f172a', accent: '#ca8a04', success: '#059669', slate: '#f8fafc', text: '#111827', border: '#cbd5e1', ruby: '#e11d48', info: '#0284c7'
 };
 
-const TABLE_GRID_LAYOUT = "50px 100px 2fr 130px 120px 120px 100px 100px";
+const TABLE_GRID_LAYOUT = "50px 100px 2.5fr 120px 120px 120px 100px 100px";
 
 const tafqeet = (n: number) => {
   if (n === 0) return "صفر";
@@ -32,7 +32,6 @@ const ZatcaQRCode = ({ record }: { record: any }) => {
         </div>
      );
   }
-
   const timestamp = record.date ? `${record.date}T12:00:00Z` : new Date().toISOString().split('.')[0] + 'Z';
   const generateQR = (s:string, v:string, t:string, it:string, vt:string) => {
     const getB = (tag:number, val:string) => {
@@ -52,57 +51,89 @@ const ZatcaQRCode = ({ record }: { record: any }) => {
 
 const ModalField = ({ label, value, onChange, type="text", readOnly=false, hideLabel=false }: any) => (
   <div style={{ marginBottom: hideLabel ? '0' : '15px' }}>
-    {!hideLabel && <label style={{ display: 'block', fontWeight: 900, fontSize: '13px', color: THEME.primary, marginBottom: '6px' }}>{label}</label>}
+    {!hideLabel && <label style={{ display: 'block', fontWeight: 900, fontSize: '14px', color: THEME.primary, marginBottom: '8px' }}>{label}</label>}
     <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} readOnly={readOnly}
-      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: `1px solid ${THEME.border}`, fontWeight: 900, fontSize: '15px', outline: 'none', background: readOnly ? '#f1f5f9' : 'white', color: THEME.text }} 
+      style={{ width: '100%', height: '45px', padding: '0 12px', borderRadius: '10px', border: `2px solid ${THEME.border}`, fontWeight: 900, fontSize: '16px', outline: 'none', background: readOnly ? '#f1f5f9' : '#ffffff', color: '#000000' }} 
       onFocus={(e) => e.target.style.borderColor = THEME.accent} onBlur={(e) => e.target.style.borderColor = THEME.border} />
   </div>
 );
 
-const SmartSelect = ({ options, value, displayKey='name', onChange, label, hideLabel=false, placeholder="اختر..." }: any) => {
+const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, strict = false, isTextArea = false, disabled = false }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
-  
+
+  useEffect(() => { setSearch(value || ''); }, [value]);
+
   useEffect(() => { 
     const click = (e:any) => { if(ref.current && !ref.current.contains(e.target)) setIsOpen(false); }; 
     document.addEventListener('mousedown', click); 
     return () => document.removeEventListener('mousedown', click); 
   }, []);
 
-  const normalizeText = (text: string) => text.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
-  
-  const filtered = options.filter((o:any) => {
-    const val = normalizeText(o[displayKey] || '');
-    const q = normalizeText(search);
-    return val.includes(q);
-  });
+  const normalizeText = (text: string) => text?.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim() || '';
+  const filtered = options.filter((o:string) => normalizeText(o).includes(normalizeText(search)) && o !== search).slice(0, 15); 
 
-  const display = options.find((o:any) => o.id === value || o[displayKey] === value)?.[displayKey] || placeholder;
+  useEffect(() => { setHighlightedIndex(-1); }, [search, isOpen]);
+
+  const handleSelect = (opt: string) => {
+     setSearch(opt);
+     onChange(opt);
+     setIsOpen(false);
+     setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: any) => {
+    if (!isOpen || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev < filtered.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (highlightedIndex >= 0 && highlightedIndex < filtered.length) {
+            e.preventDefault();
+            handleSelect(filtered[highlightedIndex]);
+        }
+    } else if (e.key === 'Escape') { setIsOpen(false); }
+  };
+
+  const handleBlur = () => {
+     if (strict && search) {
+        const match = options.find((o:string) => o === search);
+        if (!match) { setSearch(''); onChange(''); }
+     }
+     setTimeout(() => { setIsOpen(false); }, 200); 
+  };
+
+  const InputElement = isTextArea ? 'textarea' : 'input';
 
   return (
-    <div style={{ position: 'relative' }} ref={ref}>
-      {!hideLabel && <label style={{ display: 'block', fontWeight: 900, fontSize: '13px', color: THEME.primary, marginBottom: '6px' }}>{label}</label>}
-      <div onClick={() => setIsOpen(!isOpen)} style={{ minHeight: '42px', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${THEME.border}`, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontWeight: 900, fontSize: '14px', color: THEME.text }}>
-        <span style={{ flex: 1, whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'right' }}>{display}</span>
-        <span style={{ fontSize: '10px', color: '#94a3b8', paddingLeft: '5px' }}>▼</span>
+    <div style={{ position: 'relative', marginBottom: '15px' }} ref={ref}>
+      {label && <label className="label-royal">{label}</label>}
+      <div onClick={() => !disabled && setIsOpen(true)} style={{ minHeight: isTextArea ? '80px' : '45px', padding: isTextArea ? '10px 12px' : '0 12px', borderRadius: '10px', border: `2px solid ${THEME.border}`, background: disabled ? '#f1f5f9' : '#ffffff', display: 'flex', alignItems: isTextArea ? 'flex-start' : 'center', cursor: disabled ? 'not-allowed' : 'text', color: '#000000', fontWeight: 900, fontSize: '15px' }}>
+        <InputElement 
+          disabled={disabled}
+          style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', color: '#000000', fontWeight: 900, fontSize: '16px', resize: isTextArea ? 'vertical' : 'none', minHeight: isTextArea ? '70px' : 'auto' }}
+          placeholder={placeholder}
+          value={search}
+          onChange={(e:any) => { setSearch(e.target.value); if(!strict) onChange(e.target.value); setIsOpen(true); }}
+          onFocus={() => setIsOpen(true)}
+          onBlur={handleBlur} 
+          onKeyDown={handleKeyDown} 
+        />
+        {!isTextArea && <span style={{ fontSize: '10px', color: '#000000', cursor: 'pointer', paddingRight: '5px' }} onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}>▼</span>}
       </div>
-      {isOpen && (
-        <div style={{ position: 'absolute', top: '100%', right: 0, left: 0, background: 'white', zIndex: 10000, border: `2px solid ${THEME.accent}`, borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', marginTop: '5px' }}>
-          <div style={{ padding: '10px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '8px 8px 0 0' }}>
-            <input autoFocus placeholder="🔍 بحث ذكي سريع..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', padding: '10px', border: `1px solid ${THEME.border}`, borderRadius: '6px', outline: 'none', fontWeight: 900, color: THEME.text, fontSize: '13px' }} onFocus={(e) => e.target.style.borderColor = THEME.accent} onBlur={(e) => e.target.style.borderColor = THEME.border} />
-          </div>
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }} className="custom-scrollbar">
-            {filtered.length === 0 ? (
-                <div style={{ padding: '15px', textAlign: 'center', color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>لا توجد نتائج مطابقة...</div>
-            ) : (
-                filtered.map((o:any) => (
-                  <div key={o.id} onClick={() => { onChange(o); setIsOpen(false); setSearch(''); }} className="select-item-hover" style={{ padding: '12px 15px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '14px', fontWeight: 900, color: THEME.primary, transition: '0.2s', whiteSpace: 'normal' }}>
-                    {o[displayKey]}
-                  </div>
-                ))
-            )}
-          </div>
+      {isOpen && filtered.length > 0 && !disabled && (
+         <div style={{ position: 'absolute', top: '100%', right: 0, left: 0, background: '#ffffff', zIndex: 10000, border: `2px solid ${THEME.accent}`, borderRadius: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', maxHeight: '200px', overflowY: 'auto', marginTop: '5px' }}>
+          {filtered.map((o:string, i:number) => (
+              <div key={i} onMouseDown={(e) => { e.preventDefault(); handleSelect(o); }} onMouseEnter={() => setHighlightedIndex(i)} 
+                style={{ padding: '12px 15px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '15px', fontWeight: 900, color: '#000000', backgroundColor: highlightedIndex === i ? '#fef3c7' : 'transparent' }}>
+                {o}
+              </div>
+          ))}
         </div>
       )}
     </div>
@@ -117,276 +148,325 @@ export default function InvoicesPage() {
 
   const downloadPDF = () => { window.print(); };
 
-  if (logic.isLoading) return <div style={{padding:'100px', textAlign:'center', fontWeight:900, color: THEME.primary, fontSize: '20px'}}>⏳ جاري تحميل الفواتير...</div>;
+  if (logic.isLoading) return <div style={{padding:'100px', textAlign:'center', fontWeight:900, color: THEME.primary, fontSize: '20px'}}>⏳ جاري تحميل مركز المستخلصات...</div>;
+
+  const projectOptions = Array.from(new Set((logic.projects||[]).map((p:any) => p.display || p.Property).filter(Boolean)));
+  const partnerOptions = Array.from(new Set((logic.partners||[]).map((c:any) => c.display || c.name).filter(Boolean)));
+  const accountOptions = Array.from(new Set((logic.accounts||[]).map((a:any) => a.display || a.name).filter(Boolean)));
+  const boqOptions = Array.from(new Set((logic.boqItems||[]).map((b:any) => b.display || b.item_name).filter(Boolean)));
+  const descriptionOptions = Array.from(new Set((logic.items||[]).map((b:any)=>b.display || b.name).filter(Boolean)));
+
+  const currentCreditorName = (logic.accounts||[]).find((a:any)=>a.id === logic.currentRecord.creditor_account_id)?.display || '';
+  const currentDebtorName = (logic.accounts||[]).find((a:any)=>a.id === logic.currentRecord.debtor_account_id)?.display || '';
+  const currentDiscountAccountName = (logic.accounts||[]).find((a:any)=>a.id === logic.currentRecord.discount_account_id)?.display || '';
 
   return (
-    <div style={{ direction: 'rtl', minHeight: '100vh', background: '#f1f5f9', display: 'flex', fontFamily: 'Cairo, sans-serif' }}>
+    <div style={{ direction: 'rtl', backgroundColor: '#f1f5f9', display: 'flex', minHeight: '100vh', fontFamily: 'Cairo, sans-serif' }}>
       <style>{`
+        * { box-sizing: border-box; }
         @media print { 
             @page { size: A4 portrait; margin: 10mm; }
             body { background: white; -webkit-print-color-adjust: exact; color: #000; }
             .no-print { display: none !important; } 
             .print-area { display: block !important; width: 100%; }
         }
-        .row-hover:hover { border-color: ${THEME.accent}; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
-        .kpi-card { background: white; padding: 20px; border-radius: 12px; border: 1px solid ${THEME.border}; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .sidebar-input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; width: 100%; outline: none; font-weight: bold; }
-        .sidebar-input::placeholder { color: rgba(255,255,255,0.6); }
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .select-item-hover:hover { background-color: #fef3c7; color: ${THEME.accent} !important; }
-        .modern-invoice { font-family: 'Cairo', sans-serif; color: #000; }
-        .modern-header { display: flex; justify-content: space-between; border-bottom: 3px solid ${THEME.primary}; padding-bottom: 20px; margin-bottom: 30px; }
-        .modern-company h2 { margin: 0 0 5px 0; color: ${THEME.primary}; font-weight: 900; }
-        .modern-company p { margin: 0; color: #111827; font-size: 14px; font-weight: 800; }
-        .modern-title h1 { margin: 0 0 10px 0; font-size: 28px; font-weight: 900; }
-        .modern-client { margin-bottom: 30px; background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #cbd5e1; }
-        .modern-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1px solid #cbd5e1; }
-        .modern-table th, .modern-table td { padding: 15px; text-align: right; border-bottom: 1px solid #cbd5e1; font-weight: 800; color: #000; }
-        .modern-table th { background-color: ${THEME.primary}; color: white; font-weight: 900; font-size: 15px; }
-        .modern-table tbody tr:nth-child(even) { background-color: #f8fafc; }
-        .modern-totals { width: 400px; margin-right: auto; margin-left: 0; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; }
-        .modern-totals table th, .modern-totals table td { border-bottom: none; padding: 10px 15px; font-weight: 900; color: #000; font-size: 15px;}
-        .modern-grand-total { border-top: 2px solid ${THEME.primary}; font-weight: 900; font-size: 20px; color: ${THEME.primary}; background: #e2e8f0; }
-        .modern-footer { margin-top: 40px; text-align: center; font-size: 14px; color: #111827; border-top: 2px solid ${THEME.primary}; padding-top: 20px; font-weight: 800; }
+        .main-content { flex: 1; padding: 40px; margin-right: 70px; transition: 0.4s; }
+        .main-content.sidebar-open { margin-right: 280px; }
+        .row-hover:hover { border-color: ${THEME.accent}; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .control-btn { width: 100%; padding: 12px; border-radius: 10px; border: none; font-weight: 900; cursor: pointer; transition: 0.3s; margin-bottom: 8px; color: #fff; }
+        .modal-input { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid ${THEME.border}; margin-bottom: 15px; font-weight: 900; outline: none; transition: 0.3s; color: #000000; font-size: 16px; background-color: #ffffff; }
+        .modal-input:focus { border-color: ${THEME.accent}; }
+        .modal-input::placeholder { color: #94a3b8; font-weight: 700; }
+        .label-royal { display: block; font-weight: 900; font-size: 14px; color: ${THEME.primary}; margin-bottom: 8px; }
       `}</style>
 
-      {/* سايد بار العمليات */}
-      <aside className="no-print" onMouseEnter={() => setIsSidebarOpen(true)} onMouseLeave={() => setIsSidebarOpen(false)} style={{ width: isSidebarOpen ? '280px' : '70px', background: THEME.primary, color: 'white', transition: '0.4s', position: 'fixed', right: 0, height: '100vh', zIndex: 1001, borderLeft: `3px solid ${THEME.accent}`, overflow: 'hidden' }}>
-          <div style={{ padding: '25px 15px', opacity: isSidebarOpen ? 1 : 0, transition: '0.2s', width: '280px' }}>
-             <h3 style={{ color: THEME.accent, fontWeight: 900, marginBottom: '20px', borderBottom: `1px solid rgba(255,255,255,0.1)`, paddingBottom: '10px' }}>مركز العمليات</h3>
-             <button onClick={logic.handleAddNew} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'white', color: THEME.primary, fontWeight: 900, border: 'none', cursor: 'pointer', marginBottom: '20px', fontSize: '15px' }}>➕ مستند مالي جديد</button>
-             <div style={{ marginBottom: '20px' }}>
-               <input placeholder="🔍 بحث برقم المستند، العميل..." value={logic.globalSearch} onChange={e => logic.setGlobalSearch(e.target.value)} className="sidebar-input" />
-             </div>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
-                <label style={{color: THEME.accent, fontSize: '12px', fontWeight: 900, marginBottom: '5px'}}>إجراءات المستندات المحددة</label>
-                <button onClick={logic.handleEditSelected} disabled={logic.selectedIds.length!==1} style={{ padding: '10px', borderRadius: '8px', background: THEME.accent, color: 'white', border: 'none', cursor: logic.selectedIds.length===1?'pointer':'not-allowed', fontWeight: 900, opacity: logic.selectedIds.length===1?1:0.3 }}>✏️ تعديل المستند</button>
-                <button onClick={logic.handlePostSelected} disabled={logic.selectedIds.length===0} style={{ padding: '10px', borderRadius: '8px', background: THEME.success, color: 'white', border: 'none', cursor: logic.selectedIds.length>0?'pointer':'not-allowed', fontWeight: 900, opacity: logic.selectedIds.length>0?1:0.3 }}>🚀 اعتماد وترحيل</button>
-                <button onClick={logic.handleDeleteSelected} disabled={logic.selectedIds.length===0} style={{ padding: '10px', borderRadius: '8px', background: THEME.ruby, color: 'white', border: 'none', cursor: logic.selectedIds.length>0?'pointer':'not-allowed', fontWeight: 900, opacity: logic.selectedIds.length>0?1:0.3 }}>🗑️ حذف المختار</button>
-                <button onClick={logic.handleUnpostSelected} disabled={logic.selectedIds.length===0} style={{ padding: '10px', borderRadius: '8px', background: '#4b5563', color: 'white', border: 'none', cursor: logic.selectedIds.length>0?'pointer':'not-allowed', fontWeight: 900, opacity: logic.selectedIds.length>0?1:0.3 }}>↩️ فك ترحيل</button>
-             </div>
-             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '12px' }}>
-                <label style={{color: THEME.accent, fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '10px'}}>عرض السجلات</label>
-                <select className="sidebar-input" style={{marginBottom: '15px', padding: '8px'}} value={logic.rowsPerPage} onChange={e => { logic.setRowsPerPage(Number(e.target.value)); logic.setCurrentPage(1); }}>
-                  <option value="50" style={{color: 'black'}}>50 سجل</option>
-                  <option value="100" style={{color: 'black'}}>100 سجل</option>
-                  <option value="500" style={{color: 'black'}}>500 سجل</option>
-                </select>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button onClick={() => logic.setCurrentPage(p => Math.max(1, p - 1))} disabled={logic.currentPage === 1} style={{background: THEME.accent, color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', cursor: logic.currentPage===1?'not-allowed':'pointer', opacity: logic.currentPage===1?0.5:1, fontWeight: 900}}>السابق</button>
-                  <span style={{ color: 'white', fontWeight: 900, fontSize: '14px' }}>{logic.currentPage} / {logic.totalPages}</span>
-                  <button onClick={() => logic.setCurrentPage(p => Math.min(logic.totalPages, p + 1))} disabled={logic.currentPage === logic.totalPages} style={{background: THEME.accent, color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', cursor: logic.currentPage===logic.totalPages?'not-allowed':'pointer', opacity: logic.currentPage===logic.totalPages?0.5:1, fontWeight: 900}}>التالي</button>
-                </div>
+      {/* السايد بار */}
+      <aside className="no-print" onMouseEnter={() => setIsSidebarOpen(true)} onMouseLeave={() => setIsSidebarOpen(false)}
+        style={{ width: isSidebarOpen ? '280px' : '70px', backgroundColor: THEME.primary, position: 'fixed', right: 0, height: '100vh', zIndex: 1001, borderLeft: `3px solid ${THEME.accent}`, transition: '0.4s', overflowY: 'auto' }}>
+        
+        <div style={{ padding: '25px 15px', width: '280px', opacity: isSidebarOpen ? 1 : 0, transition: '0.2s' }}>
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '15px', marginBottom: '20px', textAlign: 'center', border: `1px solid ${THEME.accent}` }}>
+            <div style={{color: THEME.accent, fontSize: '12px', fontWeight: 900}}>إجمالي فواتير الفترة (الصافي)</div>
+            <div style={{color: 'white', fontSize: '24px', fontWeight: 900}}>{logic.kpis.totalNet.toLocaleString()}</div>
+          </div>
+
+          <input style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '10px', color: 'white', marginBottom: '20px', outline: 'none', fontWeight: 900 }} placeholder="🔍 بحث سريع..." value={logic.globalSearch} onChange={e => logic.setGlobalSearch(e.target.value)} />
+
+          <div style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '15px', marginBottom: '20px' }}>
+            <label style={{color: THEME.accent, fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '10px'}}>إجراءات مجمعة</label>
+            
+            <button onClick={logic.handleAddNew} className="control-btn" style={{ background: 'white', color: THEME.primary }}>➕ مستند مالي جديد</button>
+            <button onClick={logic.handleEditSelected} disabled={logic.selectedIds.length !== 1} className="control-btn" style={{ background: THEME.accent, color: 'white', opacity: logic.selectedIds.length === 1 ? 1 : 0.3 }}>✏️ تعديل المختار</button>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+              <button onClick={logic.handleDeleteSelected} disabled={logic.selectedIds.length === 0} className="control-btn" style={{ background: THEME.ruby, margin: 0, opacity: logic.selectedIds.length > 0 ? 1 : 0.3 }}>🗑️ حذف</button>
+              <button onClick={logic.handlePostSelected} disabled={logic.selectedIds.length === 0} className="control-btn" style={{ background: THEME.success, margin: 0, opacity: logic.selectedIds.length > 0 ? 1 : 0.3 }}>🚀 ترحيل</button>
+            </div>
+            <button onClick={logic.handleUnpostSelected} disabled={logic.selectedIds.length === 0} className="control-btn" style={{ background: '#4b5563', opacity: logic.selectedIds.length > 0 ? 1 : 0.3, width: '100%' }}>↩️ فك ترحيل</button>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+             <label style={{color: THEME.accent, fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '10px'}}>عرض السجلات</label>
+             <select style={{ width: '100%', padding: '10px', borderRadius: '8px', border: 'none', outline: 'none', fontWeight: 900, marginBottom: '15px', color: '#000' }} value={logic.rowsPerPage} onChange={e => { logic.setRowsPerPage(Number(e.target.value)); logic.setCurrentPage(1); }}>
+               <option value="50">50 سجل</option><option value="100">100 سجل</option><option value="500">500 سجل</option>
+             </select>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <button onClick={() => logic.setCurrentPage((p:number) => Math.max(1, p - 1))} style={{background: THEME.accent, color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontWeight:900, cursor:'pointer'}}>السابق</button>
+               <span style={{ color: 'white', fontWeight: 900, fontSize: '14px' }}>{logic.currentPage} / {logic.totalPages}</span>
+               <button onClick={() => logic.setCurrentPage((p:number) => Math.min(logic.totalPages, p + 1))} style={{background: THEME.accent, color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontWeight:900, cursor:'pointer'}}>التالي</button>
              </div>
           </div>
+          <button onClick={logic.exportToExcel} className="control-btn" style={{ background: '#334155' }}>📊 تصدير Excel</button>
+        </div>
       </aside>
 
       {/* المحتوى الرئيسي */}
-      <main className="no-print" style={{ flex: 1, padding: '40px', marginRight: isSidebarOpen ? '280px' : '70px', transition: '0.4s' }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+      <main className={`main-content ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 900, color: THEME.primary, margin: 0 }}>الفواتير والمستخلصات</h1>
-            <p style={{ color: THEME.text, fontWeight: 900, margin: 0 }}>المركز المالي لشركة رواسي اليسر</p>
+            <h1 style={{ fontSize: '38px', fontWeight: 900, color: THEME.primary, margin: 0 }}>سجل المستخلصات والفواتير</h1>
+            <p style={{ color: '#000', fontWeight: 900, margin: 0 }}>شركة رواسي اليسر للمقاولات</p>
           </div>
-          <img src="/RYC_Logo.png" alt="Logo" style={{ height: '70px' }} />
+          <img src="/RYC_Logo.png" alt="Logo" style={{ height: '110px' }} />
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
-            <div className="kpi-card" style={{ borderBottom: `4px solid ${THEME.primary}` }}>
-                <div style={{ fontSize: '14px', color: THEME.text, fontWeight: 900 }}>إجمالي المستندات</div>
-                <div style={{ fontSize: '32px', fontWeight: 900, color: THEME.primary }}>{logic.kpis.total}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', borderRight: `5px solid ${THEME.primary}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: '#000' }}>إجمالي المستندات</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#000' }}>{logic.kpis.total}</div>
             </div>
-            <div className="kpi-card" style={{ borderBottom: `4px solid ${THEME.success}` }}>
-                <div style={{ fontSize: '14px', color: THEME.text, fontWeight: 900 }}>مستندات مرحلة ومعتمدة</div>
-                <div style={{ fontSize: '32px', fontWeight: 900, color: THEME.success }}>{logic.kpis.posted}</div>
-                <div style={{ fontSize: '14px', color: THEME.success, fontWeight: 900, marginTop: '5px' }}>إجمالي: {logic.kpis.totalNet.toLocaleString()} ريال</div>
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', borderRight: `5px solid ${THEME.success}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: '#000' }}>المرحلة</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: THEME.success }}>{logic.kpis.posted}</div>
             </div>
-            <div className="kpi-card" style={{ borderBottom: `4px solid ${logic.kpis.pending > 0 ? THEME.ruby : THEME.accent}` }}>
-                <div style={{ fontSize: '14px', color: THEME.text, fontWeight: 900 }}>مستندات معلقة (غير مرحلة)</div>
-                <div style={{ fontSize: '32px', fontWeight: 900, color: logic.kpis.pending > 0 ? THEME.ruby : THEME.accent }}>{logic.kpis.pending}</div>
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', borderRight: `5px solid ${THEME.accent}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 900, color: '#000' }}>إجمالي الصافي (ريال)</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: THEME.accent }}>{logic.kpis.totalNet.toLocaleString()}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '5px', alignItems: 'center', background: 'white', padding: '10px', borderRadius: '12px' }}>
+                <input type="date" value={logic.dateFrom} onChange={e=>logic.setDateFrom(e.target.value)} style={{ width: '50%', padding: '8px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '12px', color: '#000', fontWeight: 900 }} />
+                <input type="date" value={logic.dateTo} onChange={e=>logic.setDateTo(e.target.value)} style={{ width: '50%', padding: '8px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '12px', color: '#000', fontWeight: 900 }} />
             </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: TABLE_GRID_LAYOUT, background: THEME.primary, color: 'white', padding: '15px', borderRadius: '12px', fontWeight: 900, fontSize: '14px', marginBottom: '15px', alignItems: 'center', textAlign: 'center' }}>
-          <input type="checkbox" onChange={() => { if (logic.selectedIds.length === logic.paginatedInvoices.length) logic.setSelectedIds([]); else logic.setSelectedIds(logic.paginatedInvoices.map(r => r.id)); }} checked={logic.selectedIds.length > 0 && logic.selectedIds.length === logic.paginatedInvoices.length} />
+          <input type="checkbox" onChange={(e) => logic.setSelectedIds(e.target.checked ? (logic.paginatedInvoices||[]).map((r:any) => r.id) : [])} checked={logic.selectedIds.length > 0 && logic.selectedIds.length === logic.paginatedInvoices.length} />
           <div>التاريخ</div><div style={{textAlign:'right'}}>العميل / المشروع</div><div>رقم المستند</div><div>الإجمالي</div><div>الصافي</div><div>النوع</div><div>الإجراءات</div>
         </div>
 
-        {logic.paginatedInvoices.map(inv => (
+        {(logic.paginatedInvoices || []).map((inv:any) => (
           <div key={inv.id} className="row-hover" style={{ display: 'grid', gridTemplateColumns: TABLE_GRID_LAYOUT, background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '10px', alignItems: 'center', border: `1px solid ${THEME.border}`, transition: '0.2s', textAlign: 'center', backgroundColor: logic.selectedIds.includes(inv.id) ? '#fef3c7' : 'white' }}>
-            <input type="checkbox" checked={logic.selectedIds.includes(inv.id)} onChange={() => logic.setSelectedIds(p => p.includes(inv.id)?p.filter(x=>x!==inv.id):[...p, inv.id])} />
-            <div style={{fontWeight:900, color: THEME.primary, fontSize: '15px'}}>{inv.date}</div>
-            <div style={{textAlign:'right', paddingRight:'5px'}}>
-               <div style={{fontWeight:900, color: THEME.primary, fontSize: '16px'}}>{inv.client_name}</div>
-               <div style={{fontSize: '13px', color: THEME.accent, fontWeight: 900}}>{inv.property_name || 'بدون مشروع'}</div>
+            <input type="checkbox" checked={logic.selectedIds.includes(inv.id)} onChange={() => { if (logic.selectedIds.includes(inv.id)) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== inv.id)); else logic.setSelectedIds([...logic.selectedIds, inv.id]); }} />
+            <div className="data-cell" style={{color: THEME.primary, fontWeight: 900}}>{inv.date}</div>
+            <div className="data-cell" style={{textAlign:'right'}}>
+               <div style={{fontSize: '15px', fontWeight: 900, color: '#000'}}>{inv.client_name}</div>
+               <div style={{fontSize: '12px', color: THEME.accent, fontWeight: 900}}>{inv.property_name || 'بدون مشروع'}</div>
             </div>
-            <div style={{fontWeight:900, color: THEME.primary, fontSize: '15px'}}>{inv.invoice_number}</div>
-            <div style={{fontWeight:900, color: THEME.primary, fontSize: '15px'}}>{Number(inv.total_amount).toLocaleString()}</div>
-            <div style={{color: THEME.success, fontWeight: 900, fontSize: '17px'}}>{Number(inv.net_amount).toLocaleString()}</div>
-            <div>{inv.is_internal ? <span style={{ padding: '6px 12px', background: '#ffe4e6', color: THEME.ruby, borderRadius: '8px', fontSize: '12px', fontWeight: 900 }}>داخلية</span> : <span style={{ padding: '6px 12px', background: '#e0f2fe', color: '#0369a1', borderRadius: '8px', fontSize: '12px', fontWeight: 900 }}>ضريبية</span>}</div>
+            <div className="data-cell" style={{fontWeight: 900, color: '#000'}}>{inv.invoice_number}</div>
+            <div className="data-cell" style={{fontWeight: 900, color: '#000'}}>{Number(inv.total_amount).toLocaleString()}</div>
+            <div className="data-cell" style={{color: THEME.success, fontSize: '16px', fontWeight: 900}}>{Number(inv.net_amount).toLocaleString()}</div>
+            <div>
+               {inv.is_internal ? <span style={{ padding: '4px 12px', background: '#ffe4e6', color: THEME.ruby, borderRadius: '20px', fontSize: '12px', fontWeight: 900 }}>داخلية</span> : <span style={{ padding: '4px 12px', background: '#e0f2fe', color: '#0369a1', borderRadius: '20px', fontSize: '12px', fontWeight: 900 }}>ضريبية</span>}
+            </div>
             <div style={{display:'flex', justifyContent: 'center', gap:'8px'}}>
-               <button onClick={() => { setPRec(inv); setIsPrintOpen(true); }} style={{ background: '#f8fafc', border: `2px solid ${THEME.primary}`, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px' }} title="عرض وطباعة">🖨️</button>
-               {inv.status !== 'مُعتمد' && <button onClick={() => logic.handlePostSingle(inv.id)} style={{ background: THEME.success, color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, fontSize: '16px' }} title="ترحيل فوري">🚀</button>}
+               <button onClick={() => { setPRec(inv); setIsPrintOpen(true); }} style={{ background: '#f8fafc', border: `1px solid ${THEME.border}`, padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px' }} title="عرض وطباعة">🖨️</button>
+               {inv.status !== 'مُعتمد' && <button onClick={() => logic.handlePostSingle(inv.id)} style={{ background: THEME.success, color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, fontSize: '14px' }} title="ترحيل فوري">🚀</button>}
             </div>
           </div>
         ))}
       </main>
 
-      {/* مودال الإضافة والتعديل */}
+      {/* 📝 موديول الإضافة والتعديل الموحد */}
       {logic.isEditModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.9)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
-          <div style={{ background: 'white', width: '1150px', padding: '35px', borderRadius: '24px', maxHeight: '90vh', overflowY: 'auto', border: `4px solid ${THEME.accent}`, boxShadow: '0 25px 50px rgba(0,0,0,0.4)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `3px solid ${THEME.primary}`, paddingBottom: '15px', marginBottom: '25px' }}>
-                <h2 style={{ fontWeight: 900, margin: 0, color: THEME.primary }}>{logic.editingId ? '✏️ تحديث المستند المالي' : '➕ إصدار مستند مالي جديد'}</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fff1f2', padding: '10px 15px', borderRadius: '10px', border: `2px solid ${THEME.ruby}` }}>
-                   <input type="checkbox" id="is_internal" checked={logic.currentRecord.is_internal || false} onChange={e => logic.setCurrentRecord({...logic.currentRecord, is_internal: e.target.checked})} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, backdropFilter: 'blur(8px)' }} onClick={() => logic.setIsEditModalOpen(false)}>
+          <div style={{ background: '#ffffff', width: '1100px', padding: '35px', borderRadius: '24px', border: `4px solid ${THEME.accent}`, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `4px solid ${THEME.accent}`, paddingBottom: '15px', marginBottom: '25px' }}>
+                <h2 style={{ fontWeight: 900, margin: 0, color: THEME.primary }}>📝 {logic.editingId ? 'تعديل المستند المالي' : 'إصدار مستند مالي جديد'}</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fff1f2', padding: '10px 15px', borderRadius: '10px', border: `2px dashed ${THEME.ruby}` }}>
+                   <input type="checkbox" id="is_internal" checked={logic.currentRecord.is_internal || false} onChange={e => logic.setCurrentRecord({...logic.currentRecord, is_internal: e.target.checked})} style={{ width: '20px', height: '20px', accentColor: THEME.ruby, cursor: 'pointer' }} />
                    <label htmlFor="is_internal" style={{ fontWeight: 900, color: THEME.ruby, cursor: 'pointer', fontSize: '14px' }}>إلغاء ربط الزكاة (فاتورة داخلية)</label>
                 </div>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
-              <ModalField label="التاريخ" type="date" value={logic.currentRecord.date} onChange={(v:any)=>logic.setCurrentRecord({...logic.currentRecord, date:v})} />
-              <ModalField label="رقم المستند" value={logic.currentRecord.invoice_number} onChange={(v:any)=>logic.setCurrentRecord({...logic.currentRecord, invoice_number:v})} />
-              <SmartSelect label="العميل / المقاول" options={logic.partners} value={logic.currentRecord.client_name} onChange={(o:any)=>logic.setCurrentRecord({...logic.currentRecord, client_name:o.name})} />
-              <SmartSelect label="المشروع / العقار" options={logic.projects} value={logic.currentRecord.project_id} onChange={(o:any)=>logic.setCurrentRecord({...logic.currentRecord, project_id:o.id, property_name:o.Property})} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' }}>
+              <div><label className="label-royal">📅 التاريخ</label><input type="date" className="modal-input" style={{marginBottom: 0, color: '#000'}} value={logic.currentRecord.date} onChange={e=>logic.setCurrentRecord({...logic.currentRecord, date:e.target.value})} /></div>
+              <div><label className="label-royal">🔢 رقم المستند (تلقائي)</label><input className="modal-input" style={{marginBottom: 0, background: '#f1f5f9', color: '#000'}} value={logic.currentRecord.invoice_number} readOnly /></div>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', marginBottom: '20px' }}>
-              <SmartSelect label="حساب الدائن (إلى)" options={logic.accounts} value={logic.currentRecord.creditor_account_id} onChange={(o:any)=>logic.setCurrentRecord({...logic.currentRecord, creditor_account_id:o.id})} />
-              <SmartSelect label="حساب المدين (من)" options={logic.accounts} value={logic.currentRecord.debtor_account_id} onChange={(o:any)=>logic.setCurrentRecord({...logic.currentRecord, debtor_account_id:o.id})} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' }}>
+              <UniversalAutocomplete label="👤 العميل / المقاول" placeholder="اختر العميل..." value={logic.currentRecord.client_name} onChange={(val:string)=>logic.setCurrentRecord({...logic.currentRecord, client_name:val})} options={partnerOptions} strict={true} />
+              <UniversalAutocomplete label="🏢 المشروع / العقار" placeholder="اختر العقار..." value={logic.currentRecord.property_name} onChange={(val:string)=>{
+                  const p = logic.projects.find((x:any)=>(x.display || x.Property) === val);
+                  logic.setCurrentRecord({...logic.currentRecord, project_id:p?.id || '', property_name: val});
+              }} options={projectOptions} strict={true} />
             </div>
 
-            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: `2px solid ${THEME.border}`, marginBottom: '20px' }}>
-               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 1fr 1fr 1fr 1.2fr 50px', gap: '15px', fontWeight: 900, marginBottom: '10px', fontSize: '14px', color: THEME.primary }}>
-                  <div>اختر البند</div><div>البيان التفصيلي</div><div>الوحدة</div><div>الكمية</div><div>السعر</div><div>الإجمالي</div><div></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', background: '#f8fafc', padding: '20px', borderRadius: '15px', border: `2px solid ${THEME.border}`, marginBottom: '20px' }}>
+               <UniversalAutocomplete label="🧾 حساب الإيراد (الدائن)" placeholder="ابحث في الحسابات..." value={currentCreditorName} onChange={(val:string)=>{
+                   const acc = logic.accounts.find((a:any)=>a.display === val);
+                   logic.setCurrentRecord({...logic.currentRecord, creditor_account_id: acc?.id || null});
+               }} options={accountOptions} strict={true} />
+               
+               <UniversalAutocomplete label="🏦 حساب العميل (المدين)" placeholder="ابحث في الحسابات..." value={currentDebtorName} onChange={(val:string)=>{
+                   const acc = logic.accounts.find((a:any)=>a.display === val);
+                   logic.setCurrentRecord({...logic.currentRecord, debtor_account_id: acc?.id || null});
+               }} options={accountOptions} strict={true} />
+            </div>
+
+            {/* جدول البنود */}
+            <div style={{ background: '#fff', border: `2px solid ${THEME.border}`, padding: '15px', borderRadius: '15px', marginBottom: '20px' }}>
+               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 0.8fr 0.8fr 1fr 1fr 40px', gap: '10px', fontWeight: 900, marginBottom: '10px', fontSize: '14px', color: THEME.primary }}>
+                  <div>بند المقايسة (BOQ)</div><div>البيان التفصيلي</div><div>الوحدة</div><div>الكمية</div><div>السعر</div><div>الإجمالي</div><div></div>
                </div>
-               {logic.currentRecord.lines.map((l:any, i:number) => (
-                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 1fr 1fr 1fr 1.2fr 50px', gap: '15px', marginBottom: '10px', alignItems: 'start' }}>
-                    <SmartSelect hideLabel options={logic.items} value={l.item_id} onChange={(o:any)=>logic.handleLineChange(i, 'item_id', o.id)} placeholder="ابحث عن البند..." />
-                    <textarea value={l.description || ''} onChange={(e)=>logic.handleLineChange(i, 'description', e.target.value)} placeholder="وصف البند..." style={{ width: '100%', minHeight: '42px', padding: '10px', borderRadius: '8px', border: `1px solid ${THEME.border}`, fontWeight: 900, fontSize: '14px', outline: 'none', resize: 'vertical', color: THEME.text, fontFamily: 'inherit' }} />
-                    <input value={l.unit || ''} onChange={(e)=>logic.handleLineChange(i, 'unit', e.target.value)} placeholder="الوحدة" style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: `1px solid ${THEME.border}`, fontWeight: 900, fontSize: '14px', outline: 'none', color: THEME.text }} />
-                    <input type="number" value={l.quantity} onChange={(e)=>logic.handleLineChange(i, 'quantity', e.target.value)} placeholder="الكمية" style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: `1px solid ${THEME.border}`, fontWeight: 900, fontSize: '14px', outline: 'none', color: THEME.text }} />
-                    <input type="number" value={l.unit_price} onChange={(e)=>logic.handleLineChange(i, 'unit_price', e.target.value)} placeholder="السعر" style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: `1px solid ${THEME.border}`, fontWeight: 900, fontSize: '14px', outline: 'none', color: THEME.text }} />
-                    <div style={{ background: 'white', borderRadius: '8px', border: `2px solid ${THEME.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '16px', color: THEME.primary, height: '42px' }}>{Number(l.total_price||0).toLocaleString()}</div>
-                    <button onClick={()=>logic.handleRemoveLine(i)} style={{ height: '42px', background: '#fee2e2', color: THEME.ruby, border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, fontSize: '18px' }}>✕</button>
+               {(logic.currentRecord.lines || []).map((l:any, i:number) => (
+                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 0.8fr 0.8fr 1fr 1fr 40px', gap: '10px', marginBottom: '10px', alignItems: 'start' }}>
+                    <UniversalAutocomplete placeholder="بحث BOQ..." options={boqOptions} value={(logic.boqItems||[]).find((b:any)=>b.id === l.item_id)?.display || ''} onChange={(val:string)=>{
+                        const item = logic.boqItems.find((it:any)=>it.display === val);
+                        logic.handleLineChange(i, 'item_id', item ? item.id : null);
+                    }} strict={true} />
+                    
+                    <UniversalAutocomplete freeText={true} isTextArea={true} options={descriptionOptions} placeholder="وصف البند..." value={l.description || ''} onChange={(val:string)=>logic.handleLineChange(i, 'description', val)} />
+                    
+                    <input className="modal-input" style={{marginBottom:0, padding:'10px', fontSize:'14px', color: '#000'}} value={l.unit || ''} onChange={(e)=>logic.handleLineChange(i, 'unit', e.target.value)} placeholder="الوحدة" />
+                    <input type="number" className="modal-input" style={{marginBottom:0, padding:'10px', fontSize:'14px', color: '#000'}} value={l.quantity} onChange={(e)=>logic.handleLineChange(i, 'quantity', e.target.value)} placeholder="الكمية" />
+                    <input type="number" className="modal-input" style={{marginBottom:0, padding:'10px', fontSize:'14px', color: '#000'}} value={l.unit_price} onChange={(e)=>logic.handleLineChange(i, 'unit_price', e.target.value)} placeholder="السعر" />
+                    <div style={{ background: '#f8fafc', borderRadius: '10px', border: `2px solid ${THEME.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '15px', color: THEME.primary, height: '45px' }}>{Number(l.total_price||0).toLocaleString()}</div>
+                    <button onClick={()=>logic.handleRemoveLine(i)} style={{ height: '45px', background: '#fee2e2', color: THEME.ruby, border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 900, fontSize: '18px' }}>✕</button>
                  </div>
                ))}
-               <button onClick={logic.handleAddLine} style={{ marginTop: '10px', padding: '12px 30px', borderRadius: '10px', background: THEME.primary, color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900, fontSize: '15px' }}>➕ إضافة سطر جديد</button>
+               <button onClick={logic.handleAddLine} style={{ padding: '12px 25px', background: THEME.primary, color: 'white', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 900, fontSize: '15px' }}>➕ إضافة بند جديد</button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px', alignItems: 'end' }}>
-               <ModalField label="إجمالي الأعمال" value={Number(logic.currentRecord.total_amount).toLocaleString()} readOnly />
-               <ModalField label="ضمان أعمال (%)" type="number" value={logic.currentRecord.retention_percentage} onChange={(v:any)=>logic.setCurrentRecord({...logic.currentRecord, retention_percentage:v})} />
-               <ModalField label="مبلغ الضمان" value={Number(logic.currentRecord.retention_amount).toLocaleString()} readOnly />
-               <ModalField label="خصومات مواد" type="number" value={logic.currentRecord.material_discount} onChange={(v:any)=>logic.setCurrentRecord({...logic.currentRecord, material_discount:v})} />
-               <ModalField label="الضريبة (15%)" value={Number(logic.currentRecord.tax_amount).toLocaleString()} readOnly />
-               <div style={{ background: THEME.primary, padding: '10px', borderRadius: '12px', color: 'white', textAlign: 'center', border: `1px solid ${THEME.accent}` }}>
-                  <div style={{ fontSize: '11px', opacity: 0.9, fontWeight: 900, color: THEME.accent }}>الصافي المستحق</div>
-                  <div style={{ fontSize: '18px', fontWeight: 900 }}>{Number(logic.currentRecord.net_amount).toLocaleString()}</div>
+            {/* الحسابات الختامية */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px', backgroundColor: '#f1f5f9', padding: '20px', borderRadius: '15px', border: `2px solid ${THEME.border}`, marginBottom: '15px' }}>
+               <div><label className="label-royal">إجمالي الأعمال</label><div className="modal-input" style={{marginBottom:0, background:'white', color: '#000'}}>{Number(logic.currentRecord.total_amount || 0).toLocaleString()}</div></div>
+               <div><label className="label-royal">ضمان أعمال %</label><input type="number" className="modal-input" style={{marginBottom:0, color: '#000'}} value={logic.currentRecord.retention_percentage} onChange={(e)=>logic.setCurrentRecord({...logic.currentRecord, retention_percentage: e.target.value})} /></div>
+               <div><label className="label-royal" style={{color: THEME.ruby}}>خصم خامات (-)</label><input type="number" className="modal-input" style={{marginBottom:0, color: THEME.ruby}} value={logic.currentRecord.material_discount} onChange={(e)=>logic.setCurrentRecord({...logic.currentRecord, material_discount: e.target.value})} /></div>
+               <div><label className="label-royal">ضريبة 15%</label><div className="modal-input" style={{marginBottom:0, background:'white', color: '#000'}}>{Number(logic.currentRecord.tax_amount || 0).toLocaleString()}</div></div>
+               <div style={{ textAlign: 'center' }}>
+                  <label className="label-royal" style={{color: THEME.success}}>الصافي المستحق</label>
+                  <div style={{ padding: '10px', background: 'white', borderRadius: '10px', border: `2px solid ${THEME.success}`, fontWeight: 900, color: THEME.success, fontSize: '20px' }}>{Number(logic.currentRecord.net_amount || 0).toLocaleString()}</div>
                </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '15px', marginTop: '30px' }}>
-               <button onClick={()=>logic.setIsEditModalOpen(false)} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: `2px solid ${THEME.primary}`, background: 'white', color: THEME.primary, fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إغلاق وتجاهل</button>
-               <button onClick={logic.handleSaveInvoice} disabled={logic.isSaving} style={{ flex: 2, padding: '15px', borderRadius: '12px', background: THEME.success, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: '16px' }}>{logic.isSaving ? '⏳ جاري الحفظ...' : '✅ حفظ المستند المالي'}</button>
+            {/* 🟢 حساب توجيه الخصم */}
+            {Number(logic.currentRecord.material_discount) > 0 && (
+                <div style={{ background: '#fff1f2', padding: '15px', borderRadius: '15px', border: `2px dashed ${THEME.ruby}`, marginBottom: '20px' }}>
+                   <UniversalAutocomplete 
+                      label="🧾 حساب توجيه خصم خامات العميل (لإنشاء القيد المحاسبي)" 
+                      placeholder="ابحث في شجرة الحسابات..." 
+                      value={currentDiscountAccountName} 
+                      onChange={(val:string)=>{
+                          const acc = logic.accounts.find((a:any)=>a.display === val);
+                          logic.setCurrentRecord({...logic.currentRecord, discount_account_id: acc?.id || null});
+                      }} 
+                      options={accountOptions} 
+                      strict={true} 
+                   />
+                </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+               <button onClick={logic.handleSaveInvoice} disabled={logic.isSaving} style={{ flex: 2, background: THEME.success, color: 'white', padding: '18px', borderRadius: '15px', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '18px', boxShadow: '0 10px 20px rgba(5, 150, 105, 0.2)' }}>
+                  {logic.isSaving ? '⏳ جاري الحفظ...' : '✅ اعتماد وحفظ المستند'}
+               </button>
+               <button onClick={()=>logic.setIsEditModalOpen(false)} style={{ flex: 1, padding: '18px', background: '#f8fafc', border: `2px solid ${THEME.primary}`, borderRadius: '15px', fontWeight: 900, cursor: 'pointer', color: THEME.primary, fontSize: '16px' }}>إلغاء وتجاهل</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* شاشة الطباعة */}
+      {/* 🖨️ شاشة الطباعة - ممنوع حذف أو تغيير أي سطر */}
       {isPrintOpen && pRec && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.95)', zIndex: 6000, display: 'flex', flexDirection: 'column', alignItems: 'center', overflowY: 'auto', padding: '20px' }}>
           <div className="no-print" style={{ marginBottom: '20px', display: 'flex', gap: '15px' }}>
-             <button onClick={downloadPDF} style={{ padding: '12px 30px', background: THEME.ruby, color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '16px', boxShadow: '0 4px 10px rgba(225,29,72,0.4)' }}>📥 تحميل كـ PDF / طباعة</button>
+             <button onClick={downloadPDF} style={{ padding: '12px 30px', background: THEME.ruby, color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>📥 تحميل كـ PDF / طباعة</button>
              <button onClick={() => setIsPrintOpen(false)} style={{ padding: '12px 40px', background: '#334155', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>✕ إغلاق</button>
           </div>
           
           <div className="print-area modern-invoice" style={{ width: '210mm', minHeight: '297mm', background: 'white', padding: '15mm', position: 'relative', boxShadow: '0 0 30px rgba(0,0,0,0.5)' }}>
-             <div className="modern-header">
+             <div className="modern-header" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `3px solid ${THEME.primary}`, paddingBottom: '20px', marginBottom: '30px' }}>
                 <div className="modern-company">
                     <img src="/RYC_Logo.png" alt="Logo" style={{ height: '90px', marginBottom: '10px' }} />
-                    <h2>شركة رواسي اليسر للمقاولات</h2>
-                    <p>المملكة العربية السعودية - الرياض</p>
-                    <p>الرقم الضريبي: 312487477800003</p>
+                    <h2 style={{ color: THEME.primary, fontWeight: 900, margin: '0 0 5px 0' }}>شركة رواسي اليسر للمقاولات</h2>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: '14px', color: '#000' }}>المملكة العربية السعودية - الرياض</p>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: '14px', color: '#000' }}>الرقم الضريبي: 312487477800003</p>
                 </div>
                 <div className="modern-title" style={{ textAlign: 'left' }}>
-                    <h1 style={{ background: pRec.is_internal ? THEME.ruby : THEME.primary, color: 'white', padding: '12px 60px', borderRadius: '50px', fontSize: '26px', border: `3px solid ${THEME.accent}`, display: 'inline-block' }}>{pRec.is_internal ? 'فاتورة داخلية' : 'فاتورة ضريبية'}</h1>
+                    <h1 style={{ background: pRec.is_internal ? THEME.ruby : THEME.primary, margin: '0 0 10px 0', color: 'white', padding: '12px 60px', borderRadius: '50px', fontSize: '26px', border: `3px solid ${THEME.accent}`, display: 'inline-block' }}>{pRec.is_internal ? 'فاتورة داخلية' : 'فاتورة ضريبية'}</h1>
                     <p style={{ margin: '8px 0 15px 0', fontWeight: 900, color: '#111827', fontSize: '14px', textAlign: 'center' }}>{pRec.is_internal ? 'INTERNAL INVOICE' : 'TAX INVOICE'}</p>
-                    <p style={{ fontSize: '16px', fontWeight: 900 }}><strong>رقم الفاتورة:</strong> #{pRec.invoice_number}</p>
-                    <p style={{ fontSize: '16px', fontWeight: 900 }}><strong>تاريخ الإصدار:</strong> {pRec.date}</p>
+                    <p style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#000' }}><strong>رقم الفاتورة:</strong> #{pRec.invoice_number}</p>
+                    <p style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#000' }}><strong>تاريخ الإصدار:</strong> {pRec.date}</p>
                     <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'flex-end' }}><ZatcaQRCode record={pRec} /></div>
                 </div>
              </div>
 
-             <div className="modern-client" style={{ borderRight: `6px solid ${pRec.is_internal ? THEME.ruby : THEME.primary}` }}>
+             <div className="modern-client" style={{ borderRight: `6px solid ${pRec.is_internal ? THEME.ruby : THEME.primary}`, marginBottom: '30px', background: '#f8fafc', padding: '20px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                 <h3 style={{ color: THEME.primary, margin: '0 0 12px 0', fontSize: '18px', fontWeight: 900 }}>فاتورة إلى العميل:</h3>
-                <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: 900 }}><strong>الاسم:</strong> {pRec.client_name}</p>
-                <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: 900 }}><strong>المشروع:</strong> {pRec.property_name || '---'}</p>
-                <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: 900 }}><strong>الرقم الضريبي:</strong> {pRec.client_vat || '---'}</p>
+                <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: 900, color: '#000' }}><strong>الاسم:</strong> {pRec.client_name}</p>
+                <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: 900, color: '#000' }}><strong>المشروع:</strong> {pRec.property_name || '---'}</p>
+                <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: 900, color: '#000' }}><strong>الرقم الضريبي:</strong> {pRec.client_vat || '---'}</p>
              </div>
 
-             <table className="modern-table">
+             <table className="modern-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px', border: '1px solid #cbd5e1' }}>
                 <thead>
                    <tr>
-                      <th style={{textAlign: 'center', width: '50px'}}>م</th>
-                      <th style={{textAlign: 'right'}}>البيان التفصيلي</th>
-                      <th style={{textAlign: 'center', width: '100px'}}>الكمية</th>
-                      <th style={{textAlign: 'center', width: '100px'}}>الوحدة</th>
-                      <th style={{textAlign: 'center', width: '120px'}}>السعر</th>
-                      <th style={{textAlign: 'center', width: '150px'}}>الإجمالي</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>م</th>
+                      <th style={{ padding: '15px', textAlign: 'right', background: THEME.primary, color: 'white', fontWeight: 900 }}>البيان التفصيلي</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>الكمية</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>الوحدة</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>السعر</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>الإجمالي</th>
                    </tr>
                 </thead>
                 <tbody>
                    {(pRec.invoice_lines || pRec.lines || []).map((l:any, i:number) => (
-                     <tr key={i}>
-                        <td style={{textAlign: 'center', fontWeight: 900}}>{i+1}</td>
-                        <td style={{fontWeight: 900, whiteSpace: 'pre-wrap', lineHeight: '1.6'}}>{l.description}</td>
-                        <td style={{textAlign: 'center', fontWeight: 900}}>{l.quantity}</td>
-                        <td style={{textAlign: 'center', fontWeight: 900}}>{l.unit}</td>
-                        <td style={{textAlign: 'center', fontWeight: 900}}>{Number(l.unit_price || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
-                        <td style={{textAlign: 'center', fontWeight: 900, color: THEME.primary}}>{Number(l.total_price || 0).toLocaleString()}</td>
+                     <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f8fafc' }}>
+                        <td style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #cbd5e1', fontWeight: 900, color: '#000' }}>{i+1}</td>
+                        <td style={{ padding: '15px', textAlign: 'right', borderBottom: '1px solid #cbd5e1', fontWeight: 900, color: '#000', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{l.description}</td>
+                        <td style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #cbd5e1', fontWeight: 900, color: '#000' }}>{l.quantity}</td>
+                        <td style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #cbd5e1', fontWeight: 900, color: '#000' }}>{l.unit}</td>
+                        <td style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #cbd5e1', fontWeight: 900, color: '#000' }}>{Number(l.unit_price || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                        <td style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #cbd5e1', fontWeight: 900, color: '#000' }}>{Number(l.total_price || 0).toLocaleString()}</td>
                      </tr>
                    ))}
                 </tbody>
              </table>
 
-             <div className="modern-totals">
+             <div className="modern-totals" style={{ width: '400px', marginRight: 'auto', marginLeft: 0, background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' }}>
                 <table style={{ width: '100%' }}>
                    <tbody>
                       <tr>
-                         <td>إجمالي الأعمال:</td>
-                         <td style={{textAlign: 'left'}}>{Number(pRec?.total_amount || 0).toLocaleString()} ريال</td>
+                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>إجمالي الأعمال:</td>
+                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>{Number(pRec?.total_amount || 0).toLocaleString()} ريال</td>
                       </tr>
                       <tr>
-                         <td>ضمان أعمال ({pRec?.retention_percentage || 0}%):</td>
-                         <td style={{textAlign: 'left'}}>- {Number(pRec?.retention_amount || 0).toLocaleString()} ريال</td>
+                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>ضمان أعمال ({pRec?.retention_percentage || 0}%):</td>
+                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>- {Number(pRec?.retention_amount || 0).toLocaleString()} ريال</td>
                       </tr>
                       <tr>
-                         <td>الخصومات:</td>
-                         <td style={{textAlign: 'left'}}>- {Number(pRec?.material_discount || 0).toLocaleString()} ريال</td>
+                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>الخصومات:</td>
+                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>- {Number(pRec?.material_discount || 0).toLocaleString()} ريال</td>
                       </tr>
                       <tr>
-                         <td>ضريبة القيمة المضافة (15%):</td>
-                         <td style={{textAlign: 'left'}}>{Number(pRec?.tax_amount || 0).toLocaleString()} ريال</td>
+                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>ضريبة القيمة المضافة (15%):</td>
+                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>{Number(pRec?.tax_amount || 0).toLocaleString()} ريال</td>
                       </tr>
-                      <tr className="modern-grand-total">
-                         <td style={{ padding: '15px' }}>الصافي المستحق للدفع:</td>
-                         <td style={{textAlign: 'left', padding: '15px', fontSize: '22px'}}>{Number(pRec?.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2})} ريال</td>
+                      <tr className="modern-grand-total" style={{ borderTop: `2px solid ${THEME.primary}`, background: '#e2e8f0' }}>
+                         <td style={{ padding: '15px 15px 8px 15px', fontWeight: 900, fontSize: '20px', color: THEME.primary }}>الصافي المستحق للدفع:</td>
+                         <td style={{ textAlign: 'left', padding: '15px 15px 8px 15px', fontSize: '22px', fontWeight: 900, color: THEME.primary }}>{Number(pRec?.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2})} ريال</td>
                       </tr>
                    </tbody>
                 </table>
              </div>
 
-             <div style={{ marginTop: '25px', fontWeight: 900, fontSize: '16px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+             <div style={{ marginTop: '25px', fontWeight: 900, fontSize: '16px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#000' }}>
                 المبلغ بالحروف: فقط {tafqeet(Number(pRec?.net_amount || 0))}
              </div>
 
-             <div className="modern-footer">
-                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', fontWeight: 900 }}>
+             <div className="modern-footer" style={{ marginTop: '40px', textAlign: 'center', fontSize: '14px', color: '#111827', borderTop: `2px solid ${THEME.primary}`, paddingTop: '20px', fontWeight: 800 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', fontWeight: 900, color: '#000' }}>
                     <div>توقيع المحاسب / المدير المالي<br/><br/>.................................</div>
                     <div>الختم الرسمي للشركة<br/><br/>.................................</div>
                 </div>

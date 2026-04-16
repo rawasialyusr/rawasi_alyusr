@@ -1,219 +1,281 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase'; 
+import * as XLSX from 'xlsx';
 
 export function useInvoicesLogic() {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [projects, setProjects] = useState<any[]>([]); 
     const [partners, setPartners] = useState<any[]>([]);
-    const [items, setItems] = useState<any[]>([]);
+    const [boqItems, setBoqItems] = useState<any[]>([]); 
+    const [items, setItems] = useState<any[]>([]); 
     const [accounts, setAccounts] = useState<any[]>([]); 
     
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+
     const [globalSearch, setGlobalSearch] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [filterStatus, setFilterStatus] = useState('الكل');
+
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
 
+    // 🟢 تمت إضافة discount_account_id للحسابات
     const defaultInv = { 
         date: new Date().toISOString().split('T')[0], 
         type: 'مستخلص مالك', 
-        invoice_number: '', client_name: '', project_id: '', property_name: '',
+        invoice_number: '', 
+        client_name: '', 
+        project_id: '', 
+        property_name: '',
         material_discount: 0, 
+        discount_account_id: null, // 🟢 حقل توجيه الخصم للقيد
         retention_percentage: 5, 
         retention_amount: 0,
-        tax_amount: 0, total_amount: 0, net_amount: 0, note: '',
-        creditor_account_id: null, debtor_account_id: null, status: 'معلق',
+        tax_amount: 0, 
+        total_amount: 0, 
+        net_amount: 0, 
+        note: '',
+        creditor_account_id: null, 
+        debtor_account_id: null, 
+        status: 'معلق',
         is_internal: false,
-        lines: [{ id: Date.now().toString(), item_id: '', description: '', unit: 'مقطوعية', quantity: 1, unit_price: 0, total_price: 0 }]
+        lines: [{ 
+            id: Date.now().toString(), 
+            item_id: '', 
+            description: '', 
+            unit: 'مقطوعية', 
+            quantity: 1, 
+            unit_price: 0, 
+            total_price: 0 
+        }]
     };
 
     const [currentRecord, setCurrentRecord] = useState<any>(defaultInv);
 
-    // 🟢 معادلة الحسابات التلقائية (ضمان أعمال + ضريبة + خصم مواد)
-    useEffect(() => {
-        const lines = currentRecord.lines || [];
-        const linesTotal = lines.reduce((sum: number, line: any) => sum + (Number(line.total_price) || 0), 0);
-        const materialDiscount = Number(currentRecord.material_discount || 0);
-        const retentionPct = Number(currentRecord.retention_percentage || 0);
-        const retentionAmt = linesTotal * (retentionPct / 100);
-        const taxAmt = linesTotal * 0.15; 
-        const netAmt = linesTotal - retentionAmt - materialDiscount + taxAmt;
+    const generateAutoNumber = useCallback((data: any[]) => {
+        if (!data || data.length === 0) return "INV-1001";
+        const numericParts = data.map(i => {
+            const match = (i.invoice_number || "").match(/\d+/);
+            return match ? parseInt(match[0]) : 1000;
+        });
+        const max = Math.max(...numericParts, 1000);
+        return `INV-${max + 1}`;
+    }, []);
 
-        if (netAmt !== currentRecord.net_amount || currentRecord.total_amount !== linesTotal) {
-            setCurrentRecord((prev: any) => ({
-                ...prev,
-                total_amount: linesTotal,
-                retention_amount: retentionAmt,
-                tax_amount: taxAmt,
-                net_amount: netAmt
-            }));
-        }
-    }, [currentRecord.lines, currentRecord.material_discount, currentRecord.retention_percentage]);
-
-    const fetchSupportData = async () => {
+    const fetchFullData = async () => {
         setIsLoading(true);
         try {
-            const [p, pr, it, ac, inv] = await Promise.all([
+            let allResults: any[] = [];
+            let from = 0;
+            let hasMore = true;
+            
+            while (hasMore) {
+                const { data } = await supabase.from('invoices').select('*, invoice_lines(*)').order('date', { ascending: false }).range(from, from + 999);
+                if (data && data.length > 0) {
+                    allResults = [...allResults, ...data];
+                    from += 1000;
+                    if (data.length < 1000) hasMore = false;
+                } else {
+                    hasMore = false;
+                }
+            }
+            setInvoices(allResults || []);
+
+            const [p, pr, it, ac] = await Promise.all([
                 supabase.from('partners').select('id, name'),
                 supabase.from('projects').select('id, Property'),
-                supabase.from('items').select('id, name, default_unit'),
-                supabase.from('accounts').select('id, name, code'),
-                supabase.from('invoices').select('*, invoice_lines(*)').order('date', { ascending: false })
+                supabase.from('items').select('*'),
+                supabase.from('accounts').select('id, name, code')
             ]);
-            if (p.data) setPartners(p.data);
-            if (pr.data) setProjects(pr.data);
-            if (it.data) setItems(it.data);
-            if (ac.data) setAccounts(ac.data);
-            if (inv.data) setInvoices(inv.data);
+
+            setPartners(p.data || []);
+            setProjects(pr.data || []);
+            setAccounts(ac.data || []);
+            
+            const formattedItems = (it.data || []).map((x:any) => ({
+                ...x,
+                display: x.item_code ? `${x.item_code} - ${x.name || x.item_name}` : (x.name || x.item_name)
+            }));
+            setItems(formattedItems);
+
+        } catch (err) {
+            console.error("Error fetching data:", err);
         } finally {
             setIsLoading(false);
         }
     };
 
-    useEffect(() => { fetchSupportData(); }, []);
+    useEffect(() => { fetchFullData(); }, []);
 
-    // 🟢 1. الفلترة والبحث الذكي (هذا الجزء كان مفقوداً)
-    const filteredInvoices = useMemo(() => {
-        const search = globalSearch.toLowerCase().trim();
-        if (!search) return invoices;
-        return invoices.filter(inv => 
-            (inv.invoice_number || '').toLowerCase().includes(search) || 
-            (inv.client_name || '').toLowerCase().includes(search) ||
-            (inv.property_name || '').toLowerCase().includes(search)
-        );
-    }, [invoices, globalSearch]);
+    useEffect(() => {
+        if (!currentRecord.lines) return;
+        
+        const linesTotal = currentRecord.lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0);
+        const materialDiscount = Number(currentRecord.material_discount || 0);
+        const retentionPct = Number(currentRecord.retention_percentage || 0);
+        
+        const retentionAmt = linesTotal * (retentionPct / 100);
+        const taxableAmount = linesTotal - retentionAmt - materialDiscount;
+        const taxAmt = taxableAmount * 0.15; 
+        const netAmt = taxableAmount + taxAmt;
 
-    // 🟢 2. الترقيم (Pagination) (هذا المتغير الذي يسبب الخطأ لعدم وجوده)
+        if (Math.abs(netAmt - (currentRecord.net_amount || 0)) > 0.01 || Math.abs(linesTotal - (currentRecord.total_amount || 0)) > 0.01) {
+            setCurrentRecord((prev: any) => ({
+                ...prev,
+                total_amount: Number(linesTotal.toFixed(2)),
+                retention_amount: Number(retentionAmt.toFixed(2)),
+                tax_amount: Number(taxAmt.toFixed(2)),
+                net_amount: Number(netAmt.toFixed(2)),
+                // 🟢 تصفير الحساب لو الخصم بقى صفر
+                discount_account_id: materialDiscount > 0 ? prev.discount_account_id : null 
+            }));
+        }
+    }, [currentRecord.lines, currentRecord.material_discount, currentRecord.retention_percentage]);
+
+    const allFiltered = useMemo(() => {
+        return (invoices || []).filter(inv => {
+            const search = (globalSearch || '').toLowerCase().trim();
+            const matchesSearch = !search || 
+                (inv.invoice_number || '').toLowerCase().includes(search) || 
+                (inv.client_name || '').toLowerCase().includes(search) ||
+                (inv.property_name || '').toLowerCase().includes(search);
+
+            const matchesStatus = filterStatus === 'الكل' || 
+                (filterStatus === 'مرحل' && inv.status === 'مُعتمد') || 
+                (filterStatus === 'معلق' && inv.status !== 'مُعتمد');
+
+            const matchesDate = (!dateFrom || inv.date >= dateFrom) && (!dateTo || inv.date <= dateTo);
+
+            return matchesSearch && matchesStatus && matchesDate;
+        });
+    }, [invoices, globalSearch, filterStatus, dateFrom, dateTo]);
+
     const paginatedInvoices = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
-        return filteredInvoices.slice(start, start + rowsPerPage);
-    }, [filteredInvoices, currentPage, rowsPerPage]);
-
-    // 🟢 3. حساب إجمالي الصفحات
-    const totalPages = Math.ceil(filteredInvoices.length / rowsPerPage) || 1;
-
-    // 🟢 إدارة العمليات
-    const handleAddNew = () => { 
-        setEditingId(null); 
-        setCurrentRecord(defaultInv); 
-        setIsEditModalOpen(true); 
-    };
-
-    const handleEditSelected = () => {
-        if (selectedIds.length !== 1) return;
-        const inv = invoices.find(i => i.id === selectedIds[0]);
-        if (inv) { 
-            const recordToEdit = { 
-                ...inv, 
-                lines: inv.invoice_lines && inv.invoice_lines.length > 0 ? inv.invoice_lines : defaultInv.lines 
-            };
-            setEditingId(inv.id); 
-            setCurrentRecord(recordToEdit); 
-            setIsEditModalOpen(true); 
-        }
-    };
+        return (allFiltered || []).slice(start, start + rowsPerPage);
+    }, [allFiltered, currentPage, rowsPerPage]);
 
     const handleSaveInvoice = async () => {
+        if (!currentRecord.client_name) return alert("يرجى اختيار العميل");
+        if (Number(currentRecord.material_discount) > 0 && !currentRecord.discount_account_id) {
+            return alert("يرجى اختيار حساب لتوجيه خصم خامات العميل");
+        }
+        
         setIsSaving(true);
         try {
             const { lines, invoice_lines, ...headerPayload } = currentRecord;
-            let finalInvoiceId = editingId;
+            let finalId = editingId;
+
             if (editingId) {
-                await supabase.from('invoices').update(headerPayload).eq('id', editingId);
+                const { error: hErr } = await supabase.from('invoices').update(headerPayload).eq('id', editingId);
+                if (hErr) throw hErr;
                 await supabase.from('invoice_lines').delete().eq('invoice_id', editingId);
             } else {
-                const { data, error } = await supabase.from('invoices').insert([headerPayload]).select('id').single();
-                if (error) throw error;
-                finalInvoiceId = data.id;
+                const { data, error: iErr } = await supabase.from('invoices').insert([headerPayload]).select('id').single();
+                if (iErr) throw iErr;
+                finalId = data.id;
             }
-            if (lines) {
-                const linesPayload = lines.map((l:any) => ({
-                    invoice_id: finalInvoiceId,
-                    item_id: l.item_id || null,
-                    description: l.description,
-                    unit: l.unit,
-                    quantity: Number(l.quantity) || 0,
-                    unit_price: Number(l.unit_price) || 0,
-                    total_price: Number(l.total_price) || 0
-                }));
-                await supabase.from('invoice_lines').insert(linesPayload);
+
+            const linesPayload = (lines || []).map((l:any) => ({
+                invoice_id: finalId, 
+                item_id: l.item_id || null, 
+                description: l.description,
+                unit: l.unit, 
+                quantity: Number(l.quantity) || 0, 
+                unit_price: Number(l.unit_price) || 0, 
+                total_price: Number(l.total_price) || 0
+            }));
+            
+            if (linesPayload.length > 0) {
+                const { error: lErr } = await supabase.from('invoice_lines').insert(linesPayload);
+                if (lErr) throw lErr;
             }
-            await fetchSupportData(); 
+
+            await fetchFullData(); 
             setIsEditModalOpen(false); 
             setSelectedIds([]);
-        } catch(err: any) { 
-            alert("خطأ أثناء الحفظ: " + err.message); 
-        } finally { 
-            setIsSaving(false); 
+        } catch(err: any) {
+            alert("فشل الحفظ: " + err.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
-    const handleDeleteSelected = async () => {
-        if (!confirm("هل أنت متأكد من حذف المستندات المختارة نهائياً؟")) return;
-        await supabase.from('invoices').delete().in('id', selectedIds);
-        await fetchSupportData(); 
-        setSelectedIds([]);
+    const handleLineChange = (index: number, field: string, value: any) => {
+        const newLines = [...(currentRecord.lines || [])];
+        if (!newLines[index]) return;
+
+        newLines[index][field] = value;
+        
+        if (field === 'item_id') {
+            const boqItem = boqItems.find(it => it.id === value);
+            const standardItem = items.find(it => it.id === value);
+            const foundItem = boqItem || standardItem;
+
+            if (foundItem) { 
+                newLines[index].description = foundItem.item_name || foundItem.name; 
+                newLines[index].unit = foundItem.unit || foundItem.default_unit || 'مقطوعية'; 
+            }
+        }
+        
+        if (field === 'quantity' || field === 'unit_price') {
+            const q = Number(newLines[index].quantity || 0);
+            const p = Number(newLines[index].unit_price || 0);
+            newLines[index].total_price = Number((q * p).toFixed(2));
+        }
+        setCurrentRecord({...currentRecord, lines: newLines});
     };
 
-    const handlePostSingle = async (id: string) => {
-        await supabase.from('invoices').update({ status: 'مُعتمد' }).eq('id', id);
-        await fetchSupportData();
-    };
-
-    const handlePostSelected = async () => {
-        await supabase.from('invoices').update({ status: 'مُعتمد' }).in('id', selectedIds);
-        await fetchSupportData(); 
-        setSelectedIds([]);
-    };
-
-    const handleUnpostSelected = async () => {
-        await supabase.from('invoices').update({ status: 'معلق' }).in('id', selectedIds);
-        await fetchSupportData(); 
-        setSelectedIds([]);
+    const exportToExcel = () => {
+        const reportData = allFiltered.map(i => ({
+            "التاريخ": i.date,
+            "رقم المستند": i.invoice_number,
+            "العميل": i.client_name,
+            "المشروع": i.property_name,
+            "الإجمالي": i.total_amount,
+            "الصافي": i.net_amount,
+            "الحالة": i.status
+        }));
+        const ws = XLSX.utils.json_to_sheet(reportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "المستخلصات");
+        XLSX.writeFile(wb, `Invoices_Export_${new Date().toLocaleDateString()}.xlsx`);
     };
 
     return {
-        projects, partners, items, accounts, invoices, paginatedInvoices,
-        isEditModalOpen, setIsEditModalOpen, currentRecord, setCurrentRecord, 
-        isSaving, handleAddNew, handleSaveInvoice, 
-        globalSearch, setGlobalSearch, selectedIds, setSelectedIds,
-        currentPage, setCurrentPage, rowsPerPage, setRowsPerPage,
-        totalPages,
-        handleEditSelected, handleDeleteSelected, handlePostSelected, handleUnpostSelected, handlePostSingle,
-        handleLineChange: (index: number, field: string, value: any) => {
-            const newLines = [...currentRecord.lines];
-            newLines[index][field] = value;
-            if (field === 'item_id') {
-                const item = items.find(it => it.id === value);
-                if (item) { 
-                    newLines[index].description = item.name; 
-                    newLines[index].unit = item.default_unit || 'مقطوعية'; 
-                }
-            }
-            if (field === 'quantity' || field === 'unit_price') {
-                newLines[index].total_price = Number(newLines[index].quantity || 0) * Number(newLines[index].unit_price || 0);
-            }
-            setCurrentRecord({...currentRecord, lines: newLines});
+        isLoading, isSaving,
+        invoices: invoices || [], paginatedInvoices: paginatedInvoices || [], 
+        projects: projects || [], partners: partners || [], 
+        boqItems: boqItems || [], items: items || [], accounts: accounts || [], 
+        globalSearch, setGlobalSearch, dateFrom, setDateFrom, dateTo, setDateTo, filterStatus, setFilterStatus,
+        selectedIds: selectedIds || [], setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage,
+        totalPages: Math.ceil(allFiltered.length / rowsPerPage) || 1, totalResults: allFiltered.length,
+        isEditModalOpen, setIsEditModalOpen, editingId, setEditingId, currentRecord, setCurrentRecord, 
+        handleAddNew: () => { setEditingId(null); setCurrentRecord({ ...defaultInv, invoice_number: generateAutoNumber(invoices) }); setIsEditModalOpen(true); },
+        handleSaveInvoice, exportToExcel,
+        handleEditSelected: () => {
+            if (selectedIds.length !== 1) return;
+            const inv = invoices.find(i => i.id === selectedIds[0]);
+            if (inv) { setEditingId(inv.id); setCurrentRecord({...inv, lines: inv.invoice_lines && inv.invoice_lines.length > 0 ? inv.invoice_lines : defaultInv.lines}); setIsEditModalOpen(true); }
         },
-        handleAddLine: () => {
-            setCurrentRecord((prev:any) => ({
-                ...prev,
-                lines: [...(prev.lines || []), { id: Date.now().toString(), item_id: '', description: '', unit: 'مقطوعية', quantity: 1, unit_price: 0, total_price: 0 }]
-            }));
-        },
-        handleRemoveLine: (index: number) => {
-            setCurrentRecord((prev:any) => ({ ...prev, lines: prev.lines.filter((_:any, i:number) => i !== index) }));
-        },
-        isLoading, editingId,
+        handleDeleteSelected: async () => { if(selectedIds.length && confirm("حذف المختار نهائياً؟")) { await supabase.from('invoices').delete().in('id', selectedIds); await fetchFullData(); setSelectedIds([]); } },
+        handlePostSelected: async () => { if(selectedIds.length) { await supabase.from('invoices').update({ status: 'مُعتمد' }).in('id', selectedIds); await fetchFullData(); setSelectedIds([]); } },
+        handleUnpostSelected: async () => { if(selectedIds.length) { await supabase.from('invoices').update({ status: 'معلق' }).in('id', selectedIds); await fetchFullData(); setSelectedIds([]); } },
+        handlePostSingle: async (id: string) => { await supabase.from('invoices').update({ status: 'مُعتمد' }).eq('id', id); await fetchFullData(); },
+        handleLineChange,
+        handleAddLine: () => setCurrentRecord((p:any)=>({...p, lines: [...(p.lines || []), { id: Date.now().toString(), item_id: '', description: '', unit: 'مقطوعية', quantity: 1, unit_price: 0, total_price: 0 }]})),
+        handleRemoveLine: (index: number) => setCurrentRecord((p:any)=>({...p, lines: (p.lines || []).filter((_:any, i:number)=>i!==index)})),
         kpis: {
-            total: invoices.length,
-            posted: invoices.filter(i => i.status === 'مُعتمد').length,
-            pending: invoices.filter(i => i.status !== 'مُعتمد').length,
-            totalNet: invoices.filter(i => i.status === 'مُعتمد').reduce((sum, i) => sum + (Number(i.net_amount) || 0), 0)
+            total: allFiltered.length,
+            posted: allFiltered.filter(i => i.status === 'مُعتمد').length,
+            pending: allFiltered.filter(i => i.status !== 'مُعتمد').length,
+            totalNet: allFiltered.reduce((sum, i) => sum + (Number(i.net_amount) || 0), 0)
         }
     };
 }
