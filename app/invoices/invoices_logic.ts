@@ -25,7 +25,6 @@ export function useInvoicesLogic() {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
 
-    // 🟢 تمت إضافة discount_account_id للحسابات
     const defaultInv = { 
         date: new Date().toISOString().split('T')[0], 
         type: 'مستخلص مالك', 
@@ -34,7 +33,7 @@ export function useInvoicesLogic() {
         project_id: '', 
         property_name: '',
         material_discount: 0, 
-        discount_account_id: null, // 🟢 حقل توجيه الخصم للقيد
+        discount_account_id: null, 
         retention_percentage: 5, 
         retention_amount: 0,
         tax_amount: 0, 
@@ -87,20 +86,27 @@ export function useInvoicesLogic() {
             }
             setInvoices(allResults || []);
 
-            const [p, pr, it, ac] = await Promise.all([
+            const [p, pr, boq, it, ac] = await Promise.all([
                 supabase.from('partners').select('id, name'),
-                supabase.from('projects').select('id, Property'),
+                supabase.from('projects').select('id, "Property", project_code'), 
+                supabase.from('boq_items').select('id, item_code, item_name, unit_of_measure'), // 🟢 جدول المقايسة الصحيح
                 supabase.from('items').select('*'),
                 supabase.from('accounts').select('id, name, code')
             ]);
 
             setPartners(p.data || []);
-            setProjects(pr.data || []);
             setAccounts(ac.data || []);
             
+            setProjects((pr.data || []).map((x:any) => ({
+                ...x, id: x.id, display: x.project_code ? `${x.project_code} - ${x["Property"]}` : x["Property"]
+            })));
+
+            setBoqItems((boq.data || []).map((x:any) => ({
+                ...x, id: x.id, display: `${x.item_code} - ${x.item_name}`
+            })));
+
             const formattedItems = (it.data || []).map((x:any) => ({
-                ...x,
-                display: x.item_code ? `${x.item_code} - ${x.name || x.item_name}` : (x.name || x.item_name)
+                ...x, display: x.item_code ? `${x.item_code} - ${x.name || x.item_name}` : (x.name || x.item_name)
             }));
             setItems(formattedItems);
 
@@ -112,6 +118,12 @@ export function useInvoicesLogic() {
     };
 
     useEffect(() => { fetchFullData(); }, []);
+
+    const historicalDescriptions = useMemo(() => {
+        const texts = new Set<string>();
+        invoices.forEach(inv => (inv.invoice_lines || []).forEach((l:any) => { if(l.description) texts.add(l.description); }));
+        return Array.from(texts).map(t => ({ id: t, display: t }));
+    }, [invoices]);
 
     useEffect(() => {
         if (!currentRecord.lines) return;
@@ -132,7 +144,6 @@ export function useInvoicesLogic() {
                 retention_amount: Number(retentionAmt.toFixed(2)),
                 tax_amount: Number(taxAmt.toFixed(2)),
                 net_amount: Number(netAmt.toFixed(2)),
-                // 🟢 تصفير الحساب لو الخصم بقى صفر
                 discount_account_id: materialDiscount > 0 ? prev.discount_account_id : null 
             }));
         }
@@ -166,10 +177,9 @@ export function useInvoicesLogic() {
         if (Number(currentRecord.material_discount) > 0 && !currentRecord.discount_account_id) {
             return alert("يرجى اختيار حساب لتوجيه خصم خامات العميل");
         }
-        
         setIsSaving(true);
         try {
-            const { lines, invoice_lines, ...headerPayload } = currentRecord;
+            const { lines, invoice_lines, projects, ...headerPayload } = currentRecord;
             let finalId = editingId;
 
             if (editingId) {
@@ -213,14 +223,15 @@ export function useInvoicesLogic() {
 
         newLines[index][field] = value;
         
+        // 🟢 زيتونة الربط: سحب الوصف والوحدة فور اختيار البند
         if (field === 'item_id') {
-            const boqItem = boqItems.find(it => it.id === value);
-            const standardItem = items.find(it => it.id === value);
+            const boqItem = boqItems.find(it => String(it.id) === String(value));
+            const standardItem = items.find(it => String(it.id) === String(value));
             const foundItem = boqItem || standardItem;
 
             if (foundItem) { 
                 newLines[index].description = foundItem.item_name || foundItem.name; 
-                newLines[index].unit = foundItem.unit || foundItem.default_unit || 'مقطوعية'; 
+                newLines[index].unit = foundItem.unit_of_measure || foundItem.unit || foundItem.default_unit || 'مقطوعية'; 
             }
         }
         
@@ -233,7 +244,7 @@ export function useInvoicesLogic() {
     };
 
     const exportToExcel = () => {
-        const reportData = allFiltered.map(i => ({
+        const reportData = (allFiltered || []).map(i => ({
             "التاريخ": i.date,
             "رقم المستند": i.invoice_number,
             "العميل": i.client_name,
@@ -249,13 +260,12 @@ export function useInvoicesLogic() {
     };
 
     return {
-        isLoading, isSaving,
-        invoices: invoices || [], paginatedInvoices: paginatedInvoices || [], 
+        isLoading, isSaving, invoices: invoices || [], paginatedInvoices: paginatedInvoices || [], 
         projects: projects || [], partners: partners || [], 
-        boqItems: boqItems || [], items: items || [], accounts: accounts || [], 
+        boqItems: boqItems || [], items: items || [], accounts: accounts || [], historicalDescriptions,
         globalSearch, setGlobalSearch, dateFrom, setDateFrom, dateTo, setDateTo, filterStatus, setFilterStatus,
         selectedIds: selectedIds || [], setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage,
-        totalPages: Math.ceil(allFiltered.length / rowsPerPage) || 1, totalResults: allFiltered.length,
+        totalPages: Math.ceil((allFiltered?.length || 0) / rowsPerPage) || 1, totalResults: allFiltered?.length || 0,
         isEditModalOpen, setIsEditModalOpen, editingId, setEditingId, currentRecord, setCurrentRecord, 
         handleAddNew: () => { setEditingId(null); setCurrentRecord({ ...defaultInv, invoice_number: generateAutoNumber(invoices) }); setIsEditModalOpen(true); },
         handleSaveInvoice, exportToExcel,
@@ -272,10 +282,10 @@ export function useInvoicesLogic() {
         handleAddLine: () => setCurrentRecord((p:any)=>({...p, lines: [...(p.lines || []), { id: Date.now().toString(), item_id: '', description: '', unit: 'مقطوعية', quantity: 1, unit_price: 0, total_price: 0 }]})),
         handleRemoveLine: (index: number) => setCurrentRecord((p:any)=>({...p, lines: (p.lines || []).filter((_:any, i:number)=>i!==index)})),
         kpis: {
-            total: allFiltered.length,
-            posted: allFiltered.filter(i => i.status === 'مُعتمد').length,
-            pending: allFiltered.filter(i => i.status !== 'مُعتمد').length,
-            totalNet: allFiltered.reduce((sum, i) => sum + (Number(i.net_amount) || 0), 0)
+            total: allFiltered?.length || 0,
+            posted: allFiltered?.filter(i => i.status === 'مُعتمد').length || 0,
+            pending: allFiltered?.filter(i => i.status !== 'مُعتمد').length || 0,
+            totalNet: allFiltered?.reduce((sum, i) => sum + (Number(i.net_amount) || 0), 0) || 0
         }
     };
 }

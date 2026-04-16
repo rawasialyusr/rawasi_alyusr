@@ -4,7 +4,7 @@ import { useInvoicesLogic } from './invoices_logic';
 import { QRCodeSVG } from 'qrcode.react'; 
 
 const THEME = {
-  primary: '#0f172a', accent: '#ca8a04', success: '#059669', slate: '#f8fafc', text: '#111827', border: '#cbd5e1', ruby: '#e11d48', info: '#0284c7'
+  primary: '#0f172a', accent: '#ca8a04', success: '#059669', slate: '#f8fafc', text: '#111827', border: '#cbd5e1', ruby: '#991B1B', info: '#0284c7'
 };
 
 const TABLE_GRID_LAYOUT = "50px 100px 2.5fr 120px 120px 120px 100px 100px";
@@ -58,13 +58,22 @@ const ModalField = ({ label, value, onChange, type="text", readOnly=false, hideL
   </div>
 );
 
-const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, strict = false, isTextArea = false, disabled = false }: any) => {
+// 🟢 مكون الإكمال التلقائي الذكي المأمن
+const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, strict = false, isTextArea = false, disabled = false, freeText = false }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setSearch(value || ''); }, [value]);
+  useEffect(() => {
+    if (!isOpen && !freeText) {
+      const selectedOption = (options || []).find((o: any) => String(o.id || o) === String(value));
+      const labelToShow = typeof selectedOption === 'object' ? (selectedOption.display || selectedOption.item_name || selectedOption.Property || selectedOption.name) : selectedOption;
+      setSearch(labelToShow || '');
+    } else if (freeText && value) {
+      setSearch(value);
+    }
+  }, [value, isOpen, options, freeText]);
 
   useEffect(() => { 
     const click = (e:any) => { if(ref.current && !ref.current.contains(e.target)) setIsOpen(false); }; 
@@ -72,37 +81,46 @@ const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, s
     return () => document.removeEventListener('mousedown', click); 
   }, []);
 
-  const normalizeText = (text: string) => text?.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim() || '';
-  const filtered = options.filter((o:string) => normalizeText(o).includes(normalizeText(search)) && o !== search).slice(0, 15); 
+  const normalizeText = (text: any) => String(text || '').toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 
-  useEffect(() => { setHighlightedIndex(-1); }, [search, isOpen]);
+  const filtered = (options || []).filter((o:any) => {
+    const textToSearch = typeof o === 'object' ? (o.display || o.item_name || o.Property || o.name || '') : o;
+    return normalizeText(textToSearch).includes(normalizeText(search));
+  }).slice(0, 15);
 
-  const handleSelect = (opt: string) => {
-     setSearch(opt);
-     onChange(opt);
+  const handleSelect = (opt: any) => {
+     const actualValue = typeof opt === 'object' ? (opt.id || opt.display || opt) : opt;
+     const displayLabel = typeof opt === 'object' ? (opt.display || opt.item_name || opt.Property || opt.name || opt) : opt;
+     setSearch(displayLabel);
+     onChange(actualValue); 
      setIsOpen(false);
      setHighlightedIndex(-1);
   };
 
   const handleKeyDown = (e: any) => {
-    if (!isOpen || filtered.length === 0) return;
-    if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setHighlightedIndex(prev => (prev < filtered.length - 1 ? prev + 1 : prev));
-    } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : -1));
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
-        if (highlightedIndex >= 0 && highlightedIndex < filtered.length) {
-            e.preventDefault();
-            handleSelect(filtered[highlightedIndex]);
+    if (!isOpen || filtered.length === 0) {
+       if (e.key === 'ArrowDown') setIsOpen(true);
+       return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedIndex(prev => (prev < filtered.length - 1 ? prev + 1 : prev)); } 
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIndex(prev => (prev > 0 ? prev - 1 : -1)); } 
+    else if (e.key === 'Enter' || e.key === 'Tab') { 
+        if (highlightedIndex >= 0) { 
+            e.preventDefault(); 
+            handleSelect(filtered[highlightedIndex]); 
+        } else if (freeText) {
+            setIsOpen(false);
         }
-    } else if (e.key === 'Escape') { setIsOpen(false); }
+    } 
+    else if (e.key === 'Escape') { setIsOpen(false); }
   };
 
   const handleBlur = () => {
      if (strict && search) {
-        const match = options.find((o:string) => o === search);
+        const match = options.find((o:any) => {
+            const lbl = typeof o === 'object' ? (o.display || o.item_name || o.Property || o.name) : o;
+            return String(lbl) === search;
+        });
         if (!match) { setSearch(''); onChange(''); }
      }
      setTimeout(() => { setIsOpen(false); }, 200); 
@@ -112,14 +130,14 @@ const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, s
 
   return (
     <div style={{ position: 'relative', marginBottom: '15px' }} ref={ref}>
-      {label && <label className="label-royal">{label}</label>}
+      {label && <label className="label-royal" style={{display: 'block', fontWeight: 900, fontSize: '14px', color: THEME.primary, marginBottom: '6px'}}>{label}</label>}
       <div onClick={() => !disabled && setIsOpen(true)} style={{ minHeight: isTextArea ? '80px' : '45px', padding: isTextArea ? '10px 12px' : '0 12px', borderRadius: '10px', border: `2px solid ${THEME.border}`, background: disabled ? '#f1f5f9' : '#ffffff', display: 'flex', alignItems: isTextArea ? 'flex-start' : 'center', cursor: disabled ? 'not-allowed' : 'text', color: '#000000', fontWeight: 900, fontSize: '15px' }}>
         <InputElement 
           disabled={disabled}
           style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', color: '#000000', fontWeight: 900, fontSize: '16px', resize: isTextArea ? 'vertical' : 'none', minHeight: isTextArea ? '70px' : 'auto' }}
           placeholder={placeholder}
           value={search}
-          onChange={(e:any) => { setSearch(e.target.value); if(!strict) onChange(e.target.value); setIsOpen(true); }}
+          onChange={(e:any) => { setSearch(e.target.value); if(freeText) onChange(e.target.value); setIsOpen(true); }}
           onFocus={() => setIsOpen(true)}
           onBlur={handleBlur} 
           onKeyDown={handleKeyDown} 
@@ -128,10 +146,10 @@ const UniversalAutocomplete = ({ label, value, onChange, options, placeholder, s
       </div>
       {isOpen && filtered.length > 0 && !disabled && (
          <div style={{ position: 'absolute', top: '100%', right: 0, left: 0, background: '#ffffff', zIndex: 10000, border: `2px solid ${THEME.accent}`, borderRadius: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', maxHeight: '200px', overflowY: 'auto', marginTop: '5px' }}>
-          {filtered.map((o:string, i:number) => (
+          {filtered.map((o:any, i:number) => (
               <div key={i} onMouseDown={(e) => { e.preventDefault(); handleSelect(o); }} onMouseEnter={() => setHighlightedIndex(i)} 
                 style={{ padding: '12px 15px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '15px', fontWeight: 900, color: '#000000', backgroundColor: highlightedIndex === i ? '#fef3c7' : 'transparent' }}>
-                {o}
+                {typeof o === 'object' ? (o.display || o.item_name || o.Property || o.name) : o}
               </div>
           ))}
         </div>
@@ -150,15 +168,11 @@ export default function InvoicesPage() {
 
   if (logic.isLoading) return <div style={{padding:'100px', textAlign:'center', fontWeight:900, color: THEME.primary, fontSize: '20px'}}>⏳ جاري تحميل مركز المستخلصات...</div>;
 
-  const projectOptions = Array.from(new Set((logic.projects||[]).map((p:any) => p.display || p.Property).filter(Boolean)));
-  const partnerOptions = Array.from(new Set((logic.partners||[]).map((c:any) => c.display || c.name).filter(Boolean)));
-  const accountOptions = Array.from(new Set((logic.accounts||[]).map((a:any) => a.display || a.name).filter(Boolean)));
-  const boqOptions = Array.from(new Set((logic.boqItems||[]).map((b:any) => b.display || b.item_name).filter(Boolean)));
-  const descriptionOptions = Array.from(new Set((logic.items||[]).map((b:any)=>b.display || b.name).filter(Boolean)));
-
-  const currentCreditorName = (logic.accounts||[]).find((a:any)=>a.id === logic.currentRecord.creditor_account_id)?.display || '';
-  const currentDebtorName = (logic.accounts||[]).find((a:any)=>a.id === logic.currentRecord.debtor_account_id)?.display || '';
-  const currentDiscountAccountName = (logic.accounts||[]).find((a:any)=>a.id === logic.currentRecord.discount_account_id)?.display || '';
+  const projectOptions = logic.projects || [];
+  const partnerOptions = logic.partners || [];
+  const accountOptions = logic.accounts || [];
+  const boqItemsList = logic.boqItems || [];
+  const descriptionOptions = Array.from(new Set([...(logic.boqItems||[]).map((b:any)=>b.item_name), ...(logic.historicalDescriptions||[]).map((h:any)=>h.display)].filter(Boolean)));
 
   return (
     <div style={{ direction: 'rtl', backgroundColor: '#f1f5f9', display: 'flex', minHeight: '100vh', fontFamily: 'Cairo, sans-serif' }}>
@@ -175,8 +189,6 @@ export default function InvoicesPage() {
         .row-hover:hover { border-color: ${THEME.accent}; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
         .control-btn { width: 100%; padding: 12px; border-radius: 10px; border: none; font-weight: 900; cursor: pointer; transition: 0.3s; margin-bottom: 8px; color: #fff; }
         .modal-input { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid ${THEME.border}; margin-bottom: 15px; font-weight: 900; outline: none; transition: 0.3s; color: #000000; font-size: 16px; background-color: #ffffff; }
-        .modal-input:focus { border-color: ${THEME.accent}; }
-        .modal-input::placeholder { color: #94a3b8; font-weight: 700; }
         .label-royal { display: block; font-weight: 900; font-size: 14px; color: ${THEME.primary}; margin-bottom: 8px; }
       `}</style>
 
@@ -194,10 +206,8 @@ export default function InvoicesPage() {
 
           <div style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '15px', marginBottom: '20px' }}>
             <label style={{color: THEME.accent, fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '10px'}}>إجراءات مجمعة</label>
-            
             <button onClick={logic.handleAddNew} className="control-btn" style={{ background: 'white', color: THEME.primary }}>➕ مستند مالي جديد</button>
             <button onClick={logic.handleEditSelected} disabled={logic.selectedIds.length !== 1} className="control-btn" style={{ background: THEME.accent, color: 'white', opacity: logic.selectedIds.length === 1 ? 1 : 0.3 }}>✏️ تعديل المختار</button>
-            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
               <button onClick={logic.handleDeleteSelected} disabled={logic.selectedIds.length === 0} className="control-btn" style={{ background: THEME.ruby, margin: 0, opacity: logic.selectedIds.length > 0 ? 1 : 0.3 }}>🗑️ حذف</button>
               <button onClick={logic.handlePostSelected} disabled={logic.selectedIds.length === 0} className="control-btn" style={{ background: THEME.success, margin: 0, opacity: logic.selectedIds.length > 0 ? 1 : 0.3 }}>🚀 ترحيل</button>
@@ -276,7 +286,7 @@ export default function InvoicesPage() {
         ))}
       </main>
 
-      {/* 📝 موديول الإضافة والتعديل الموحد */}
+      {/* 📝 موديول الإضافة والتعديل */}
       {logic.isEditModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, backdropFilter: 'blur(8px)' }} onClick={() => logic.setIsEditModalOpen(false)}>
           <div style={{ background: '#ffffff', width: '1100px', padding: '35px', borderRadius: '24px', border: `4px solid ${THEME.accent}`, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
@@ -296,38 +306,37 @@ export default function InvoicesPage() {
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' }}>
               <UniversalAutocomplete label="👤 العميل / المقاول" placeholder="اختر العميل..." value={logic.currentRecord.client_name} onChange={(val:string)=>logic.setCurrentRecord({...logic.currentRecord, client_name:val})} options={partnerOptions} strict={true} />
-              <UniversalAutocomplete label="🏢 المشروع / العقار" placeholder="اختر العقار..." value={logic.currentRecord.property_name} onChange={(val:string)=>{
-                  const p = logic.projects.find((x:any)=>(x.display || x.Property) === val);
-                  logic.setCurrentRecord({...logic.currentRecord, project_id:p?.id || '', property_name: val});
+              <UniversalAutocomplete label="🏢 المشروع / العقار" placeholder="اختر العقار..." value={logic.currentRecord.project_id} onChange={(id:any)=>{
+                  const p = logic.projects.find((x:any)=>String(x.id) === String(id));
+                  logic.setCurrentRecord({...logic.currentRecord, project_id:id, property_name: p?.Property || ''});
               }} options={projectOptions} strict={true} />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', background: '#f8fafc', padding: '20px', borderRadius: '15px', border: `2px solid ${THEME.border}`, marginBottom: '20px' }}>
-               <UniversalAutocomplete label="🧾 حساب الإيراد (الدائن)" placeholder="ابحث في الحسابات..." value={currentCreditorName} onChange={(val:string)=>{
-                   const acc = logic.accounts.find((a:any)=>a.display === val);
-                   logic.setCurrentRecord({...logic.currentRecord, creditor_account_id: acc?.id || null});
+               <UniversalAutocomplete label="🧾 حساب الإيراد (الدائن)" placeholder="ابحث في الحسابات..." value={logic.currentRecord.creditor_account_id} onChange={(val:string)=>{
+                   logic.setCurrentRecord({...logic.currentRecord, creditor_account_id: val});
                }} options={accountOptions} strict={true} />
                
-               <UniversalAutocomplete label="🏦 حساب العميل (المدين)" placeholder="ابحث في الحسابات..." value={currentDebtorName} onChange={(val:string)=>{
-                   const acc = logic.accounts.find((a:any)=>a.display === val);
-                   logic.setCurrentRecord({...logic.currentRecord, debtor_account_id: acc?.id || null});
+               <UniversalAutocomplete label="🏦 حساب العميل (المدين)" placeholder="ابحث في الحسابات..." value={logic.currentRecord.debtor_account_id} onChange={(val:string)=>{
+                   logic.setCurrentRecord({...logic.currentRecord, debtor_account_id: val});
                }} options={accountOptions} strict={true} />
             </div>
 
-            {/* جدول البنود */}
+            {/* جدول البنود - زيتونة الـ BOQ */}
             <div style={{ background: '#fff', border: `2px solid ${THEME.border}`, padding: '15px', borderRadius: '15px', marginBottom: '20px' }}>
                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 0.8fr 0.8fr 1fr 1fr 40px', gap: '10px', fontWeight: 900, marginBottom: '10px', fontSize: '14px', color: THEME.primary }}>
                   <div>بند المقايسة (BOQ)</div><div>البيان التفصيلي</div><div>الوحدة</div><div>الكمية</div><div>السعر</div><div>الإجمالي</div><div></div>
                </div>
                {(logic.currentRecord.lines || []).map((l:any, i:number) => (
                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr 0.8fr 0.8fr 1fr 1fr 40px', gap: '10px', marginBottom: '10px', alignItems: 'start' }}>
-                    <UniversalAutocomplete placeholder="بحث BOQ..." options={boqOptions} value={(logic.boqItems||[]).find((b:any)=>b.id === l.item_id)?.display || ''} onChange={(val:string)=>{
-                        const item = logic.boqItems.find((it:any)=>it.display === val);
-                        logic.handleLineChange(i, 'item_id', item ? item.id : null);
-                    }} strict={true} />
-                    
+                    <UniversalAutocomplete 
+                        placeholder="بحث بكود أو اسم البند..." 
+                        options={boqItemsList} 
+                        value={l.item_id} 
+                        onChange={(val: string) => logic.handleLineChange(i, 'item_id', val)} 
+                        strict={true} 
+                    />
                     <UniversalAutocomplete freeText={true} isTextArea={true} options={descriptionOptions} placeholder="وصف البند..." value={l.description || ''} onChange={(val:string)=>logic.handleLineChange(i, 'description', val)} />
-                    
                     <input className="modal-input" style={{marginBottom:0, padding:'10px', fontSize:'14px', color: '#000'}} value={l.unit || ''} onChange={(e)=>logic.handleLineChange(i, 'unit', e.target.value)} placeholder="الوحدة" />
                     <input type="number" className="modal-input" style={{marginBottom:0, padding:'10px', fontSize:'14px', color: '#000'}} value={l.quantity} onChange={(e)=>logic.handleLineChange(i, 'quantity', e.target.value)} placeholder="الكمية" />
                     <input type="number" className="modal-input" style={{marginBottom:0, padding:'10px', fontSize:'14px', color: '#000'}} value={l.unit_price} onChange={(e)=>logic.handleLineChange(i, 'unit_price', e.target.value)} placeholder="السعر" />
@@ -350,20 +359,11 @@ export default function InvoicesPage() {
                </div>
             </div>
 
-            {/* 🟢 حساب توجيه الخصم */}
             {Number(logic.currentRecord.material_discount) > 0 && (
                 <div style={{ background: '#fff1f2', padding: '15px', borderRadius: '15px', border: `2px dashed ${THEME.ruby}`, marginBottom: '20px' }}>
-                   <UniversalAutocomplete 
-                      label="🧾 حساب توجيه خصم خامات العميل (لإنشاء القيد المحاسبي)" 
-                      placeholder="ابحث في شجرة الحسابات..." 
-                      value={currentDiscountAccountName} 
-                      onChange={(val:string)=>{
-                          const acc = logic.accounts.find((a:any)=>a.display === val);
-                          logic.setCurrentRecord({...logic.currentRecord, discount_account_id: acc?.id || null});
-                      }} 
-                      options={accountOptions} 
-                      strict={true} 
-                   />
+                   <UniversalAutocomplete label="🧾 حساب توجيه خصم خامات العميل (للقيد المحاسبي)" placeholder="ابحث في شجرة الحسابات..." value={logic.currentRecord.discount_account_id} onChange={(val:string)=>{
+                       logic.setCurrentRecord({...logic.currentRecord, discount_account_id: val});
+                   }} options={accountOptions} strict={true} />
                 </div>
             )}
 
@@ -371,13 +371,13 @@ export default function InvoicesPage() {
                <button onClick={logic.handleSaveInvoice} disabled={logic.isSaving} style={{ flex: 2, background: THEME.success, color: 'white', padding: '18px', borderRadius: '15px', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '18px', boxShadow: '0 10px 20px rgba(5, 150, 105, 0.2)' }}>
                   {logic.isSaving ? '⏳ جاري الحفظ...' : '✅ اعتماد وحفظ المستند'}
                </button>
-               <button onClick={()=>logic.setIsEditModalOpen(false)} style={{ flex: 1, padding: '18px', background: '#f8fafc', border: `2px solid ${THEME.primary}`, borderRadius: '15px', fontWeight: 900, cursor: 'pointer', color: THEME.primary, fontSize: '16px' }}>إلغاء وتجاهل</button>
+               <button onClick={()=>logic.setIsEditModalOpen(false)} style={{ flex: 1, padding: '18px', background: '#f8fafc', border: `2px solid ${THEME.primary}`, borderRadius: '15px', fontWeight: 900, cursor: 'pointer', color: THEME.primary, fontSize: '16px' }}>إلغاء</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🖨️ شاشة الطباعة - ممنوع حذف أو تغيير أي سطر */}
+      {/* 🖨️ شاشة الطباعة */}
       {isPrintOpen && pRec && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.95)', zIndex: 6000, display: 'flex', flexDirection: 'column', alignItems: 'center', overflowY: 'auto', padding: '20px' }}>
           <div className="no-print" style={{ marginBottom: '20px', display: 'flex', gap: '15px' }}>
@@ -412,12 +412,12 @@ export default function InvoicesPage() {
              <table className="modern-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px', border: '1px solid #cbd5e1' }}>
                 <thead>
                    <tr>
-                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>م</th>
-                      <th style={{ padding: '15px', textAlign: 'right', background: THEME.primary, color: 'white', fontWeight: 900 }}>البيان التفصيلي</th>
-                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>الكمية</th>
-                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>الوحدة</th>
-                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>السعر</th>
-                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white', fontWeight: 900 }}>الإجمالي</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white' }}>م</th>
+                      <th style={{ padding: '15px', textAlign: 'right', background: THEME.primary, color: 'white' }}>البيان التفصيلي</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white' }}>الكمية</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white' }}>الوحدة</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white' }}>السعر</th>
+                      <th style={{ padding: '15px', textAlign: 'center', background: THEME.primary, color: 'white' }}>الإجمالي</th>
                    </tr>
                 </thead>
                 <tbody>
@@ -437,42 +437,20 @@ export default function InvoicesPage() {
              <div className="modern-totals" style={{ width: '400px', marginRight: 'auto', marginLeft: 0, background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px' }}>
                 <table style={{ width: '100%' }}>
                    <tbody>
-                      <tr>
-                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>إجمالي الأعمال:</td>
-                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>{Number(pRec?.total_amount || 0).toLocaleString()} ريال</td>
-                      </tr>
-                      <tr>
-                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>ضمان أعمال ({pRec?.retention_percentage || 0}%):</td>
-                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>- {Number(pRec?.retention_amount || 0).toLocaleString()} ريال</td>
-                      </tr>
-                      <tr>
-                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>الخصومات:</td>
-                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>- {Number(pRec?.material_discount || 0).toLocaleString()} ريال</td>
-                      </tr>
-                      <tr>
-                         <td style={{ padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>ضريبة القيمة المضافة (15%):</td>
-                         <td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900, color: '#000', fontSize: '15px' }}>{Number(pRec?.tax_amount || 0).toLocaleString()} ريال</td>
-                      </tr>
-                      <tr className="modern-grand-total" style={{ borderTop: `2px solid ${THEME.primary}`, background: '#e2e8f0' }}>
-                         <td style={{ padding: '15px 15px 8px 15px', fontWeight: 900, fontSize: '20px', color: THEME.primary }}>الصافي المستحق للدفع:</td>
-                         <td style={{ textAlign: 'left', padding: '15px 15px 8px 15px', fontSize: '22px', fontWeight: 900, color: THEME.primary }}>{Number(pRec?.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2})} ريال</td>
-                      </tr>
+                      <tr><td style={{ padding: '10px 15px', fontWeight: 900, color: '#000' }}>إجمالي الأعمال:</td><td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900 }}>{Number(pRec?.total_amount || 0).toLocaleString()} ريال</td></tr>
+                      <tr><td style={{ padding: '10px 15px', fontWeight: 900, color: '#000' }}>ضمان أعمال ({pRec?.retention_percentage || 0}%):</td><td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900 }}>- {Number(pRec?.retention_amount || 0).toLocaleString()} ريال</td></tr>
+                      <tr><td style={{ padding: '10px 15px', fontWeight: 900, color: '#000' }}>الخصومات:</td><td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900 }}>- {Number(pRec?.material_discount || 0).toLocaleString()} ريال</td></tr>
+                      <tr><td style={{ padding: '10px 15px', fontWeight: 900, color: '#000' }}>ضريبة القيمة المضافة (15%):</td><td style={{ textAlign: 'left', padding: '10px 15px', fontWeight: 900 }}>{Number(pRec?.tax_amount || 0).toLocaleString()} ريال</td></tr>
+                      <tr className="modern-grand-total" style={{ borderTop: `2px solid ${THEME.primary}`, background: '#e2e8f0' }}><td style={{ padding: '15px', fontWeight: 900, fontSize: '20px' }}>الصافي المستحق:</td><td style={{ textAlign: 'left', padding: '15px', fontSize: '22px', fontWeight: 900 }}>{Number(pRec?.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2})} ريال</td></tr>
                    </tbody>
                 </table>
              </div>
 
-             <div style={{ marginTop: '25px', fontWeight: 900, fontSize: '16px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#000' }}>
-                المبلغ بالحروف: فقط {tafqeet(Number(pRec?.net_amount || 0))}
-             </div>
+             <div style={{ marginTop: '25px', fontWeight: 900, fontSize: '16px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#000' }}>المبلغ بالحروف: فقط {tafqeet(Number(pRec?.net_amount || 0))}</div>
 
-             <div className="modern-footer" style={{ marginTop: '40px', textAlign: 'center', fontSize: '14px', color: '#111827', borderTop: `2px solid ${THEME.primary}`, paddingTop: '20px', fontWeight: 800 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', fontWeight: 900, color: '#000' }}>
-                    <div>توقيع المحاسب / المدير المالي<br/><br/>.................................</div>
-                    <div>الختم الرسمي للشركة<br/><br/>.................................</div>
-                </div>
-                <p style={{ margin: 0, color: pRec.is_internal ? THEME.ruby : '#111827', fontWeight: 900, fontSize: '14px' }}>
-                   {pRec.is_internal ? '⚠️ فاتورة داخلية وغير مرتبطة بهيئة الزكاة' : '✅ تم إصدار هذه الفاتورة إلكترونياً وهي مطابقة لمواصفات الزكاة والضريبة'}
-                </p>
+             <div className="modern-footer" style={{ marginTop: '40px', textAlign: 'center', borderTop: `2px solid ${THEME.primary}`, paddingTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', fontWeight: 900 }}><div>توقيع المحاسب / المدير المالي<br/><br/>.................................</div><div>الختم الرسمي للشركة<br/><br/>.................................</div></div>
+                <p style={{ fontWeight: 900, fontSize: '14px' }}>{pRec.is_internal ? '⚠️ فاتورة داخلية' : '✅ فاتورة إلكترونية معتمدة'}</p>
              </div>
           </div>
         </div>
