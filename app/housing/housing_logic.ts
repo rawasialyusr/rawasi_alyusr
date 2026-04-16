@@ -1,108 +1,194 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { getHousingServices } from '@/app/actions/housing_action';
+import { supabase } from '@/lib/supabase'; // 👈 استدعاء مباشر من قاعدة البيانات بدل الأكشن
 
 export function useHousingLogic() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [totalSumFromDB, setTotalSumFromDB] = useState(0);
+  const [totalSumFromDB, setTotalSumFromDB] = useState(0); 
   
   // فلاتر البحث
   const [searchName, setSearchName] = useState("");
-  const [searchService, setSearchService] = useState("");
-  const [searchMonth, setSearchMonth] = useState(""); 
+  const [searchReason, setSearchReason] = useState(""); 
+  const [startDate, setStartDate] = useState(""); 
+  const [endDate, setEndDate] = useState("");
 
-  // الترقيم (Pagination)
+  // الترقيم والتحكم (Pagination)
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(100);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // حالة التعديل (Modal)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+
+  // 1. جلب البيانات (الربط المباشر مع Supabase)
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. جلب البيانات من السيرفر (RPC)
-      const result = await getHousingServices(searchName, searchService, searchMonth);
+      // ⚠️ تنويه: تأكد أن اسم الجدول هو 'housing_services' في قاعدة بياناتك، أو قم بتغييره هنا
+      let query = supabase
+        .from('housing_services') 
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (searchName) {
+        query = query.ilike('emp_name', `%${searchName}%`);
+      }
+      if (startDate) {
+        query = query.gte('date', startDate);
+      }
+
+      const { data, error } = await query;
       
-      // 2. تنظيف البيانات من الـ NaN وأي نصوص غريبة
-      const cleanedData = (result.data || []).map((item: any) => {
-        // تحويل آمن للمبلغ
-        const rawAmount = item.amount;
-        let finalAmount = 0;
+      if (error) throw error;
 
-        if (rawAmount !== null && rawAmount !== undefined) {
-           // لو القيمة جاية "null" كـ نص أو NaN، بنخليها 0
-           finalAmount = isNaN(Number(rawAmount)) ? 0 : Number(rawAmount);
-        }
-
-        return {
-          ...item,
-          // توحيد مسميات العرض لسهولة الاستخدام في الـ Table
-          display_name: item.emp_name || "غير معروف",
-          display_service: item.service_type || "-",
-          display_month: item.deduction_month || "-",
-          display_amount: finalAmount,
-          display_notes: item.notes || "-"
-        };
-      });
-
-      setRecords(cleanedData);
-      setTotalSumFromDB(result.totalSum || 0);
-    } catch (error) { 
-      console.error("Error fetching housing records:", error); 
-    } finally { 
-      setLoading(false); 
+      if (data) {
+        setRecords(data);
+        const sum = data.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        setTotalSumFromDB(sum);
+      }
+    } catch (error) {
+      console.error("❌ خطأ في جلب البيانات:", error);
+    } finally {
+      setLoading(false);
     }
-  }, [searchName, searchService, searchMonth]);
+  }, [searchName, startDate]);
 
-  useEffect(() => { 
-    fetchRecords(); 
+  useEffect(() => {
+    fetchRecords();
   }, [fetchRecords]);
 
-  // الإجمالي والعدد (مأخوذ مباشرة من الداتابيز لضمان الدقة)
-  const totalAmount = totalSumFromDB; 
-  const totalCount = records.length;
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
-  
-  // السجلات التي ستعرض في الصفحة الحالية
-  const displayedRecords = useMemo(() => {
-    return records.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
-  }, [records, currentPage, pageSize]);
+  // 2. الفلترة المتقدمة (تصفية النتائج محلياً)
+  const filteredRecords = useMemo(() => {
+    return records.filter(item => {
+      const reasonText = (item.reason || item.notes || item.description || "").toLowerCase();
+      const itemDate = item.date || "";
 
-  // تصدير إكسيل
+      const matchReason = reasonText.includes(searchReason.toLowerCase());
+      let matchEndDate = true;
+      if (endDate) matchEndDate = itemDate <= endDate;
+
+      return matchReason && matchEndDate;
+    });
+  }, [records, searchReason, endDate]);
+
+  // 3. الحسابات الإجمالية
+  const totalVal = totalSumFromDB; 
+  const totalCount = filteredRecords.length;
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
+  // السجلات المعروضة بناءً على الصفحة الحالية
+  const displayedRecords = useMemo(() => {
+    return filteredRecords.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  }, [filteredRecords, currentPage, pageSize]);
+
+  // 4. العمليات (حذف وتعديل)
+  const handleDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`هل أنت متأكد من حذف ${selectedIds.length} سجل؟`)) return;
+    
+    try {
+      const { error } = await supabase.from('housing_services').delete().in('id', selectedIds);
+      if (error) throw error;
+      
+      await fetchRecords();
+      setSelectedIds([]);
+    } catch (err: any) {
+      alert("❌ حدث خطأ أثناء الحذف: " + err.message);
+    }
+  };
+
+  const handleEdit = () => {
+    if (selectedIds.length !== 1) return;
+    const targetId = String(selectedIds[0]);
+    const record = records.find(d => String(d.id || d.generated_id) === targetId);
+    if (record) {
+      setEditingRecord({ ...record });
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleSaveUpdate = async () => {
+    if (!editingRecord) return;
+    
+    try {
+      const { error } = await supabase
+        .from('housing_services')
+        .update(editingRecord)
+        .eq('id', editingRecord.id || editingRecord.generated_id);
+        
+      if (error) throw error;
+
+      await fetchRecords();
+      setIsEditModalOpen(false);
+      setSelectedIds([]);
+    } catch (err: any) {
+      alert("❌ حدث خطأ أثناء التعديل: " + err.message);
+    }
+  };
+
+  // 5. التحديد (Selection)
+  const toggleSelectRow = (id: any) => {
+    const cleanId = String(id);
+    setSelectedIds(prev => 
+      prev.includes(cleanId) ? prev.filter(i => i !== cleanId) : [...prev, cleanId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === displayedRecords.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(displayedRecords.map(d => String(d.id || d.generated_id)));
+    }
+  };
+
+  // 6. تصدير واستيراد (إكسيل)
   const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(records.map(r => ({
-      "اسم الموظف": r.display_name,
-      "شهر الاستحقاق": r.display_month,
-      "الخدمة": r.display_service,
-      "المبلغ": r.display_amount,
-      "ملاحظات": r.display_notes
+    const ws = XLSX.utils.json_to_sheet(filteredRecords.map(r => ({
+      "التاريخ": r.date,
+      "الاسم": r.emp_name,
+      "المبلغ": r.amount,
+      "البيان": r.reason || r.description,
+      "ملاحظات": r.notes
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Housing");
-    XLSX.writeFile(wb, "Housing_Report.xlsx");
+    XLSX.writeFile(wb, `Housing_${new Date().toLocaleDateString()}.xlsx`);
   };
 
   const downloadTemplate = () => {
-    const template = [{ emp_name: "اسم الموظف", deduction_month: "يناير 2024", service_type: "سكن", amount: 0, notes: "" }];
+    const template = [{ date: "2026-04-10", emp_name: "اسم الموظف", amount: 0, reason: "", notes: "" }];
     const ws = XLSX.utils.json_to_sheet(template);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Template");
     XLSX.writeFile(wb, "Housing_Template.xlsx");
   };
 
+  const handleImportExcel = (e: any) => {
+    console.log("Importing Excel...");
+  };
+
   return {
     loading, 
-    displayedRecords, // دي اللي هتعرضها في الجدول map
-    searchName, setSearchName, 
-    searchService, setSearchService,
-    searchMonth, setSearchMonth,
-    totalAmount, 
-    totalCount,
-    currentPage, setCurrentPage, 
-    totalPages, 
+    displayedRecords, // 👈 هذه هي المصفوفة التي يجب أن تستخدمها في الـ HTML (page.tsx) לעرض الجدول
+    searchName, setSearchName,
+    searchReason, setSearchReason, 
+    startDate, setStartDate,
+    endDate, setEndDate,
+    totalCount, totalPages, totalVal,
+    selectedIds, toggleSelectRow, toggleSelectAll,
+    currentPage, setCurrentPage,
     pageSize, setPageSize,
+    handleDelete, handleEdit,
+    isEditModalOpen, setIsEditModalOpen,
+    editingRecord, setEditingRecord,
+    handleSaveUpdate,
     exportToExcel, 
-    downloadTemplate, 
+    handleImportExcel,
+    downloadTemplate,
     refresh: fetchRecords
   };
 }

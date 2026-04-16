@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>شاشة فحص القيود الخام 🔍</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: system-ui; padding: 30px; background: #f4f4f9; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        input { padding: 10px; width: calc(100% - 22px); margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 12px 20px; background: #28a745; color: white; border: none; cursor: pointer; border-radius: 4px; width: 100%; font-size: 16px; font-weight: bold; }
+        button:hover { background: #218838; }
+        pre { background: #2d2d2d; color: #75b5aa; padding: 15px; border-radius: 5px; direction: ltr; text-align: left; overflow-x: auto; max-height: 500px; }
+        .error { color: #dc3545; font-weight: bold; }
+        .success { color: #28a745; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>🔍 شاشة فحص الداتابيز المباشرة (بدون فلاتر الفرونت إند)</h2>
+        <p>الصفحة دي بتسحب القيود اللي فيها كلمة "أجور" من الداتابيز مباشرة.</p>
+        
+        <input type="text" id="supabaseUrl" placeholder="Supabase Project URL (ex: https://xyz.supabase.co)">
+        <input type="password" id="supabaseKey" placeholder="Supabase Anon / Public Key">
+        
+        <button onclick="fetchRawData()">سحب البيانات الآن 🚀</button>
+
+        <h3 id="statusText"></h3>
+        <pre id="resultBox">النتيجة الخام هتظهر هنا بصيغة JSON...</pre>
+    </div>
+
+    <script>
+        async function fetchRawData() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            const statusEl = document.getElementById('statusText');
+            const resultEl = document.getElementById('resultBox');
+
+            if(!url || !key) {
+                alert("يا هندسة لازم تحط رابط المشروع والمفتاح عشان نسحب الداتا!");
+                return;
+            }
+
+            statusEl.className = "";
+            statusEl.innerText = "⏳ جاري الاتصال بقاعدة البيانات...";
+            resultEl.innerText = "";
+
+            try {
+                // تهيئة الاتصال
+                const supabase = window.supabase.createClient(url, key);
+
+                // سحب القيود اللي الوصف بتاعها فيه كلمة "أجور" أو "مطابق"
+                const { data, error } = await supabase
+                    .from('journal_headers')
+                    .select(`
+                        id, entry_date, description, status, created_at,
+                        journal_lines (
+                            id, account_id, debit, credit, item_name, quantity, unit_price, debit_account_id
+                        )
+                    `)
+                    .ilike('description', '%أجور%')
+                    .limit(5);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    statusEl.className = "success";
+                    statusEl.innerText = `✅ تم سحب (${data.length}) قيود بنجاح من الداتابيز مباشرة!`;
+                    resultEl.innerText = JSON.stringify(data, null, 4);
+                } else {
+                    statusEl.className = "error";
+                    statusEl.innerText = "❌ ملقيناش قيود بالاسم ده، اتأكد إن الكود اللي فات اتنفذ صح.";
+                    resultEl.innerText = "[]";
+                }
+
+            } catch (err) {
+                statusEl.className = "error";
+                statusEl.innerText = "❌ حصل خطأ في الاتصال!";
+                resultEl.innerText = err.message;
+            }
+        }
+    </script>
+
+</body>
+</html>

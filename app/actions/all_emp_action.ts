@@ -1,52 +1,39 @@
-"use server"
+"use server";
 
-import { supabase } from "@/lib/supabase"
-import { revalidatePath } from 'next/cache'
+import { supabase } from '@/lib/supabase';
 
-/**
- * دالة جلب بيانات الموظفين الشاملة
- */
-export async function getAllEmployees(name: string = '', start: string = '', end: string = '') {
+// دالة البحث عن الموظفين (Live Search)
+export async function searchEmployees(term: string) {
   try {
-    // نجبر سوبابيز والأكشن إنه ميعملش كاش للداتا القديمة
-    const { data, error } = await supabase.rpc('get_all_employees_data', {
-      p_search_name: name || '',
-      p_start_date: start || '',
-      p_end_date: end || ''
-    });
-
-    if (error) {
-      console.error("❌ خطأ في قاعدة البيانات:", error.message);
-      return JSON.stringify([]);
-    }
-
-    // تحديث مسار الصفحة لضمان ظهور البيانات الجديدة
-    revalidatePath('/all_emp');
-
-    // إرجاع البيانات
-    return JSON.stringify(data || []);
-
-  } catch (error: any) {
-    console.error("❌ عطل مفاجئ في الأكشن:", error.message);
-    return JSON.stringify([]);
-  }
-}
-
-/**
- * دالة لتحديث بيانات موظف
- */
-export async function updateEmployeeAction(emp_id: number, updatedData: any) {
-  try {
-    const { error } = await supabase
-      .from('all_emp')
-      .update(updatedData)
-      .eq('emp_id', emp_id);
+    const { data, error } = await supabase
+      .from('all_emp') // بناءً على اسم الجدول في الصورة بتاعتك
+      .select('*')
+      .ilike('emp_name', `%${term}%`)
+      .limit(10);
 
     if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("❌ خطأ في البحث عن الموظفين:", error);
+    return [];
+  }
+}
+// دالة جلب كل الموظفين (لصفحة عرض الموظفين)
+export async function getAllEmployees() {
+  try {
+    const { data, error } = await supabase
+      .from('all_emp') // تأكد إن ده اسم جدول الموظفين عندك
+      .select('*')
+      .order('id', { ascending: true }); // ممكن ترتبهم بالـ id أو الاسم
+
+    if (error) {
+      console.error("❌ خطأ من قاعدة البيانات:", error.message);
+      return [];
+    }
     
-    revalidatePath('/all_emp');
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+    return data || [];
+  } catch (error) {
+    console.error("❌ خطأ في جلب كل الموظفين:", error);
+    return [];
   }
 }

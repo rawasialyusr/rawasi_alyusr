@@ -1,17 +1,17 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { getEmpDeductions } from '@/app/actions/emp_ded'; // استدعاء الأكشن المربوط بـ RPC
+import { supabase } from '@/lib/supabase'; // 👈 استدعاء مباشر من Supabase بدلاً من الأكشن
 
 export function useEmpDedLogic() {
   const [deductions, setDeductions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [totalSumFromDB, setTotalSumFromDB] = useState(0); // المجموع الكلي من السيرفر قبل الـ Pagination
+  const [totalSumFromDB, setTotalSumFromDB] = useState(0); // المجموع الكلي
   
-  // فلاتر البحث (أضفنا searchDate ليتوافق مع الـ RPC)
+  // فلاتر البحث
   const [searchName, setSearchName] = useState("");
   const [searchReason, setSearchReason] = useState(""); 
-  const [startDate, setStartDate] = useState(""); // يستخدم كفلتر رئيسي في الـ RPC
+  const [startDate, setStartDate] = useState(""); 
   const [endDate, setEndDate] = useState("");
 
   // الترقيم والتحكم (Pagination)
@@ -23,19 +23,36 @@ export function useEmpDedLogic() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
 
-  // 1. جلب البيانات (الربط مع السيرفر أكشن لضمان الجمع قبل الـ 1000 صف)
+  // 1. جلب البيانات (الربط المباشر مع Supabase)
   const fetchDeductions = useCallback(async () => {
     setLoading(true);
     try {
-      // نرسل الاسم وتاريخ البداية للسيرفر للفلترة والجمع هناك
-      const result = await getEmpDeductions(searchName, startDate);
+      // بناء الاستعلام (تأكد أن اسم الجدول هو emp_deductions أو عدله حسب قاعدة بياناتك)
+      let query = supabase
+        .from('emp_deductions') 
+        .select('*')
+        .order('date', { ascending: false });
+
+      // تطبيق فلاتر البحث في الداتابيز مباشرة لتقليل التحميل
+      if (searchName) {
+        query = query.ilike('emp_name', `%${searchName}%`); // البحث بجزء من الاسم
+      }
+      if (startDate) {
+        query = query.gte('date', startDate); // من تاريخ كذا
+      }
+
+      const { data, error } = await query;
       
-      if (result) {
-        setDeductions(result.data || []);
-        setTotalSumFromDB(result.totalSum || 0); // المجموع الحقيقي من الداتابيز
+      if (error) throw error;
+
+      if (data) {
+        setDeductions(data);
+        // حساب المجموع الكلي للبيانات القادمة من الداتابيز لضمان دقة الإجمالي
+        const sum = data.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        setTotalSumFromDB(sum);
       }
     } catch (error) {
-      console.error("Fetch Error:", error);
+      console.error("❌ خطأ في جلب البيانات:", error);
     } finally {
       setLoading(false);
     }
@@ -45,10 +62,9 @@ export function useEmpDedLogic() {
     fetchDeductions();
   }, [fetchDeductions]);
 
-  // 2. الفلترة المتقدمة (تصفية النتائج محلياً للسبب ونطاق التاريخ)
+  // 2. الفلترة المتقدمة (تصفية النتائج محلياً للسبب ونطاق التاريخ النهائي)
   const filteredDeductions = useMemo(() => {
     return deductions.filter(item => {
-      // التعامل مع المسميات من الصورة (reason أو notes)
       const reasonText = (item.reason || item.notes || "").toLowerCase();
       const itemDate = item.date || "";
 
@@ -60,8 +76,7 @@ export function useEmpDedLogic() {
     });
   }, [deductions, searchReason, endDate]);
 
-  // 3. الحسابات الإجمالية (حل مشكلة NaN الظاهرة في الصورة)
-  // نعتمد على القيمة القادمة من الداتابيز مباشرة
+  // 3. الحسابات الإجمالية
   const totalDedVal = totalSumFromDB; 
   const totalCount = filteredDeductions.length;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
@@ -75,14 +90,21 @@ export function useEmpDedLogic() {
   const handleDelete = async () => {
     if (selectedIds.length === 0) return;
     if (!confirm(`هل أنت متأكد من حذف ${selectedIds.length} سجل؟`)) return;
-    // يتم الربط مع أكشن الحذف لاحقاً
-    console.log("Delete IDs:", selectedIds);
+    
+    try {
+      const { error } = await supabase.from('emp_deductions').delete().in('id', selectedIds);
+      if (error) throw error;
+      
+      await fetchDeductions(); // تحديث القائمة بعد الحذف
+      setSelectedIds([]);
+    } catch (err: any) {
+      alert("❌ حدث خطأ أثناء الحذف: " + err.message);
+    }
   };
 
   const handleEdit = () => {
     if (selectedIds.length !== 1) return;
     const targetId = String(selectedIds[0]);
-    // البحث عن السجل باستخدام المعرف (id أو generated_id)
     const record = deductions.find(d => String(d.id || d.generated_id) === targetId);
     if (record) {
       setEditingRecord({ ...record });
@@ -92,9 +114,21 @@ export function useEmpDedLogic() {
 
   const handleSaveUpdate = async () => {
     if (!editingRecord) return;
-    // يتم الربط مع أكشن التعديل لاحقاً
-    setIsEditModalOpen(false);
-    setSelectedIds([]);
+    
+    try {
+      const { error } = await supabase
+        .from('emp_deductions')
+        .update(editingRecord)
+        .eq('id', editingRecord.id || editingRecord.generated_id);
+        
+      if (error) throw error;
+
+      await fetchDeductions();
+      setIsEditModalOpen(false);
+      setSelectedIds([]);
+    } catch (err: any) {
+      alert("❌ حدث خطأ أثناء التعديل: " + err.message);
+    }
   };
 
   // 5. التحديد (Selection)
@@ -137,6 +171,7 @@ export function useEmpDedLogic() {
 
   const handleImportExcel = (e: any) => {
     console.log("Importing Excel...");
+    // سيتم تنفيذ لوجيك الاستيراد لاحقاً
   };
 
   return {
