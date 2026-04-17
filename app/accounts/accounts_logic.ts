@@ -1,27 +1,37 @@
 "use client";
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export function useHierarchicalAccountsLogic() {
-  const [treeData, setTreeData] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]); 
+  const router = useRouter();
+
+  // 📦 تخزين البيانات الخام (Raw Data) عشان منعملش Fetch مع كل فلترة
+  const [rawAccounts, setRawAccounts] = useState<any[]>([]);
+  const [rawHeaders, setRawHeaders] = useState<any[]>([]);
+  const [rawLines, setRawLines] = useState<any[]>([]);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 📅 فلاتر التاريخ (تم إضافتها للوجيك للتحكم المركزي)
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
+  // 1️⃣ دالة سحب البيانات الخام من قاعدة البيانات (تعمل مرة واحدة فقط)
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      console.log("🚀 جاري سحب البيانات المالية الكاملة (بدون حد الـ 1000 سطر)...");
+      console.log("🚀 جاري سحب البيانات المالية الكاملة...");
 
-      // 1. جلب كل الحسابات
       const { data: accList } = await supabase.from('accounts').select('*').order('code');
 
-      // 2. جلب كل رؤوس القيود المرحلة (باستخدام Pagination لتخطي حد الـ 1000)
       let allHeaders: any[] = [];
       let headerFrom = 0;
       const step = 1000;
@@ -42,7 +52,6 @@ export function useHierarchicalAccountsLogic() {
         }
       }
 
-      // 3. جلب كل أطراف القيود (Lines) بنفس الطريقة
       let allLines: any[] = [];
       let lineFrom = 0;
       let hasMoreLines = true;
@@ -61,86 +70,9 @@ export function useHierarchicalAccountsLogic() {
         }
       }
 
-      // 4. بناء خريطة الرؤوس للربط السريع
-      const headerMap: Record<string, any> = {};
-      allHeaders.forEach(h => { headerMap[h.id] = h; });
-
-      // 5. بناء خريطة الحسابات (دعم الربط بالـ ID والـ Code معاً)
-      const mapById: Record<string, any> = {};
-      const mapByCode: Record<string, any> = {};
-
-      accList?.forEach(acc => {
-        const node = { ...acc, children: [], transactions: [], totalDebit: 0, totalCredit: 0, balance: 0 };
-        const safeId = String(acc.id).trim();
-        mapById[safeId] = node;
-        if (acc.code) {
-          mapByCode[String(acc.code).trim()] = node;
-        }
-      });
-
-      // 6. توزيع العمليات على الحسابات (مطابقة ذكية)
-      allLines.forEach((line: any) => {
-        const header = headerMap[line.header_id];
-        if (!header) return; 
-
-        // محاولة الربط بالـ ID أولاً، ثم بالكود كخطة بديلة
-        const lineAccId = String(line.account_id).trim();
-        let targetNode = mapById[lineAccId];
-
-        // ملاحظة: إذا كان الترحيل القديم يستخدم الأكواد في خانة الـ account_id
-        if (!targetNode) {
-            targetNode = mapByCode[lineAccId];
-        }
-
-        if (targetNode) {
-          targetNode.transactions.push({
-            ...line,
-            date: header.entry_date || '---',
-            description: line.item_name || header.description || 'مصروف مرحل'
-          });
-        }
-      });
-
-      // 7. بناء الشجرة الهرمية
-      const roots: any[] = [];
-      accList?.forEach(acc => {
-        const safeId = String(acc.id).trim();
-        const safeParentId = acc.parent_id ? String(acc.parent_id).trim() : null;
-        
-        if (safeParentId && mapById[safeParentId]) {
-          mapById[safeParentId].children.push(mapById[safeId]);
-        } else if (!safeParentId) {
-          roots.push(mapById[safeId]);
-        }
-      });
-
-      // 8. المحرك المحاسبي: تجميع الأرصدة من الفروع للأصول (Roll-up)
-      const calculateTotals = (node: any) => {
-        let d = 0, c = 0;
-        
-        // حساب حركات الحساب نفسه
-        node.transactions.forEach((t: any) => {
-          d += Number(t.debit || 0);
-          c += Number(t.credit || 0);
-        });
-
-        // إضافة حركات الأبناء (الحسابات الفرعية)
-        node.children.forEach((child: any) => {
-          const totals = calculateTotals(child);
-          d += totals.debit;
-          c += totals.credit;
-        });
-
-        node.totalDebit = d;
-        node.totalCredit = c;
-        node.balance = d - c; // (مدين - دائن)
-        return { debit: d, credit: c };
-      };
-
-      roots.forEach(root => calculateTotals(root));
-
-      setAccounts(accList || []);
-      setTreeData([...roots]);
+      setRawAccounts(accList || []);
+      setRawHeaders(allHeaders);
+      setRawLines(allLines);
       console.log(`✅ تم تحميل ${allLines.length} حركة مالية بنجاح.`);
 
     } catch (error: any) {
@@ -151,7 +83,81 @@ export function useHierarchicalAccountsLogic() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // منطق البحث
+  // 2️⃣ المحرك الذكي: بناء الشجرة وتطبيق فلاتر التاريخ والأرصدة في الذاكرة (سريع جداً)
+  const treeData = useMemo(() => {
+    if (!rawAccounts.length) return [];
+
+    const headerMap: Record<string, any> = {};
+    rawHeaders.forEach(h => { headerMap[h.id] = h; });
+
+    const mapById: Record<string, any> = {};
+    const mapByCode: Record<string, any> = {};
+
+    // تهيئة الحسابات
+    rawAccounts.forEach(acc => {
+      const node = { ...acc, children: [], transactions: [], totalDebit: 0, totalCredit: 0, balance: 0 };
+      const safeId = String(acc.id).trim();
+      mapById[safeId] = node;
+      if (acc.code) mapByCode[String(acc.code).trim()] = node;
+    });
+
+    // توزيع القيود مع تطبيق 📅 فلتر التاريخ
+    rawLines.forEach((line: any) => {
+      const header = headerMap[line.header_id];
+      if (!header) return; 
+
+      // 🛑 الفلترة بالتاريخ هنا!
+      if (startDate && header.entry_date < startDate) return;
+      if (endDate && header.entry_date > endDate) return;
+
+      const lineAccId = String(line.account_id).trim();
+      let targetNode = mapById[lineAccId] || mapByCode[lineAccId];
+
+      if (targetNode) {
+        targetNode.transactions.push({
+          ...line,
+          date: header.entry_date || '---',
+          description: line.item_name || header.description || 'مصروف مرحل'
+        });
+      }
+    });
+
+    // بناء الشجرة
+    const roots: any[] = [];
+    rawAccounts.forEach(acc => {
+      const safeId = String(acc.id).trim();
+      const safeParentId = acc.parent_id ? String(acc.parent_id).trim() : null;
+      
+      if (safeParentId && mapById[safeParentId]) {
+        mapById[safeParentId].children.push(mapById[safeId]);
+      } else if (!safeParentId) {
+        roots.push(mapById[safeId]);
+      }
+    });
+
+    // حساب الأرصدة (Roll-up)
+    const calculateTotals = (node: any) => {
+      let d = 0, c = 0;
+      node.transactions.forEach((t: any) => {
+        d += Number(t.debit || 0);
+        c += Number(t.credit || 0);
+      });
+      node.children.forEach((child: any) => {
+        const totals = calculateTotals(child);
+        d += totals.debit;
+        c += totals.credit;
+      });
+      node.totalDebit = d;
+      node.totalCredit = c;
+      node.balance = d - c; 
+      return { debit: d, credit: c };
+    };
+
+    roots.forEach(root => calculateTotals(root));
+    return roots;
+  }, [rawAccounts, rawHeaders, rawLines, startDate, endDate]); // يعيد الحساب تلقائياً لو اتغير التاريخ
+
+  // 3️⃣ منطق البحث في الشجرة
   const filteredTree = useMemo(() => {
     if (!searchTerm) return treeData;
     const searchRecursive = (nodes: any[]): any[] => {
@@ -165,16 +171,20 @@ export function useHierarchicalAccountsLogic() {
     return searchRecursive(treeData);
   }, [treeData, searchTerm]);
 
-  // منطق الترقيم
+  // منطق الترقيم (Pagination)
   const paginatedTree = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredTree.slice(start, start + itemsPerPage);
   }, [filteredTree, currentPage, itemsPerPage]);
 
   return { 
-    accounts, paginatedTree, totalPages: Math.ceil(filteredTree.length / itemsPerPage),
+    accounts: rawAccounts, 
+    paginatedTree, 
+    totalPages: Math.ceil(filteredTree.length / itemsPerPage),
     currentPage, setCurrentPage, itemsPerPage, setItemsPerPage,
-    isLoading, searchTerm, setSearchTerm, expandedIds, 
+    isLoading, searchTerm, setSearchTerm, 
+    startDate, setStartDate, endDate, setEndDate, // 👈 تم التصدير للـ UI
+    expandedIds, 
     toggleExpand: (id: string) => setExpandedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
     expandAll: () => {
       const ids: string[] = [];
@@ -183,11 +193,29 @@ export function useHierarchicalAccountsLogic() {
       setExpandedIds(ids);
     }, 
     collapseAll: () => setExpandedIds([]),
-    selectedIds, toggleSelection: (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
-    handleDelete: async (id: string) => { 
-        if(confirm("هل أنت متأكد من حذف هذا الحساب؟")) {
-            await supabase.from('accounts').delete().eq('id', id); 
-            fetchData(); 
+    selectedIds, 
+    toggleSelection: (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
+    
+    // 🚀 زراير الأكشن (الإضافة - التعديل - الحذف)
+    handleAdd: () => {
+      router.push('/accounts/new'); // توجيه لشاشة إضافة حساب
+    },
+    handleEdit: (ids: string[]) => {
+      if (ids.length === 1) {
+        router.push(`/accounts/edit/${ids[0]}`); // توجيه لشاشة التعديل
+      }
+    },
+    handleDelete: async (ids: string[]) => { 
+        if(confirm(`هل أنت متأكد من حذف ${ids.length} حساب/حسابات بجميع تفاصيلها؟`)) {
+            // استخدام "in" لحذف مجموعة حسابات مرة واحدة
+            const { error } = await supabase.from('accounts').delete().in('id', ids); 
+            if (error) {
+                alert("❌ حدث خطأ أثناء الحذف: " + error.message);
+            } else {
+                fetchData(); // تحديث الداتا
+                setSelectedIds([]); // تفريغ التحديد
+                alert("✅ تم الحذف بنجاح!");
+            }
         }
     },
     fetchData

@@ -1,7 +1,7 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase'; // افترضت أنك تستخدم Supabase بناءً على الملفات السابقة
+import { supabase } from '@/lib/supabase';
 
 const THEME = {
   primary: '#0f172a',
@@ -18,6 +18,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // 1. مزامنة قيم المتصفح (Autofill) لضمان طيران العنوان فوراً
+  useEffect(() => {
+    const syncFields = () => {
+      const emailField = document.querySelector('input[type="email"]') as HTMLInputElement;
+      const passField = document.querySelector('input[type="password"]') as HTMLInputElement;
+      if (emailField?.value && !email) setEmail(emailField.value);
+      if (passField?.value && !password) setPassword(passField.value);
+    };
+    
+    // فحص دوري في الثواني الأولى للتأكد من التقاط بيانات المتصفح
+    const intervals = [100, 500, 1000, 2000].map(t => setTimeout(syncFields, t));
+    return () => intervals.forEach(t => clearTimeout(t));
+  }, [email, password]);
+
+  // 2. اكتشاف الـ Autofill عبر الأنيميشن (حل تقني متقدم)
+  const handleAutoFill = (e: React.AnimationEvent<HTMLInputElement>) => {
+    if (e.animationName === 'onAutoFillStart') {
+      const target = e.target as HTMLInputElement;
+      if (target.type === 'email') setEmail(target.value);
+      if (target.type === 'password') setPassword(target.value);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,20 +66,20 @@ export default function LoginPage() {
   return (
     <div className="login-wrapper">
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+        
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
+        @keyframes onAutoFillStart { from {} to {} }
+
         .login-wrapper {
           min-height: 100vh;
           display: flex;
           align-items: center;
-          justifyContent: center;
+          justify-content: center;
           direction: rtl;
           font-family: 'Cairo', sans-serif;
-          
-          /* 🟢 التعديل هنا: استخدام صورتك الخاصة ryc_login.jpeg كخلفية */
-          /* قمنا بالإبقاء على طبقة الـ Gradient الداكنة لضمان وضوح النصوص والكارت الزجاجي */
           background-image: linear-gradient(rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.95)), url('/ryc_login.jpeg');
-          
           background-size: cover;
           background-position: center;
           background-attachment: fixed;
@@ -65,7 +88,7 @@ export default function LoginPage() {
         .glass-card {
           width: 100%;
           max-width: 480px;
-          background: rgba(15, 23, 42, 0.4); 
+          background: rgba(15, 23, 42, 0.6); 
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
           border: 1px solid rgba(202, 138, 4, 0.3); 
@@ -82,9 +105,9 @@ export default function LoginPage() {
         }
 
         .logo-container {
-          text-align: center;
-          margin-bottom: 30px;
-        }
+  text-align: right; /* 👈 يخلي اللوجو يروح أقصى اليمين */
+  margin-bottom: 25px;
+}
 
         .logo-container img {
           height: 110px;
@@ -92,9 +115,7 @@ export default function LoginPage() {
           transition: transform 0.3s ease;
         }
         
-        .logo-container img:hover {
-          transform: scale(1.05);
-        }
+        .logo-container img:hover { transform: scale(1.05); }
 
         .cinematic-title {
           color: ${THEME.white};
@@ -102,7 +123,6 @@ export default function LoginPage() {
           font-size: 32px;
           text-align: center;
           margin-bottom: 8px;
-          letter-spacing: -0.5px;
         }
 
         .cinematic-subtitle {
@@ -120,19 +140,24 @@ export default function LoginPage() {
 
         .cinematic-input {
           width: 100%;
-          padding: 16px 20px;
-          background: rgba(255, 255, 255, 0.05);
+          padding: 18px 20px;
+          background: rgba(255, 255, 255, 0.05) !important;
           border: 2px solid rgba(255, 255, 255, 0.1);
           border-radius: 14px;
-          color: ${THEME.white};
+          color: ${THEME.white} !important;
           font-size: 16px;
           font-weight: 700;
           outline: none;
           transition: all 0.3s ease;
+          text-align: right;
         }
 
-        .cinematic-input::placeholder {
-          color: transparent; 
+        /* تنسيق الـ Autofill لمنع تغير الخلفية وتداخل النصوص */
+        .cinematic-input:-webkit-autofill {
+          animation-name: onAutoFillStart;
+          -webkit-text-fill-color: #ffffff !important;
+          -webkit-box-shadow: 0 0 0px 1000px #151c2c inset !important;
+          transition: background-color 5000s ease-in-out 0s;
         }
 
         .floating-label {
@@ -144,24 +169,25 @@ export default function LoginPage() {
           font-size: 16px;
           font-weight: 700;
           pointer-events: none;
-          transition: all 0.3s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          z-index: 10;
         }
 
-        .cinematic-input:focus, .cinematic-input:not(:placeholder-shown) {
-          border-color: ${THEME.accent};
-          background: rgba(255, 255, 255, 0.1);
-          box-shadow: 0 0 15px rgba(202, 138, 4, 0.2);
-        }
-
-        .cinematic-input:focus + .floating-label, 
-        .cinematic-input:not(:placeholder-shown) + .floating-label {
-          top: -10px;
-          right: 15px;
-          font-size: 13px;
-          color: ${THEME.accent};
-          background: ${THEME.primary};
-          padding: 0 8px;
-          border-radius: 4px;
+        /* 🚀 الحل المعياري: رفع العنوان "بره الصندوق" تماماً بخلفية صلبة */
+        .cinematic-input:focus ~ .floating-label, 
+        .cinematic-input:not(:placeholder-shown) ~ .floating-label,
+        .cinematic-input:-webkit-autofill ~ .floating-label,
+        .forced-float {
+          top: -12px !important;
+          right: 15px !important;
+          font-size: 13px !important;
+          color: ${THEME.accent} !important;
+          background: #151c2c !important; /* لون خلفية الكارت لقطع خط الحدود */
+          padding: 0 10px !important;
+          border-radius: 4px !important;
+          transform: translateY(0) !important;
+          opacity: 1 !important;
+          font-weight: 900 !important;
         }
 
         .submit-btn {
@@ -178,18 +204,13 @@ export default function LoginPage() {
           transition: all 0.3s ease;
           box-shadow: 0 10px 20px rgba(202, 138, 4, 0.3);
           display: flex;
-          justifyContent: center;
+          justify-content: center;
           align-items: center;
         }
 
         .submit-btn:hover {
           transform: translateY(-2px);
           box-shadow: 0 15px 25px rgba(202, 138, 4, 0.4);
-          background: linear-gradient(135deg, ${THEME.accentLight}, ${THEME.accent});
-        }
-
-        .submit-btn:active {
-          transform: translateY(1px);
         }
 
         .error-message {
@@ -200,33 +221,17 @@ export default function LoginPage() {
           border-radius: 10px;
           text-align: center;
           font-weight: 700;
-          font-size: 14px;
           margin-bottom: 20px;
-          animation: fadeInUp 0.3s ease;
-        }
-
-        .ambient-light {
-          position: fixed;
-          top: -20%;
-          left: -10%;
-          width: 50vw;
-          height: 50vw;
-          background: radial-gradient(circle, rgba(202, 138, 4, 0.15) 0%, rgba(15, 23, 42, 0) 70%);
-          border-radius: 50%;
-          z-index: 0;
-          pointer-events: none;
         }
       `}</style>
-
-      <div className="ambient-light"></div>
 
       <div className="glass-card">
         <div className="logo-container">
           <img src="/RYC_Logo.png" alt="شعار شركة رواسي اليسر" />
         </div>
         
-        <h1 className="cinematic-title">النظام المالي المتكامل</h1>
-        <p className="cinematic-subtitle">شركة رواسي اليسر للمقاولات</p>
+        <h1 className="cinematic-title">رواسي اليسر</h1>
+        <p className="cinematic-subtitle">النظام المالي المتكامل</p>
 
         {errorMsg && <div className="error-message">⚠️ {errorMsg}</div>}
 
@@ -235,36 +240,32 @@ export default function LoginPage() {
             <input 
               type="email" 
               className="cinematic-input" 
-              placeholder="البريد الإلكتروني"
+              placeholder=" " 
               value={email}
+              onAnimationStart={handleAutoFill}
               onChange={(e) => setEmail(e.target.value)}
               required 
               autoComplete="email"
             />
-            <label className="floating-label">✉️ البريد الإلكتروني</label>
+            <label className={`floating-label ${email ? 'forced-float' : ''}`}>✉️ البريد الإلكتروني</label>
           </div>
 
           <div className="input-group">
             <input 
               type="password" 
               className="cinematic-input" 
-              placeholder="كلمة المرور"
+              placeholder=" " 
               value={password}
+              onAnimationStart={handleAutoFill}
               onChange={(e) => setPassword(e.target.value)}
               required 
               autoComplete="current-password"
             />
-            <label className="floating-label">🔒 كلمة المرور</label>
+            <label className={`floating-label ${password ? 'forced-float' : ''}`}>🔒 كلمة المرور</label>
           </div>
 
           <button type="submit" className="submit-btn" disabled={isLoading}>
-            {isLoading ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                ⏳ جاري التحقق...
-              </span>
-            ) : (
-              'تسجيل الدخول 🚀'
-            )}
+            {isLoading ? '⏳ جاري التحقق...' : 'تسجيل الدخول 🚀'}
           </button>
         </form>
 
