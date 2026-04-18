@@ -4,7 +4,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
 
-// --- [مكون البحث الذكي - Smart Autocomplete "نسخة الكيبورد الاحترافية"] ---
+// --- [مكون البحث الذكي - Smart Autocomplete] ---
 const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,code', displayCol = 'name', multi = false, selectedValues = [] }: any) => {
     const [search, setSearch] = useState<string>(''); 
     const [results, setResults] = useState<any[]>([]);
@@ -177,6 +177,21 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
 export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, onSave, isSaving }: any) {
     if (!isOpen || !record) return null;
 
+    // 🚀 1. إعطاء القيم الافتراضية لأول مرة فقط (عشان الزرار ميعلقش)
+    useEffect(() => {
+        if (record && !record.invoice_number) {
+            setRecord((prev: any) => ({
+                ...prev,
+                invoice_number: `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+                date: prev.date || new Date().toISOString(),
+                tax_acc_id: prev.tax_acc_id || '990c949c-5f32-40d7-8d36-5fe45a6c892c', 
+                materials_acc_id: prev.materials_acc_id || '85e61a6a-8c85-4219-a733-3b2180dfe043',
+                guarantee_acc_id: prev.guarantee_acc_id || '8bf39cb1-4028-4c9e-817d-27c239873030'
+            }));
+        }
+    }, [record?.id]); 
+
+    // 🚀 2. الحسابات الفورية (تشتغل بس لما الأرقام أو زرار الضريبة يتغير)
     useEffect(() => {
         if (!record) return; 
         const qty = Number(record.quantity || 0);
@@ -185,34 +200,38 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         
         const materialsDiscount = Number(record.materials_discount || 0);
         const taxableAmount = lineTotal - materialsDiscount;
-        
         const guaranteePercent = Number(record.guarantee_percent || 0);
         const guaranteeAmount = (taxableAmount * guaranteePercent) / 100;
         
-        const taxAmount = taxableAmount * 0.15; 
+        // 🔥 سحر التفعيل والإيقاف: لو skip_zatca شغالة يبقى الضريبة 0 كأنها مش موجودة نهائي
+        const taxAmount = record.skip_zatca ? 0 : (taxableAmount * 0.15); 
         const finalTotal = taxableAmount + taxAmount - guaranteeAmount;
 
-        setRecord((prev: any) => {
-            const autoInvoiceNumber = prev.invoice_number || `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
-            const autoDate = prev.date || new Date().toISOString();
+        const days = Number(record.due_in_days || 0);
+        const invoiceDate = record.date ? new Date(record.date) : new Date();
+        const dueDateCalculated = new Date(invoiceDate);
+        dueDateCalculated.setDate(dueDateCalculated.getDate() + days);
 
-            return {
+        // التحديث يحصل فقط لو في تغيير فعلي (لمنع التعليق)
+        if (
+            record.line_total !== lineTotal ||
+            record.taxable_amount !== taxableAmount ||
+            record.guarantee_amount !== guaranteeAmount ||
+            record.tax_amount !== taxAmount ||
+            record.total_amount !== finalTotal ||
+            record.due_date !== dueDateCalculated.toISOString()
+        ) {
+            setRecord((prev: any) => ({
                 ...prev,
                 line_total: lineTotal,
                 taxable_amount: taxableAmount,
                 guarantee_amount: guaranteeAmount,
                 tax_amount: taxAmount,
                 total_amount: finalTotal,
-                invoice_number: autoInvoiceNumber, 
-                date: autoDate,
-                
-                // 🚀 التوجيه الآلي المكتمل للضريبة، الخامات، والضمان:
-                tax_acc_id: prev.tax_acc_id || '990c949c-5f32-40d7-8d36-5fe45a6c892c', 
-                materials_acc_id: prev.materials_acc_id || '85e61a6a-8c85-4219-a733-3b2180dfe043',
-                guarantee_acc_id: prev.guarantee_acc_id || '8bf39cb1-4028-4c9e-817d-27c239873030' // 👈 تم إضافة حساب تأمينات محتجزة
-            };
-        });
-    }, [record.quantity, record.unit_price, record.materials_discount, record.guarantee_percent]);
+                due_date: dueDateCalculated.toISOString()
+            }));
+        }
+    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca]); 
 
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}>
@@ -236,13 +255,16 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         📑 إنشاء / تعديل فاتورة ذكية
                     </h2>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: (record?.skip_zatca) ? '#fee2e2' : '#f1f5f9', padding: '8px 15px', borderRadius: '12px', cursor: 'pointer' }} 
-                         onClick={() => setRecord({...record, skip_zatca: !record.skip_zatca})}>
-                        <div style={{ width: '34px', height: '18px', background: (record?.skip_zatca) ? THEME.ruby : '#cbd5e1', borderRadius: '20px', position: 'relative', transition: '0.3s' }}>
-                            <div style={{ width: '14px', height: '14px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', right: (record?.skip_zatca) ? '2px' : '18px', transition: '0.3s' }} />
+                    {/* 🚀 زرار الـ Turn ON / Turn OFF الجديد */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: record?.skip_zatca ? '#fee2e2' : '#dcfce3', padding: '8px 15px', borderRadius: '12px', cursor: 'pointer', transition: '0.3s' }} 
+                         onClick={() => setRecord({ ...record, skip_zatca: !record.skip_zatca })}>
+                        
+                        <div style={{ width: '36px', height: '20px', background: record?.skip_zatca ? '#cbd5e1' : THEME.success, borderRadius: '20px', position: 'relative', transition: '0.3s' }}>
+                            <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', left: record?.skip_zatca ? '2px' : '18px', transition: '0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }} />
                         </div>
-                        <span style={{ fontSize: '11px', fontWeight: 900, color: (record?.skip_zatca) ? THEME.ruby : '#64748b' }}>
-                            {(record?.skip_zatca) ? '⚠️ فاتورة داخلية (تجاوز الزكاة)' : '✅ ربط رسمي (الزكاة والدخل)'}
+                        
+                        <span style={{ fontSize: '12px', fontWeight: 900, color: record?.skip_zatca ? '#64748b' : THEME.success }}>
+                            {record?.skip_zatca ? '❌ الضريبة: معطلة (إيقاف الدالة)' : '✅ الضريبة: مفعلة (15%)'}
                         </span>
                     </div>
                 </div>
@@ -256,6 +278,22 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     <div className="field">
                         <label style={{ fontSize: '12px', fontWeight: 900 }}>رقم الفاتورة</label>
                         <input type="text" value={record.invoice_number ?? ''} readOnly style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#e2e8f0', border: `1px solid ${THEME.border}`, fontWeight: 'bold', color: THEME.primary }} />
+                    </div>
+
+                    <div className="field">
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary }}>📅 فترة السداد (بالأيام)</label>
+                        <input 
+                            type="number" 
+                            placeholder="مثلاً: 30" 
+                            value={record.due_in_days ?? ''} 
+                            onChange={(e) => setRecord({...record, due_in_days: e.target.value})} 
+                            style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `2px solid ${THEME.accent}50`, fontWeight: 'bold', outline: 'none' }} 
+                        />
+                        {record.due_date && (
+                            <div style={{ fontSize: '10px', marginTop: '6px', color: '#64748b', fontWeight: 'bold' }}>
+                                تاريخ الاستحقاق: {new Date(record.due_date).toLocaleDateString('ar-EG')}
+                            </div>
+                        )}
                     </div>
 
                     <SmartCombo 
@@ -395,7 +433,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                                 label="ترحل استقطاعات الضمان إلى حساب:" 
                                 table="accounts" 
                                 searchCols="name,code" displayCol="name"
-                                /* 🚀 إظهار الحساب الافتراضي الجديد للضمان (124) */
                                 placeholder={record.guarantee_acc_id === '8bf39cb1-4028-4c9e-817d-27c239873030' ? '[124] تأمينات محتجزة لدى الغير (افتراضي)' : '🔍 اختر حساب...'}
                                 onSelect={(a: any) => setRecord({...record, guarantee_acc_id: a.id})} 
                             />
@@ -412,12 +449,12 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     <div>
                         <div style={{ fontSize: '11px', opacity: 0.8 }}>مبلغ الضريبة (15%)</div>
                         <div style={{ fontSize: '18px', fontWeight: 900 }}>{formatCurrency(record.tax_amount ?? 0)}</div>
-                        <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '2px' }}>ترحل آلياً لحساب [215]</div>
+                        <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '2px' }}>{record.skip_zatca ? 'الدالة معطلة (0)' : 'ترحل آلياً لحساب [215]'}</div>
                     </div>
                     <div>
                         <div style={{ fontSize: '11px', opacity: 0.8 }}>محتجز ضمان أعمال</div>
                         <div style={{ fontSize: '18px', fontWeight: 900 }}>{formatCurrency(record.guarantee_amount ?? 0)}</div>
-                        <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '2px' }}>ترحل آلياً لحساب [124]</div> {/* 👈 توضيح للمحاسب */}
+                        <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '2px' }}>ترحل آلياً لحساب [124]</div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '15px', padding: '5px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 900 }}>الصافي النهائي</div>

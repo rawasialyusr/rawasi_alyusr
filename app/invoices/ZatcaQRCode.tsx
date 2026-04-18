@@ -1,12 +1,16 @@
 "use client";
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react'; 
-import { THEME } from '@/lib/theme';
+
+// تم إضافة الثيم عشان الكود ميضربش لو مش متعرف في الملف ده
+const THEME = {
+  primary: '#0f172a', accent: '#ca8a04', success: '#059669', slate: '#f8fafc', text: '#111827', border: '#cbd5e1', ruby: '#e11d48'
+};
 
 export default function ZatcaQRCode({ record }: { record: any }) {
   if (!record) return null;
-  
-  if (record.is_internal) {
+
+  if (record.is_internal || record.skip_zatca) {
      return (
         <div style={{ padding: '4px', border: `2px solid ${THEME.ruby}`, borderRadius: '8px', background: 'white', display: 'inline-block' }}>
            <QRCodeSVG value={`INTERNAL-INV-${record.invoice_number}`} size={90} level="H" imageSettings={{ src: "/RYC_Logo.png", height: 20, width: 20, excavate: true }} />
@@ -14,7 +18,8 @@ export default function ZatcaQRCode({ record }: { record: any }) {
      );
   }
 
-  const timestamp = record.date ? `${record.date}T12:00:00Z` : new Date().toISOString().split('.')[0] + 'Z';
+  // تظبيط التاريخ عشان لو الفاتورة قديمة أو جديدة يقراها صح
+  const timestamp = record.date ? `${record.date.split('T')[0]}T12:00:00Z` : new Date().toISOString().split('.')[0] + 'Z';
   
   const generateQR = (s:string, v:string, t:string, it:string, vt:string) => {
     const getB = (tag:number, val:string) => {
@@ -25,10 +30,18 @@ export default function ZatcaQRCode({ record }: { record: any }) {
     return btoa(String.fromCharCode(...new Uint8Array(tlvs)));
   };
 
+  // 🚀 القفشة هنا: استخدمنا total_amount بدلاً من net_amount عشان يقرا من الداتابيز صح
+  const invoiceTotal = Number(record.total_amount || 0).toFixed(2);
+  const taxTotal = Number(record.tax_amount || 0).toFixed(2);
+
   return (
     <div style={{ padding: '4px', border: `2px solid ${THEME.primary}`, borderRadius: '8px', background: 'white', display: 'inline-block' }}>
-      <QRCodeSVG value={generateQR("شركة رواسي اليسر", "312487477800003", timestamp, Number(record.net_amount||0).toFixed(2), Number(record.tax_amount||0).toFixed(2))} 
-        size={90} level="H" imageSettings={{ src: "/RYC_Logo.png", height: 20, width: 20, excavate: true }} />
+      <QRCodeSVG 
+        value={generateQR("شركة رواسي اليسر", "312487477800003", timestamp, invoiceTotal, taxTotal)} 
+        size={90} 
+        level="H" 
+        imageSettings={{ src: "/RYC_Logo.png", height: 20, width: 20, excavate: true }} 
+      />
     </div>
   );
 }
