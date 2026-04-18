@@ -182,4 +182,4 @@ export function PaginationPanel({ totalItems, currentPage, rowsPerPage, onPageCh
         </div>
       </div>
     );
-}
+}export default OperationsCenter;
