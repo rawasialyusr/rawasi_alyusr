@@ -5,13 +5,13 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency, getInvoiceSummaryAndAging } from '@/lib/helpers'; 
 import InvoiceAgingDashboard from '@/components/InvoiceAgingDashboard';
 
-
 import InvoiceFormModal from './InvoiceFormModal';
 import InvoicePrintModal from './InvoicePrintModal';
 import { OperationsCenter, PaginationPanel } from '@/components/postingputton';
 
 // --- [عنصر الجدول] ---
-const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAll, onPrint, onEdit }: any) => {
+// 👈 أضفنا permissions و onStamp للـ Props هنا
+const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAll, onPrint, onEdit, permissions, onStamp }: any) => {
   return (
     <div style={{ background: 'white', borderRadius: '12px', overflowX: 'auto', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', direction: 'rtl', minWidth: '1050px' }}>
@@ -42,11 +42,9 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
             const total = Number(inv.net_amount || inv.total_amount || 0);
             let paid = Number(inv.paid_amount || 0);
             
-            // لو الفاتورة اتعملت مدفوعة بس المبلغ متسجلش، اعتبرها ادفعت بالكامل
             if (inv.status === 'مدفوعة' && paid === 0) {
                 paid = total;
             }
-            // تأمين عشان المبلغ المدفوع ميتخطاش الإجمالي ويبوظ الحسبة
             paid = Math.min(paid, total);
             
             const balance = total - paid;
@@ -71,7 +69,6 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
                   {formatCurrency(total)}
                 </td>
                 
-                {/* عرض حالة الترحيل */}
                 <td style={{ padding: '12px', textAlign: 'center' }}>
                   <span style={{ 
                     padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
@@ -82,7 +79,6 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
                   </span>
                 </td>
 
-                {/* عرض حالة السداد */}
                 <td style={{ padding: '12px', textAlign: 'center' }}>
                   <span style={{ 
                     padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
@@ -97,7 +93,6 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
                 <td style={{ padding: '12px', textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
                     
-                    {/* زر التحصيل يظهر فقط لو الفاتورة مرحلة ومش مدفوعة بالكامل */}
                     {!isPaid && !isDraft && (
                       <button 
                         onClick={() => {
@@ -125,6 +120,22 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
 
                     <button onClick={() => onPrint(inv)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px' }} title="طباعة">🖨️</button>
                     <button onClick={() => onEdit(inv)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px' }} title="تعديل">📝</button>
+                    
+                    {/* 🔏 زر الختم يظهر فقط لو المستخدم أدمن */}
+                    {permissions?.isAdmin && (
+                        <button 
+                            onClick={() => onStamp(inv.id, inv.is_stamped)}
+                            style={{ 
+                                background: inv.is_stamped ? THEME.ruby : THEME.success, 
+                                color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', 
+                                padding: '6px', fontSize: '14px', display: 'flex', alignItems: 'center'
+                            }}
+                            title={inv.is_stamped ? "إلغاء الختم" : "ختم الفاتورة"}
+                        >
+                            {inv.is_stamped ? "🔓" : "🔏"}
+                        </button>
+                    )}
+
                   </div>
                 </td>
               </tr>
@@ -138,6 +149,7 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
 export default function InvoicesPage() {
   const {
     invoices, allFiltered, projects, isLoading, isSaving,
+    permissions, handleToggleStamp, // 👈 استخراج الصلاحيات ودالة الختم
     globalSearch, setGlobalSearch,
     dateFrom, setDateFrom,
     dateTo, setDateTo,
@@ -152,11 +164,8 @@ export default function InvoicesPage() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
   
-  // حالة لرسالة الإشعار
   const [toastMsg, setToastMsg] = useState('');
 
-  // دالة ترحيل بتشغل الإشعار بعد الترحيل
-  // 🚀 دالة ترحيل بتشغل الإشعار بعد الترحيل
   const onPostWithNotification = async () => {
     if (selectedIds.length === 0) return;
     await handlePostSelected(); 
@@ -165,10 +174,9 @@ export default function InvoicesPage() {
     setSelectedIds([]); 
   };
 
-  // 🚀 1. ضيف الدالة دي هنا (دالة التراجع مع الإشعار)
   const onUnpostWithNotification = async () => {
     if (selectedIds.length === 0) return;
-    await handleUnpostSelected(); // تشغيل دالة التراجع من اللوجيك
+    await handleUnpostSelected(); 
     setToastMsg(`↩️ تم التراجع عن ترحيل ${selectedIds.length} فاتورة بنجاح (عادت كمسودة)!`);
     setTimeout(() => setToastMsg(''), 4000); 
     setSelectedIds([]); 
@@ -176,7 +184,6 @@ export default function InvoicesPage() {
 
   const dataToProcess = allFiltered && allFiltered.length > 0 ? allFiltered : invoices;
   
-  // تصفية الفواتير لاستبعاد المسودات من أعمار الديون
   const validForAging = dataToProcess.filter((inv: any) => inv.status && inv.status !== 'مسودة');
   const result = getInvoiceSummaryAndAging(validForAging);
 
@@ -202,7 +209,6 @@ export default function InvoicesPage() {
   return (
     <div style={{ padding: '25px', background: '#f8fafc', minHeight: '100vh', direction: 'rtl', position: 'relative' }}>
       
-      {/* إشعار الترحيل (Toast) */}
       {toastMsg && (
         <div style={{
           position: 'fixed', top: '30px', left: '50%', transform: 'translateX(-50%)',
@@ -214,29 +220,23 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* 🛡️ السايد بار (مركز التحكم) */}
-     {/* 🛡️ السايد بار (مركز التحكم) */}
       <OperationsCenter 
         title="مركز عمليات الفواتير"
         searchQuery={globalSearch}
-        onPostSelected={handlePostSelected} // 👈 دي اللي فيها اللوجيك الصح بتاع الجورنال
-        onUnpostSelected={handleUnpostSelected}
+        onPostSelected={onPostWithNotification} 
+        onUnpostSelected={onUnpostWithNotification}
         onSearchChange={setGlobalSearch}
         onDeleteSelected={handleDeleteSelected}
         selectedCount={selectedIds.length}
         
-        // 🚀 الـ 3 سطور دول هما اللي بيشغلوا الترحيل في المكون الجديد:
         selectedIds={selectedIds}
         moduleType="invoices"
         onSuccess={() => {
-          setSelectedIds([]); // عشان يمسح التحديد بعد ما يرحل بنجاح
-          // لو عندك دالة fetchInvoices في اللوجيك، اكتبها هنا عشان الجدول يعمل Refresh
-          // if (fetchInvoices) fetchInvoices(); 
+          setSelectedIds([]); 
         }}
         
         onAdd={handleAddNew}
         onEdit={() => handleEdit(invoices.find(i => i.id === selectedIds[0]))}
-        onDeleteSelected={handleDeleteSelected}
         
         kpis={sidebarKPIs} 
         filtersSlot={
@@ -257,7 +257,6 @@ export default function InvoicesPage() {
         }
       />
 
-      {/* 📄 الجزء الرئيسي (الجدول) */}
       <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ color: THEME.primary, fontWeight: 900, marginBottom: '20px', marginTop: 0 }}>📄 قائمة الفواتير والمستخلصات</h1>
           
@@ -272,6 +271,8 @@ export default function InvoicesPage() {
                 onToggleSelect={onToggleSelect}
                 onSelectAll={onSelectAll}
                 onEdit={handleEdit}
+                permissions={permissions} // 👈 تمرير الصلاحيات للجدول
+                onStamp={handleToggleStamp} // 👈 تمرير دالة الختم للجدول
                 onPrint={(inv: any) => { 
                     let projNames = 'بدون مشروع';
                     if (inv.project_ids && inv.project_ids.length > 0 && projects) {

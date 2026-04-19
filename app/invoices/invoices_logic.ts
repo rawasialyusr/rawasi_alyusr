@@ -8,6 +8,9 @@ export function useInvoicesLogic() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     
+    // 🔐 State الصلاحيات الخاصة بالأدمن
+    const [permissions, setPermissions] = useState<any>({ isAdmin: false });
+    
     const [globalSearch, setGlobalSearch] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -16,6 +19,25 @@ export function useInvoicesLogic() {
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [currentRecord, setCurrentRecord] = useState<any>({ lines: [] });
+
+    // 🚀 جلب صلاحيات المستخدم الحالي (هل هو أدمن؟)
+    useEffect(() => {
+        const fetchAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role, permissions')
+                    .eq('id', session.user.id)
+                    .single();
+                setPermissions({ 
+                    isAdmin: profile?.role === 'admin', 
+                    ...profile?.permissions 
+                });
+            }
+        };
+        fetchAuth();
+    }, []);
 
     const fetchFullData = useCallback(async () => {
         setIsLoading(true);
@@ -56,8 +78,33 @@ export function useInvoicesLogic() {
     const handleEdit = (inv: any) => { setCurrentRecord(inv); setIsEditModalOpen(true); };
 
     // =========================================================================
-    // 🚀 1. الترحيل: إنشاء Header ثم ربط السطور به
+    // 🔏 0. ختم الفاتورة (صلاحية للأدمن فقط)
     // =========================================================================
+    const handleToggleStamp = async (id: string, currentStatus: boolean) => {
+        if (!permissions.isAdmin) {
+            alert("🚫 عذراً، هذه الصلاحية مخصصة للمدير العام فقط!");
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const { error } = await supabase
+                .from('invoices')
+                .update({ is_stamped: !currentStatus }) // نعكس الحالة الحالية (ختم/إلغاء ختم)
+                .eq('id', id);
+
+            if (error) throw error;
+            
+            // تحديث البيانات في الشاشة فوراً
+            fetchFullData(); 
+        } catch (error) {
+            console.error("Stamp Error:", error);
+            alert("حدث خطأ أثناء محاولة ختم الفاتورة!");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // =========================================================================
     // 🚀 1. الترحيل: إنشاء الهيدر ثم السطور (مطابق تماماً لجدول journal_lines)
     // =========================================================================
@@ -167,7 +214,6 @@ export function useInvoicesLogic() {
         if(!selectedIds.length) return;
         setIsLoading(true);
         try {
-            // جلب الهيدر المربوط بالفاتورة عن طريق الـ reference_id
             const { data: headers } = await supabase
                 .from('journal_headers')
                 .select('id')
@@ -175,9 +221,7 @@ export function useInvoicesLogic() {
 
             if (headers && headers.length > 0) {
                 const headerIds = headers.map(h => h.id);
-                // حذف السطور أولاً (عن طريق header_id)
                 await supabase.from('journal_lines').delete().in('header_id', headerIds);
-                // حذف الهيدر
                 await supabase.from('journal_headers').delete().in('id', headerIds);
             }
             
@@ -206,7 +250,6 @@ export function useInvoicesLogic() {
 
             if (headers && headers.length > 0) {
                 const headerIds = headers.map(h => h.id);
-                // 🚀 استخدمنا journal_header_id هنا كمان في الحذف
                 await supabase.from('journal_lines').delete().in('journal_header_id', headerIds);
                 await supabase.from('journal_headers').delete().in('id', headerIds);
             }
@@ -311,6 +354,11 @@ export function useInvoicesLogic() {
         projects,
         isLoading,
         isSaving,
+        
+        // 👈 تصدير الصلاحيات ودالة الختم عشان تستخدمهم في الـ page.tsx
+        permissions,
+        handleToggleStamp,
+        
         globalSearch, setGlobalSearch,
         dateFrom, setDateFrom,
         dateTo, setDateTo,

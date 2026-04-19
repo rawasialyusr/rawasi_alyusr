@@ -4,6 +4,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency, formatDate, tafqeet } from '@/lib/helpers';
 import ZatcaQRCode from './ZatcaQRCode';
 import { supabase } from '@/lib/supabase'; 
+import { QRCodeSVG } from 'qrcode.react'; // 🚀 1. استدعاء مكتبة الباركود
 
 interface InvoicePrintModalProps {
   isOpen: boolean;
@@ -15,20 +16,36 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
   const printRef = useRef<HTMLDivElement>(null);
   const [fetchedPartner, setFetchedPartner] = useState<any>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const fetchPartnerData = async () => {
-      if (data?.partner_id) {
-        const { data: partnerData } = await supabase
-          .from('partners')
-          .select('name, vat_number, address') 
-          .eq('id', data.partner_id)
-          .single();
-        if (partnerData) setFetchedPartner(partnerData);
+    const fetchData = async () => {
+      try {
+        if (data?.partner_id) {
+          const { data: partnerData } = await supabase
+            .from('partners')
+            .select('name, vat_number, address') 
+            .eq('id', data.partner_id)
+            .single();
+          if (partnerData) setFetchedPartner(partnerData);
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role, username, full_name, signature_url') // 🚀 2. ضفنا signature_url هنا
+            .eq('id', session.user.id)
+            .single();
+          if (profile) setCurrentUser(profile);
+        }
+      } catch (err) {
+        console.error("Error fetching print data", err);
       }
     };
-    if (isOpen && data) fetchPartnerData();
-  }, [data, isOpen]);
+
+    if (isOpen && data?.id) fetchData();
+  }, [data?.id, isOpen]);
 
   if (!isOpen || !data) return null;
 
@@ -49,13 +66,14 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
               body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; font-family: 'Cairo', sans-serif; }
               * { box-sizing: border-box; }
               
-              /* 🚀 إجبار المتصفح على مقاس ورقة واحدة في الطباعة */
+              /* إجبار المتصفح على عرض الورقة بالكامل بدون قص */
               #invoice-paper { 
                  box-shadow: none !important; 
                  border: none !important; 
                  width: 210mm !important; 
-                 height: 296.5mm !important; /* طول ثابت لمنع رفع الفوتر */
+                 min-height: 296.5mm !important; 
                  padding: 10mm 15mm !important; 
+                 margin: 0 !important;
               }
             </style>
           </head>
@@ -85,7 +103,7 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
       const fileName = `فاتورة_${invNumber}.pdf`;
 
       const opt = {
-        margin:       0, // بدون هوامش خارجية لأن الورقة مضبوطة من الداخل
+        margin:       0, 
         filename:     fileName,
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  {
@@ -123,11 +141,27 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
   const customerVat = fetchedPartner?.vat_number || '---';
   const customerAddress = fetchedPartner?.address || 'المملكة العربية السعودية';
 
-  const showStamp = data?.status === 'مُعتمد'; 
-  const showAccountant = !!data?.accountant_name;
+  const showStamp = currentUser?.role === 'admin' || data?.is_stamped || data?.status === 'مُعتمد'; 
+  const showAccountant = currentUser?.role !== 'admin' || !!data?.accountant_name;
+  
+  const accountantName = currentUser?.role !== 'admin' 
+      ? (currentUser?.full_name || currentUser?.username || 'توقيع إلكتروني') 
+      : (data?.accountant_name || '');
+
+  // 🚀 3. تجهيز بيانات الـ QR Code للتوقيع
+  const signatureQRData = `
+تم الاعتماد بواسطة: ${accountantName}
+رقم الفاتورة: ${data?.invoice_number || '---'}
+تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}
+المنصة: نظام رواسي المالي
+  `.trim();
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.style.display = 'none';
+  };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, backdropFilter: 'blur(5px)', padding: '20px' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px' }}>
       <div style={{ background: 'white', width: '100%', maxWidth: '950px', maxHeight: '95vh', borderRadius: '15px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         
         <div style={{ padding: '15px 25px', background: THEME.primary, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -141,16 +175,15 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#e2e8f0', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#e2e8f0', padding: '20px' }}>
           
-          {/* 🚀 الورقة البيضاء: طول ثابت + Flexbox لضمان بقاء الفوتر في الأسفل */}
           <div 
             id="invoice-paper"
             ref={printRef} 
             style={{ 
               width: '210mm', 
-              height: '296.5mm', // 🚀 سر الصفحة الواحدة: الطول الثابت بيمنع الصفحة التانية وبيمنع الفوتر يطلع للنص
-              overflow: 'hidden', // لمنع أي عنصر من الهروب لصفحة تانية
+              minHeight: '296.5mm', 
+              margin: '0 auto',     
               display: 'flex', 
               flexDirection: 'column', 
               backgroundColor: 'white', 
@@ -166,14 +199,19 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
             <img 
               src="/in-Logo.png" 
               alt="Watermark" 
+              onError={handleImageError}
               style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '75%', opacity: 0.08, pointerEvents: 'none', zIndex: 0 }} 
             />
 
-            {/* 🚀 المحتوى الأساسي يأخذ المساحة المتبقية ويزق الفوتر للأسفل */}
             <div style={{ flex: 1, position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', borderBottom: `2px solid ${THEME.primary}`, paddingBottom: '10px' }}>
                  <div>
-                    <img src="/in-Logo.png" alt="Logo" style={{ height: '65px', marginRight: '70px', display: 'block' }} />
+                    <img 
+                      src="/in-Logo.png" 
+                      alt="Logo" 
+                      onError={handleImageError}
+                      style={{ height: '65px', marginRight: '70px', display: 'block' }} 
+                    />
                     <h2 style={{ margin: '5px 0', color: THEME.primary, fontWeight: 900, fontSize: '20px' }}>مؤسسة طفله عبدالله السبيعي للمقاولات</h2>
                     <div style={{ fontSize: '12px' }}>
                        <p style={{ margin: '2px 0' }}>الرقم الضريبي: 312487477800003</p>
@@ -288,20 +326,37 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
               </div>
 
               {(showStamp || showAccountant) && (
-                <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '30px', paddingBottom: '20px' }}>
                    {showStamp ? (
                      <div style={{ textAlign: 'center' }}>
-                        <p style={{ fontWeight: 900, fontSize: '13px', margin: '0 0 5px 0' }}>ختم الشركة</p>
-                        <img src="/company-stamp.png" alt="ختم الشركة" style={{ maxHeight: '75px' }} />
+                        {/* <p style={{ fontWeight: 900, fontSize: '13px', margin: '0 0 5px 0' }}>ختم الشركة</p> */}
+                        <img 
+                          src="/company-stamp.png" 
+                          alt="ختم الشركة" 
+                          onError={handleImageError}
+                          style={{ maxHeight: '75px' }} 
+                        />
                      </div>
                    ) : (
                      <div style={{ width: '100px' }}></div> 
                    )}
                    
+                   {/* 🚀 4. الذكاء الاصطناعي: لو مفيش صورة، هيعرض QR Code بدل النص */}
                    {showAccountant ? (
                      <div style={{ textAlign: 'center' }}>
                         <p style={{ fontWeight: 900, fontSize: '13px', margin: '0 0 5px 0' }}>توقيع المحاسب</p>
-                        <p style={{ fontFamily: 'cursive', fontSize: '18px', color: THEME.primary, margin: 0 }}>{data.accountant_name}</p>
+                        
+                        {currentUser?.signature_url ? (
+                            <img 
+                               src={currentUser.signature_url} 
+                               alt="توقيع المحاسب" 
+                               style={{ maxHeight: '65px', transform: 'rotate(-2deg)' }} 
+                            />
+                        ) : (
+                            <div style={{ background: 'white', padding: '5px', borderRadius: '8px', border: `1px dashed ${THEME.border}`, display: 'inline-block', marginTop: '5px' }}>
+                                <QRCodeSVG value={signatureQRData} size={60} level="L" />
+                            </div>
+                        )}
                      </div>
                    ) : (
                      <div style={{ width: '100px' }}></div>
@@ -310,9 +365,8 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
               )}
             </div>
 
-            {/* 🚀 الفوتر ملزوق في الأسفل دائمًا باستخدام marginTop: auto */}
             <div style={{ 
-              marginTop: 'auto', // ده اللي بيزق الفوتر لقاع الورقة (لأن الورقة طولها ثابت)
+              marginTop: 'auto',
               borderTop: `2px solid ${THEME.primary}`, 
               paddingTop: '10px', 
               display: 'flex', 

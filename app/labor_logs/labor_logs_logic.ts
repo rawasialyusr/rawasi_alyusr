@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
-import { fetchAllSupabaseData } from '@/lib/helpers'; // 👈 استيراد دالة كسر حاجز الـ 1000 صف
+// 🚀 استدعاء دوال الهيلبرز بما فيها دالة الـ 1000 صف وتنسيق العملات والتواريخ
+import { fetchAllSupabaseData, formatCurrency, formatDate } from '@/lib/helpers'; 
 
 export function useLaborLogsLogic() {
     const [logs, setLogs] = useState<any[]>([]);
@@ -32,7 +33,7 @@ export function useLaborLogsLogic() {
     const fetchAllData = async () => {
         setIsLoading(true);
         try {
-            // جلب الإحصائيات
+            // جلب الإحصائيات (شغل عالي 👏)
             const { data: statsData } = await supabase.rpc('get_labor_stats');
             if (statsData) setStats({ sum: statsData[0].total_wage_sum || 0, attendance: statsData[0].total_attendance_sum || 0, count: statsData[0].total_records_count || 0 });
 
@@ -40,7 +41,7 @@ export function useLaborLogsLogic() {
             const { data: pData } = await supabase.from('partners').select('id, name, type');
             if (pData) setPartners(pData);
 
-            // 🚀 التحديث هنا: استخدام الهيلبر لجلب كل الصفوف (10,000 أو أكثر)
+            // استخدام الهيلبر لجلب كل الصفوف (10,000 أو أكثر)
             const allLogs = await fetchAllSupabaseData(supabase, 'labor_daily_logs');
             
             if (allLogs) {
@@ -70,9 +71,15 @@ export function useLaborLogsLogic() {
             const search = searchTerm.toLowerCase();
             const matchesGlobal = (log.worker_name || '').toLowerCase().includes(search) || (log.site_ref || '').toLowerCase().includes(search) || (log.work_item || '').toLowerCase().includes(search);
             const matchesStatus = filterStatus === 'الكل' || (filterStatus === 'مرحل' && log.is_posted) || (filterStatus === 'معلق' && !log.is_posted);
-            return matchesGlobal && matchesStatus;
+            
+            // فلترة بالتاريخ (لو حابب تفعلها مستقبلاً)
+            const logDate = new Date(log.work_date);
+            const matchesFrom = dateFrom ? logDate >= new Date(dateFrom) : true;
+            const matchesTo = dateTo ? logDate <= new Date(dateTo) : true;
+
+            return matchesGlobal && matchesStatus && matchesFrom && matchesTo;
         });
-    }, [logs, searchTerm, filterStatus]);
+    }, [logs, searchTerm, filterStatus, dateFrom, dateTo]);
 
     const paginatedLogs = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -81,7 +88,9 @@ export function useLaborLogsLogic() {
 
     const totalPages = Math.ceil(allFiltered.length / rowsPerPage);
 
-    // العمليات (CRUD)
+    // ==========================================
+    // 🛠️ العمليات (CRUD)
+    // ==========================================
     const handleSaveLog = async () => {
         setIsSaving(true);
         const payload = {
@@ -122,6 +131,7 @@ export function useLaborLogsLogic() {
     };
 
     const handlePostSelected = async () => {
+        if (selectedIds.length === 0) return;
         await supabase.from('labor_daily_logs').update({ is_posted: true }).in('id', selectedIds);
         setSelectedIds([]);
         fetchAllData();
@@ -134,12 +144,62 @@ export function useLaborLogsLogic() {
         XLSX.writeFile(wb, "يوميات_العمالة.xlsx");
     };
 
+    // ==========================================
+    // 🎨 دوال الهيلبرز المضافة للواجهة (UI Helpers)
+    // ==========================================
+    
+    // دالة تلوين حالة الحضور
+    const getAttendanceStyle = (status: string) => {
+        if (!status) return { bg: '#f1f5f9', color: '#64748b' };
+        if (status.includes('1') || status.includes('حاضر')) return { bg: '#dcfce7', color: '#166534' };
+        if (status.includes('0') || status.includes('غائب')) return { bg: '#ffe4e6', color: '#be123c' };
+        return { bg: '#fef3c7', color: '#b45309' }; // نصف يوم
+    };
+
+    // دوال التحديد السريع للـ Checkboxes
+    const toggleSelectAll = (checked: boolean) => {
+        setSelectedIds(checked ? allFiltered.map(r => r.id) : []);
+    };
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
     return {
-        isLoading, searchTerm, setSearchTerm, filterStatus, setFilterStatus,
-        filteredLogs: paginatedLogs, stats, selectedIds, setSelectedIds,
-        currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, totalResults: allFiltered.length,
-        isAddModalOpen, setIsAddModalOpen, currentLog, setCurrentLog, isSaving, handleSaveLog,
-        handleEdit, handleDelete, handlePostSingle, handlePostSelected, exportToExcel, editingId, setEditingId, defaultLog,
-        workersList, sitesList
+        // الحالات الأساسية
+        isLoading, 
+        searchTerm, setSearchTerm, 
+        filterStatus, setFilterStatus,
+        dateFrom, setDateFrom,
+        dateTo, setDateTo,
+        
+        // البيانات والإحصائيات
+        filteredLogs: paginatedLogs, 
+        stats, 
+        totalResults: allFiltered.length,
+        
+        // التحديد والصفحات
+        selectedIds, setSelectedIds,
+        currentPage, setCurrentPage, 
+        rowsPerPage, setRowsPerPage, 
+        totalPages, 
+        
+        // المودال والإضافة/التعديل
+        isAddModalOpen, setIsAddModalOpen, 
+        currentLog, setCurrentLog, 
+        isSaving, editingId, setEditingId, defaultLog,
+        
+        // القوائم المنسدلة
+        workersList, sitesList,
+
+        // الدوال (العمليات)
+        handleSaveLog, handleEdit, handleDelete, 
+        handlePostSingle, handlePostSelected, exportToExcel,
+        
+        // 🚀 الهيلبرز الجديدة (عشان الواجهة)
+        getAttendanceStyle,
+        toggleSelectAll, toggleSelect,
+        formatCurrency, formatDate,
+        refreshData: fetchAllData
     };
 }
