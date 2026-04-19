@@ -99,6 +99,7 @@ export const tafqeet = (value: number | string | null | undefined): string => {
 
   return finalStr;
 };
+
 // دالة الفلترة الذكية (نص + تاريخ)
 export const filterData = (
   data: any[], 
@@ -126,6 +127,7 @@ export const filterData = (
     return matchesSearch && isAfterFrom && isBeforeTo;
   });
 };
+
 export const formatCurrency = (amount: number | string | null | undefined): string => {
   const num = Number(amount) || 0;
   return new Intl.NumberFormat('ar-SA', {
@@ -135,6 +137,7 @@ export const formatCurrency = (amount: number | string | null | undefined): stri
     maximumFractionDigits: 2,
   }).format(num);
 };
+
 export const formatDate = (dateString: string, showTime: boolean = false): string => {
   if (!dateString) return '---';
   const date = new Date(dateString);
@@ -148,6 +151,7 @@ export const formatDate = (dateString: string, showTime: boolean = false): strin
   
   return new Intl.DateTimeFormat('ar-EG', options).format(date);
 };
+
 export const calculateVAT = (amount: number, isInclusive: boolean = false, vatRate: number = 0.15) => {
   const numAmount = Number(amount) || 0;
   
@@ -163,6 +167,7 @@ export const calculateVAT = (amount: number, isInclusive: boolean = false, vatRa
     return { net: numAmount, vat: Number(vat.toFixed(2)), total: Number(total.toFixed(2)) };
   }
 };
+
 export const parseDbError = (error: any): string => {
   if (!error) return "حدث خطأ غير معروف.";
   
@@ -198,6 +203,7 @@ export const calculateProgress = (executed: number, total: number) => {
     color
   };
 };
+
 export const checkBudgetVariance = (budget: number, actualCost: number) => {
   const numBudget = Number(budget) || 0;
   const numActual = Number(actualCost) || 0;
@@ -212,6 +218,7 @@ export const checkBudgetVariance = (budget: number, actualCost: number) => {
     color: isOverBudget ? '#dc2626' : '#059669' // أحمر لو تخطى، أخضر لو في السليم
   };
 };
+
 export const buildWbsTree = (items: any[], idKey = 'id', parentKey = 'parent_id') => {
   const itemMap: any = {};
   const tree: any[] = [];
@@ -233,6 +240,7 @@ export const buildWbsTree = (items: any[], idKey = 'id', parentKey = 'parent_id'
 
   return tree;
 };
+
 export const getProjectTimelineStatus = (startDate: string, endDate: string) => {
   if (!startDate || !endDate) return { status: 'غير محدد', daysLeft: 0, color: '#94a3b8' };
 
@@ -254,6 +262,7 @@ export const getProjectTimelineStatus = (startDate: string, endDate: string) => 
     return { status: 'قيد التنفيذ', daysLeft, color: '#3b82f6' }; // أزرق
   }
 };
+
 export const calculateCumulativeInvoice = (
   totalWorkToDate: number,       // إجمالي الأعمال المنفذة حتى اليوم
   previousBilledAmount: number,  // ما تم صرفه في المستخلصات السابقة
@@ -279,7 +288,9 @@ export const calculateCumulativeInvoice = (
     totalDeductions: Number((retention + advanceDeduction).toFixed(2)),
     netAmount: Number(netAmount.toFixed(2))
   };
-};export const getStockAlertStatus = (
+};
+
+export const getStockAlertStatus = (
   currentStock: number,   // الرصيد الفعلي في الموقع
   reorderPoint: number,   // حد الطلب (مثلاً لو نزل عن 100 طن اطلب)
   minimumBuffer: number   // رصيد الأمان الحرج (لو نزل عنه الموقع هيقف)
@@ -292,6 +303,7 @@ export const calculateCumulativeInvoice = (
     return { status: 'الرصيد آمن', action: 'لا إجراء مطلوب', color: '#047857', bg: '#d1fae5' }; // أخضر
   }
 };
+
 export const calculatePettyCash = (
   totalAdvanced: number,  // إجمالي العهدة المستلمة
   totalExpensed: number   // إجمالي الفواتير اللي قدمها المشرف
@@ -305,7 +317,9 @@ export const calculatePettyCash = (
   } else {
     return { text: 'مستحق للموظف (صرف من جيبه)', amount: Math.abs(balance), color: '#dc2626' }; // الشركه مدينة للموظف
   }
-};export const getInvoiceAging = (invoiceDate: string, isPaid: boolean) => {
+};
+
+export const getInvoiceAging = (invoiceDate: string, isPaid: boolean) => {
   if (isPaid) return { text: 'مُسدد', daysOverdue: 0, color: '#059669', badge: '✅' };
 
   const today = new Date();
@@ -322,4 +336,127 @@ export const calculatePettyCash = (
   } else {
     return { text: 'ديون معدومة أو حرجة (+3 شهور)', daysOverdue, color: '#dc2626', badge: '🚨' };
   }
+};
+
+// استبدل الدالة القديمة في آخر الملف بهذا الكود الاحترافي
+export const getInvoiceSummaryAndAging = (invoices: any[]) => {
+  const summary = {
+    totalInvoicesAmount: 0, // إجمالي الفواتير
+    totalPaidAmount: 0,     // إجمالي المبالغ المحصلة
+    totalRemaining: 0,      // إجمالي المديونية المتبقية
+    totalOverdue: 0,        // إجمالي المتأخرات (أحمر وأصفر)
+    // التقسيمات اللونية (Buckets)
+    aging: {
+      current: 0,      // أخضر
+      days_1_30: 0,    // أصفر
+      days_31_60: 0,   // برتقالي
+      days_61_90: 0,   // أحمر
+      over_90: 0       // أحمر داكن
+    }
+  };
+
+  if (!invoices || invoices.length === 0) return summary;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  invoices.forEach(inv => {
+    // 🚀 أهم سطر: قراءة الأرقام بشكل صحيح (تأكد من مسميات الحقول عندك)
+    const amount = Number(inv.net_amount || inv.total_amount || 0);
+    const paid = Number(inv.paid_amount || 0);
+    const balance = amount - paid;
+
+    // 1. حساب الإجماليات (للفواتير المعتمدة فقط أو حسب نظامك)
+    if (inv.status !== 'مسودة') {
+      summary.totalInvoicesAmount += amount;
+      summary.totalPaidAmount += paid;
+      summary.totalRemaining += balance;
+    }
+
+    // 2. حساب أعمار الديون (للفواتير اللي ليها متبقي ومش مسودة)
+    if (balance > 0 && inv.status !== 'مسودة') {
+      const dueDate = new Date(inv.due_date || inv.date || inv.created_at);
+      dueDate.setHours(0, 0, 0, 0);
+      
+      const diffDays = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) {
+        summary.aging.current += balance;
+      } else {
+        summary.totalOverdue += balance; // يضاف لإجمالي المتأخرات
+        if (diffDays <= 30) summary.aging.days_1_30 += balance;
+        else if (diffDays <= 60) summary.aging.days_31_60 += balance;
+        else if (diffDays <= 90) summary.aging.days_61_90 += balance;
+        else summary.aging.over_90 += balance;
+      }
+    }
+  });
+
+  return summary;
+};
+
+// دي الدالة القديمة لو محتاجها لعرض "ملصق" جنب كل صف في الجدول (اختياري)
+export const getSingleInvoiceStatus = (invoiceDate: string, isPaid: boolean) => {
+  if (isPaid) return { text: 'مُسدد', color: '#059669', badge: '✅' };
+  const today = new Date();
+  const invDate = new Date(invoiceDate);
+  const diffTime = today.getTime() - invDate.getTime();
+  const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  if (days <= 0) return { text: 'جاري', color: '#10b981', badge: '🟢' };
+  return { text: `متأخر ${days} يوم`, color: days > 90 ? '#dc2626' : '#ca8a04', badge: '⚠️' };
+};
+
+// =========================================================================
+// 🚀 دالة البلدوزر: لسحب الجداول الضخمة التي تتخطى حاجز الـ 1000 سجل من Supabase
+// =========================================================================
+// =========================================================================
+// 🚀 دالة البلدوزر المطورة: سحب تكراري لضمان جلب كل البيانات (بدون سقف الـ 1000)
+// =========================================================================
+export const fetchAllSupabaseData = async (
+  supabaseClient: any, 
+  tableName: string, 
+  selectQuery: string = '*',
+  orderByCol: string = 'created_at',
+  ascending: boolean = false
+) => {
+  let allData: any[] = [];
+  let fetchMore = true;
+  let from = 0;
+  const step = 1000; 
+
+  console.log(`📡 جاري بدء سحب بيانات جدول: [${tableName}]...`);
+
+  while (fetchMore) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .select(selectQuery)
+      .order(orderByCol, { ascending })
+      .range(from, from + step - 1);
+
+    if (error) {
+      // لو الجدول مش موجود (404) نرجع مصفوفة فاضية بدل null عشان الكود مايوقفش
+      if (error.code === 'PGRST116' || error.message.includes('not found')) {
+        console.warn(`⚠️ تنبيه: جدول [${tableName}] غير موجود في قاعدة البيانات.`);
+        return [];
+      }
+      console.error(`❌ خطأ في سحب [${tableName}]:`, error.message);
+      return []; 
+    }
+
+    if (data && data.length > 0) {
+      allData = [...allData, ...data];
+      console.log(`✅ تم سحب ${allData.length} صف من جدول [${tableName}] حتى الآن...`);
+    }
+
+    // لو الطلب رجع 1000 بالظبط، معناها لسه فيه تاني، نلف لفة كمان
+    if (data && data.length === step) {
+      from += step;
+    } else {
+      // لو رجع أقل من 1000، معناها مفيش بيانات تاني
+      fetchMore = false; 
+    }
+  }
+
+  console.log(`🏁 اكتمل السحب! إجمالي بيانات [${tableName}]: ${allData.length} صف.`);
+  return allData;
 };

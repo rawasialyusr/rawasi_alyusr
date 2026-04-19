@@ -3,17 +3,16 @@ import React, { useState } from 'react';
 import { usePayrollLogic } from './payroll_logic';
 
 const THEME = {
-  primary: '#0f172a',    // كحلي فخم
-  accent: '#ca8a04',     // ذهبي ملكي
-  success: '#059669',    // أخضر
-  ruby: '#e11d48',       // أحمر للسلف والخصومات
+  primary: '#0f172a',    
+  accent: '#ca8a04',     
+  success: '#059669',    
+  ruby: '#e11d48',       
   slate: '#f8fafc',
   border: '#e2e8f0'
 };
 
 const GRID_LAYOUT = "1.5fr 100px 100px 90px 100px 100px 100px 120px 100px 60px";
 
-// دالة التفقيط لطباعة إجمالي المسير
 const tafqeet = (number: number) => {
     const ones = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
     const tens = ["", "عشرة", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
@@ -62,7 +61,6 @@ export default function PayrollPage() {
         .row-card:hover { border-color: ${THEME.accent}; transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
       `}</style>
 
-      {/* 🏰 السايد بار */}
       <aside className="no-print" onMouseEnter={() => setIsSidebarOpen(true)} onMouseLeave={() => setIsSidebarOpen(false)} style={{ width: isSidebarOpen ? '280px' : '70px', background: THEME.primary, transition: '0.3s', position: 'fixed', right: 0, height: '100vh', zIndex: 1001, borderLeft: `3px solid ${THEME.accent}` }}>
          <div style={{ padding: '25px 15px', opacity: isSidebarOpen ? 1 : 0, transition: '0.2s', width: '280px' }}>
             <h3 style={{ color: 'white', fontWeight: 900, marginBottom: '20px', borderBottom: `2px solid ${THEME.accent}`, paddingBottom: '10px' }}>إعدادات المسير</h3>
@@ -83,12 +81,28 @@ export default function PayrollPage() {
 
             <input placeholder="🔍 بحث في المسير..." value={logic.globalSearch} onChange={e => logic.setGlobalSearch(e.target.value)} style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', border: 'none', outline: 'none', marginBottom: '30px' }} />
             
-            <button onClick={() => window.print()} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: THEME.success, color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900, marginBottom: '10px' }}>🖨️ طباعة مسير الرواتب</button>
-            <button onClick={logic.exportToExcel} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900 }}>📊 تصدير Excel</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button onClick={logic.importLaborLogs} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#2563eb', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900, boxShadow: '0 4px 6px rgba(37,99,235,0.2)' }}>
+                    👷‍♂️ مزامنة يوميات العمالة
+                </button>
+                <hr style={{ border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', margin: '5px 0' }} />
+                <button onClick={() => window.print()} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900 }}>
+                    🖨️ طباعة المسير
+                </button>
+                <button onClick={logic.exportToExcel} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900 }}>
+                    📊 تصدير Excel
+                </button>
+                <hr style={{ border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', margin: '5px 0' }} />
+                <button onClick={logic.savePayrollToDB} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: THEME.success, color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900 }}>
+                    💾 حفظ المسير بالسجلات
+                </button>
+                <button onClick={logic.postToJournal} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: THEME.accent, color: THEME.primary, border: 'none', cursor: 'pointer', fontWeight: 900 }}>
+                    📝 ترحيل لليومية العامة
+                </button>
+            </div>
          </div>
       </aside>
 
-      {/* 🏙️ المحتوى الرئيسي */}
       <main className="no-print" style={{ flex: 1, padding: '40px', marginRight: isSidebarOpen ? '280px' : '70px', transition: '0.3s' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
           <div>
@@ -98,7 +112,6 @@ export default function PayrollPage() {
           <img src="/RYC_Logo.png" alt="Logo" style={{ height: '70px' }} />
         </header>
 
-        {/* كروت التلخيص العلوية */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
             <div style={{ background: 'white', padding: '20px', borderRadius: '15px', borderBottom: `4px solid ${THEME.primary}`, boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
                 <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 900 }}>إجمالي الكوادر</div>
@@ -118,13 +131,11 @@ export default function PayrollPage() {
             </div>
         </div>
 
-        {/* رأس الجدول */}
         <div style={{ display: 'grid', gridTemplateColumns: GRID_LAYOUT, background: THEME.primary, color: 'white', padding: '15px', borderRadius: '12px', fontWeight: 900, fontSize: '12px', marginBottom: '15px', textAlign: 'center', alignItems: 'center' }}>
           <div style={{textAlign: 'right', paddingRight:'10px'}}>اسم الكادر / المهنة</div>
           <div>الأساسي/اليومية</div><div>أيام العمل</div><div>بدلات</div><div>سلف</div><div>خصومات</div><div style={{color: THEME.accent}}>الصافي</div><div>الحالة</div><div></div>
         </div>
 
-        {/* صفوف مسير الرواتب (قابلة للتعديل المباشر) */}
         {logic.filteredRecords.map(r => (
           <div key={r.id} className="row-card" style={{ textAlign: 'center' }}>
             <div style={{ textAlign: 'right', paddingRight: '10px' }}>
@@ -133,8 +144,6 @@ export default function PayrollPage() {
                     <span style={{color: r.type==='عامل يومية'?THEME.accent:THEME.success}}>{r.type}</span> | {r.job_role || 'بدون مسمى'}
                 </div>
             </div>
-            
-            {/* حقول الإدخال السريع (Excel-like interface) */}
             <div><input type="number" className="payroll-input" value={r.base_rate || ''} onChange={e => logic.updateRecord(r.id, 'base_rate', e.target.value)} placeholder="0" /></div>
             <div><input type="number" className="payroll-input" value={r.days_worked || ''} onChange={e => logic.updateRecord(r.id, 'days_worked', e.target.value)} placeholder="0" disabled={r.type !== 'عامل يومية'} style={{opacity: r.type !== 'عامل يومية' ? 0.3 : 1}} /></div>
             <div><input type="number" className="payroll-input" style={{color: THEME.success}} value={r.allowances || ''} onChange={e => logic.updateRecord(r.id, 'allowances', e.target.value)} placeholder="0" /></div>
@@ -159,7 +168,6 @@ export default function PayrollPage() {
         ))}
       </main>
 
-      {/* 📝 مودال مفردات الراتب التفصيلية */}
       {logic.isEditModalOpen && logic.currentRecord && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
           <div style={{ background: 'white', width: '600px', padding: '30px', borderRadius: '20px', border: `4px solid ${THEME.accent}` }}>
@@ -206,9 +214,6 @@ export default function PayrollPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 🖨️ منطقة الطباعة الملكية Landscape (Payroll Sheet) */}
-      {/* ========================================================= */}
       <div className="print-area" style={{ display: 'none' }}>
          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `4px solid ${THEME.primary}`, paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
@@ -230,7 +235,7 @@ export default function PayrollPage() {
                   <th>الاستحقاقات (بدلات)</th>
                   <th>الاستقطاعات (سلف+خصم)</th>
                   <th style={{color: THEME.accent}}>الصافي المستحق</th>
-                  <th className="sign-col">توقيع المستلم (البصمة)</th>
+                  <th className="sign-col">توقيع المستلم</th>
                </tr>
             </thead>
             <tbody>
@@ -245,10 +250,9 @@ export default function PayrollPage() {
                      <td>{Number(r.allowances).toLocaleString()}</td>
                      <td>{(Number(r.deductions) + Number(r.advances)).toLocaleString()}</td>
                      <td style={{ fontWeight: '900', fontSize: '14px' }}>{Number(r.net_salary).toLocaleString()}</td>
-                     <td></td> {/* خانة التوقيع فارغة */}
+                     <td></td> 
                   </tr>
                ))}
-               {/* صف الإجماليات */}
                <tr style={{ background: THEME.primary, color: 'white', fontWeight: 900 }}>
                    <td colSpan={6} style={{ textAlign: 'left', paddingRight: '20px' }}>الإجمـــــالي الكــــلي:</td>
                    <td>{logic.totals.allowances.toLocaleString()}</td>

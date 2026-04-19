@@ -2,39 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
-import { calculateMassiveTotals } from '@/lib/accounting_engine'; // تأكد من وجود الملف في هذا المسار
+import { calculateMassiveTotals } from '@/lib/accounting_engine'; 
 
 export function OperationsCenter({ 
   title, searchQuery, onSearchChange, filtersSlot, 
-  selectedCount, onAdd, onEdit, onDeleteSelected, onPostSelected, onUnpostSelected, kpis 
+  selectedCount, onAdd, onEdit, onDeleteSelected, onPostSelected, onUnpostSelected, 
+  kpis // 👈 دي المصفوفة اللي بتيجي من صفحة الفواتير
 }: any) {
   const [isOpen, setIsOpen] = useState(false);
   
-  // --- [جزء حسابات الإجماليات الضخمة] ---
-  const [totals, setTotals] = useState({ invoices: 0, receipts: 0 });
-  const [isFinLoading, setIsFinLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchRealTotals = async () => {
-      setIsFinLoading(true);
-      try {
-        const invResult: any = await calculateMassiveTotals('invoices', 'net_amount');
-        const recResult: any = await calculateMassiveTotals('receipts', 'amount');
-        
-        setTotals({
-          invoices: invResult?.success ? (invResult?.total || 0) : 0,
-          receipts: recResult?.success ? (recResult?.total || 0) : 0
-        });
-      } catch (error) {
-        console.error("Error fetching totals:", error);
-      } finally {
-        setIsFinLoading(false);
-      }
-    };
-
-    if (isOpen) fetchRealTotals(); // يعمل فقط عند فتح السايد بار لتحسين الأداء
-  }, [isOpen]);
-
   const hasSelection = selectedCount > 0;
   const isSingleSelection = selectedCount === 1;
 
@@ -44,15 +20,45 @@ export function OperationsCenter({
       <button 
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          position: 'fixed', top: '120px', right: isOpen ? '380px' : '0px',
-          zIndex: 1001, background: THEME.primary, color: 'white',
-          border: 'none', padding: '15px 20px', borderRadius: '12px 0 0 12px',
-          cursor: 'pointer', transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-          boxShadow: '-5px 0 20px rgba(0,0,0,0.2)', fontWeight: 900,
-          display: 'flex', alignItems: 'center', gap: '10px'
+          position: 'fixed', 
+          top: '120px', 
+          // عند الفتح يتحرك مع السايد بار، وعند الغلق يلتصق بحافة الشاشة
+          right: isOpen ? '380px' : '0px',
+          zIndex: 1001, 
+          background: '#1e293b', // لون داكن ليتناسب مع فلاتر البحث
+          color: '#fbbf24', // لون ذهبي للأيقونة والنص
+          border: '1px solid #334155',
+          borderRight: 'none',
+          
+          // الإعدادات لجعل المقبض أفقي وعريض
+          width: isOpen ? '50px' : '140px', 
+          height: '45px',
+          padding: '0 15px', 
+          borderRadius: '12px 0 0 12px', 
+          
+          cursor: 'pointer', 
+          transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+          boxShadow: '-5px 0 20px rgba(0,0,0,0.15)', 
+          fontWeight: 900,
+          fontSize: '13px',
+          
+          // تنسيق المحتوى داخلياً
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          gap: '10px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden'
         }}
       >
-        {isOpen ? '◀' : '⚙️ مركز العمليات'}
+        {isOpen ? (
+          <span style={{ fontSize: '20px' }}>◀</span>
+        ) : (
+          <>
+            <span style={{ fontSize: '18px' }}>⚙️</span>
+            <span> العمليات</span>
+          </>
+        )}
       </button>
 
       {/* 2. طبقة التعتيم الخلفية (Blur Overlay) */}
@@ -78,7 +84,8 @@ export function OperationsCenter({
         boxShadow: '-15px 0 40px rgba(0,0,0,0.15)',
         padding: '40px 25px', display: 'flex', flexDirection: 'column', gap: '25px',
         transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
-        direction: 'rtl'
+        direction: 'rtl',
+        overflowY: 'auto' // 👈 مهم عشان لو المحتوى كتر
       }}>
         
         {/* العنوان */}
@@ -87,24 +94,23 @@ export function OperationsCenter({
             <p style={{ color: '#64748b', fontSize: '11px', marginTop: '5px' }}>الإحصائيات المباشرة والتحكم السينمائي</p>
         </div>
 
-        {/* كروت الإحصائيات (الدمج بين الـ KPIs والـ Massive Totals) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.5)', padding: '12px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.8)' }}>
-                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>إجمالي الفواتير</div>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: THEME.primary }}>{kpis?.total || 0}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.5)', padding: '12px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.8)' }}>
-                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>الحالة: معتمد</div>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: THEME.success }}>{kpis?.posted || 0}</div>
-            </div>
-            
-            {/* كروت المحرك المحاسبي الضخم */}
-            <div style={{ gridColumn: 'span 2', background: 'rgba(34, 197, 94, 0.1)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#166534' }}>سيولة الإيرادات الإجمالية</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: '#166534' }}>
-                    {isFinLoading ? '...' : formatCurrency(totals.invoices)}
-                </div>
-            </div>
+        {/* 🚀 كروت الإحصائيات (Dynamic KPIs) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+            {Array.isArray(kpis) ? kpis.map((kpi, idx) => (
+              <div key={idx} style={{ 
+                  background: 'rgba(255, 255, 255, 0.8)', padding: '15px', 
+                  borderRadius: '15px', border: `1px solid ${kpi.color || THEME.primary}40`,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+              }}>
+                  <div>
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>{kpi.title}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: kpi.color || THEME.primary, marginTop: '5px' }}>
+                          {kpi.value}
+                      </div>
+                  </div>
+                  <div style={{ fontSize: '24px', opacity: 0.8 }}>{kpi.icon}</div>
+              </div>
+            )) : null}
         </div>
 
         {/* البحث والفلترة */}
@@ -133,7 +139,7 @@ export function OperationsCenter({
                     fontWeight: 900, fontSize: '16px', boxShadow: `0 8px 20px ${THEME.primary}40`
                 }}
             >
-               ➕ إضافة سجل جديد
+                ➕ إضافة سجل جديد
             </button>
 
             {/* 2. قسم العمليات على المختار */}
@@ -182,4 +188,6 @@ export function PaginationPanel({ totalItems, currentPage, rowsPerPage, onPageCh
         </div>
       </div>
     );
-}export default OperationsCenter;
+}
+
+export default OperationsCenter;

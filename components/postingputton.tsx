@@ -1,10 +1,7 @@
 "use client";
-import React from 'react';
+import React, { useState } from 'react';
 import { THEME } from '@/lib/theme';
 
-// ==========================================
-// 1. واجهة البيانات (Types)
-// ==========================================
 interface KPI {
   title: string;
   value: string | number;
@@ -15,150 +12,205 @@ interface KPI {
 interface OperationsCenterProps {
   title: string;
   kpis: KPI[];
-  
-  // دوال البحث والفلترة
   searchQuery: string;
   onSearchChange: (val: string) => void;
-  filtersSlot?: React.ReactNode; // مساحة حرة لإضافة فلاتر التاريخ أو القوائم
-
-  // الأزرار والإجراءات
-  selectedCount: number; // عدد الصفوف المحددة لتفعيل أزرار (الترحيل والحذف)
+  filtersSlot?: React.ReactNode; 
+  selectedCount: number; 
   onAdd: () => void;
+  onEdit?: () => void;
   onDeleteSelected: () => void;
-  onPostSelected: () => void;
-  onUnpostSelected: () => void;
+  onPostSelected: () => void; 
+  onUnpostSelected: () => void; 
+  // 💡 الخاصية اختيارية (Optional) عشان منبوظش باقي الصفحات اللي بتستخدم المكون
+  onRefundSelected?: () => void; 
 }
 
-// ==========================================
-// 2. المكون الرئيسي: مركز العمليات (علوي)
-// ==========================================
 export function OperationsCenter({ 
-  title, kpis, 
-  searchQuery, onSearchChange, filtersSlot, 
-  selectedCount, onAdd, onDeleteSelected, onPostSelected, onUnpostSelected 
+  title, kpis, searchQuery, onSearchChange, filtersSlot, 
+  selectedCount, onAdd, onEdit, onDeleteSelected, onPostSelected, onUnpostSelected, onRefundSelected 
 }: OperationsCenterProps) {
   
+  const [isOpen, setIsOpen] = useState(false);
   const hasSelection = selectedCount > 0;
+  const isSingleSelection = selectedCount === 1;
+
+  // ستايل موحد للأزرار لضمان المظهر الاحترافي
+  const btnStyle = {
+    padding: '14px',
+    borderRadius: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    transition: 'all 0.3s',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    fontSize: '14px'
+  };
 
   return (
-    <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '25px', direction: 'rtl' }}>
-      
-      {/* الجزء الأول: العنوان والـ KPIs (Summary Cards) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #f1f5f9', paddingBottom: '15px' }}>
-        <h2 style={{ margin: 0, color: THEME.primary, fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          🎛️ {title}
-        </h2>
+    <>
+      {/* الزر العائم لفتح المركز */}
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          position: 'fixed', top: '120px', right: isOpen ? '380px' : '0px',
+          zIndex: 1001, background: THEME.primary, color: 'white',
+          border: 'none', padding: '15px 20px', borderRadius: '12px 0 0 12px',
+          cursor: 'pointer', transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+          boxShadow: '-5px 0 20px rgba(0,0,0,0.2)', fontWeight: 900,
+          display: 'flex', alignItems: 'center', gap: '10px'
+        }}
+      >
+        {isOpen ? '◀' : '⚙️ مركز العمليات'}
+      </button>
 
-        <div style={{ display: 'flex', gap: '15px' }}>
-          {kpis.map((kpi, idx) => (
-            <div key={idx} style={{ background: `${kpi.color}15`, border: `1px solid ${kpi.color}30`, padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '15px', minWidth: '150px' }}>
-               <span style={{ fontSize: '24px' }}>{kpi.icon}</span>
-               <div>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>{kpi.title}</div>
-                  <div style={{ fontSize: '20px', fontWeight: 900, color: kpi.color }}>{kpi.value}</div>
-               </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* الستارة الخلفية */}
+      {isOpen && (
+        <div onClick={() => setIsOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.3)', zIndex: 999, backdropFilter: 'blur(4px)' }} />
+      )}
 
-      {/* الجزء الثاني: شريط الأدوات (البحث + الفلاتر + الأزرار) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+      {/* الجانب الأيمن (Sidebar) */}
+      <div style={{
+        position: 'fixed', top: 0, right: isOpen ? 0 : '-400px',
+        width: '380px', height: '100vh', zIndex: 1000,
+        background: 'white', borderLeft: '1px solid rgba(0,0,0,0.05)',
+        boxShadow: '-15px 0 50px rgba(0,0,0,0.1)',
+        padding: '40px 25px', display: 'flex', flexDirection: 'column', gap: '25px',
+        transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)', direction: 'rtl', overflowY: 'auto' 
+      }}>
         
-        {/* البحث والفلاتر الإضافية */}
-        <div style={{ display: 'flex', gap: '10px', flex: 1, minWidth: '300px' }}>
-          <input 
-            type="text" 
-            placeholder="🔍 بحث سريع..." 
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            style={{ padding: '10px 15px', border: `1px solid ${THEME.border}`, borderRadius: '8px', width: '250px', outline: 'none' }}
-          />
-          {filtersSlot} {/* هنا سيتم إدخال فلاتر التاريخ من الصفحة الأب */}
+        <div style={{ borderBottom: `2px solid ${THEME.primary}20`, paddingBottom: '15px' }}>
+            <h2 style={{ color: THEME.primary, fontWeight: 900, margin: 0, fontSize: '20px' }}>⚙️ {title}</h2>
         </div>
 
-        {/* أزرار العمليات (فردية وجماعية) */}
-        <div style={{ display: 'flex', gap: '10px' }}>
-          
-          {/* أزرار تظهر فقط عند تحديد صفوف */}
-          {hasSelection && (
-            <div style={{ display: 'flex', gap: '8px', background: '#f8fafc', padding: '5px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-              <span style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 'bold', color: '#64748b', alignSelf: 'center' }}>
-                محدد: {selectedCount}
-              </span>
-              <button onClick={onPostSelected} style={{ background: THEME.success, color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✅ ترحيل المختار</button>
-              <button onClick={onUnpostSelected} style={{ background: THEME.accent, color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>↩️ إلغاء الترحيل</button>
-              <button onClick={onDeleteSelected} style={{ background: '#fee2e2', color: THEME.ruby, border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🗑️ حذف</button>
+        {/* كروت المؤشرات المالية */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+            {kpis.map((kpi, idx) => (
+              <div key={idx} style={{ background: '#f8fafc', padding: '15px', borderRadius: '16px', border: `1px solid ${kpi.color}20`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>{kpi.title}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: kpi.color }}>{kpi.value}</div>
+                  </div>
+                  <div style={{ fontSize: '24px', opacity: 0.8 }}>{kpi.icon}</div>
+              </div>
+            ))}
+        </div>
+
+        {/* أدوات البحث والفلترة */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ fontSize: '13px', fontWeight: 900, color: THEME.primary }}>🔍 البحث السريع</label>
+            <input 
+              type="text" 
+              placeholder="ابحث برقم السند أو اسم العميل..."
+              value={searchQuery} 
+              onChange={(e) => onSearchChange(e.target.value)} 
+              style={{ padding: '12px', borderRadius: '12px', border: `1.5px solid #e2e8f0`, outline: 'none', fontSize: '14px' }} 
+            />
+            {filtersSlot}
+        </div>
+
+        {/* 🚀 أدوات الترحيل والعمليات */}
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            
+            <button onClick={() => { onAdd(); setIsOpen(false); }} style={{ ...btnStyle, background: THEME.primary, color: 'white', fontSize: '16px', boxShadow: `0 8px 15px ${THEME.primary}30` }}>
+              ➕ إضافة جديد
+            </button>
+
+            {/* صندوق الأدوات الجماعية - يظهر فقط عند الاختيار */}
+            <div style={{ 
+              maxHeight: hasSelection ? '500px' : '0', 
+              opacity: hasSelection ? 1 : 0,
+              overflow: 'hidden', 
+              transition: 'all 0.5s ease', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '12px',
+              padding: hasSelection ? '20px 15px' : '0 15px',
+              background: '#f1f5f9',
+              borderRadius: '18px',
+              border: '1px solid #e2e8f0'
+            }}>
+                <div style={{ textAlign: 'center', fontSize: '12px', color: THEME.primary, fontWeight: 900, marginBottom: '5px' }}>
+                   ⚡ أدوات التحكم ({selectedCount}) سجل مختار
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <button onClick={onPostSelected} style={{ ...btnStyle, background: THEME.success, color: 'white' }}>
+                      ✅ ترحيل
+                    </button>
+                    <button onClick={onUnpostSelected} style={{ ...btnStyle, background: THEME.accent, color: 'white' }}>
+                      ↩️ فك ترحيل
+                    </button>
+                </div>
+
+                {/* 🚀 زر الإرجاع يظهر فقط لو الصفحة بعتت دالة onRefundSelected */}
+                {onRefundSelected && (
+                    <button onClick={onRefundSelected} style={{ ...btnStyle, background: 'white', color: THEME.ruby, border: `1.5px solid ${THEME.ruby}50` }}>
+                      🔙 إرجاع السداد
+                    </button>
+                )}
+
+                {isSingleSelection && onEdit && (
+                    <button onClick={() => { onEdit(); setIsOpen(false); }} style={{ ...btnStyle, background: '#e2e8f0', color: THEME.primary }}>
+                      📝 تعديل البيانات
+                    </button>
+                )}
+
+                <button onClick={onDeleteSelected} style={{ ...btnStyle, background: '#fee2e2', color: THEME.ruby, border: `1.5px solid ${THEME.ruby}30` }}>
+                  🗑️ حذف نهائي
+                </button>
             </div>
-          )}
-
-          {/* زر الإضافة الأساسي (دائماً ظاهر) */}
-          <button onClick={onAdd} style={{ background: THEME.primary, color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-            ➕ إضافة جديد
-          </button>
         </div>
-
       </div>
-    </div>
+    </>
   );
 }
 
-// ==========================================
-// 3. مكون الفلترة السفلية: تغيير الصفحات والصفوف
-// ==========================================
-interface PaginationPanelProps {
-  totalItems: number;
-  currentPage: number;
-  rowsPerPage: number;
-  onPageChange: (page: number) => void;
-  onRowsChange: (rows: number) => void;
-}
-
-export function PaginationPanel({ totalItems, currentPage, rowsPerPage, onPageChange, onRowsChange }: PaginationPanelProps) {
+// مكون الترقيم (Pagination) بتصميم متناسق
+export function PaginationPanel({ totalItems, currentPage, rowsPerPage, onPageChange, onRowsChange }: any) {
   const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+  const btnActionStyle = { padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 600 };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '15px 20px', borderRadius: '10px', marginTop: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', direction: 'rtl' }}>
-      
-      {/* تغيير عدد الصفوف */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#475569' }}>
-        <span>عرض:</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '15px 25px', borderRadius: '16px', marginTop: '20px', direction: 'rtl', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
+      <div style={{ fontSize: '14px', color: '#64748b' }}>
+        <span>عرض: </span>
         <select 
           value={rowsPerPage} 
           onChange={(e) => onRowsChange(Number(e.target.value))}
-          style={{ padding: '5px 10px', border: `1px solid ${THEME.border}`, borderRadius: '6px', cursor: 'pointer' }}
+          style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', margin: '0 5px', outline: 'none' }}
         >
-          <option value={50}>50 صف</option>
-          <option value={100}>100 صف</option>
-          <option value={500}>500 صف</option>
-          <option value={1000}>1000 صف</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
         </select>
-        <span>من إجمالي <strong>{totalItems}</strong> سجل</span>
+        <span> من {totalItems} سجل</span>
       </div>
-
-      {/* أزرار التنقل بين الصفحات */}
-      <div style={{ display: 'flex', gap: '5px' }}>
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button 
           onClick={() => onPageChange(currentPage - 1)} 
           disabled={currentPage === 1}
-          style={{ padding: '6px 15px', border: `1px solid ${THEME.border}`, background: currentPage === 1 ? '#f1f5f9' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', borderRadius: '6px' }}
+          style={{ ...btnActionStyle, opacity: currentPage === 1 ? 0.5 : 1 }}
         >
           السابق
         </button>
         
-        <span style={{ padding: '6px 15px', background: THEME.primary, color: 'white', borderRadius: '6px', fontWeight: 'bold' }}>
-          {currentPage} / {totalPages}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span style={{ color: THEME.primary, fontWeight: 900 }}>{currentPage}</span>
+          <span style={{ color: '#cbd5e1' }}>/</span>
+          <span style={{ color: '#64748b' }}>{totalPages}</span>
+        </div>
 
         <button 
           onClick={() => onPageChange(currentPage + 1)} 
           disabled={currentPage === totalPages}
-          style={{ padding: '6px 15px', border: `1px solid ${THEME.border}`, background: currentPage === totalPages ? '#f1f5f9' : 'white', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', borderRadius: '6px' }}
+          style={{ ...btnActionStyle, opacity: currentPage === totalPages ? 0.5 : 1 }}
         >
           التالي
         </button>
       </div>
-
     </div>
   );
 }

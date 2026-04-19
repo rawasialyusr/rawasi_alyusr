@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
+import { fetchAllSupabaseData } from '@/lib/helpers'; // 👈 استيراد دالة كسر حاجز الـ 1000 صف
 
 export function useLaborLogsLogic() {
     const [logs, setLogs] = useState<any[]>([]);
@@ -31,16 +32,30 @@ export function useLaborLogsLogic() {
     const fetchAllData = async () => {
         setIsLoading(true);
         try {
+            // جلب الإحصائيات
             const { data: statsData } = await supabase.rpc('get_labor_stats');
             if (statsData) setStats({ sum: statsData[0].total_wage_sum || 0, attendance: statsData[0].total_attendance_sum || 0, count: statsData[0].total_records_count || 0 });
 
+            // جلب الشركاء
             const { data: pData } = await supabase.from('partners').select('id, name, type');
             if (pData) setPartners(pData);
 
-            const { data } = await supabase.from('labor_daily_logs').select('*').order('work_date', { ascending: false });
-            if (data) setLogs(data);
-        } catch (error) { console.error(error); }
-        finally { setIsLoading(false); }
+            // 🚀 التحديث هنا: استخدام الهيلبر لجلب كل الصفوف (10,000 أو أكثر)
+            const allLogs = await fetchAllSupabaseData(supabase, 'labor_daily_logs');
+            
+            if (allLogs) {
+                // ترتيب البيانات تنازلياً حسب التاريخ عشان أحدث يومية تظهر فوق
+                const sortedLogs = allLogs.sort((a: any, b: any) => 
+                    new Date(b.work_date).getTime() - new Date(a.work_date).getTime()
+                );
+                setLogs(sortedLogs);
+            }
+
+        } catch (error) { 
+            console.error("Error fetching all logs:", error); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     useEffect(() => { fetchAllData(); }, []);
