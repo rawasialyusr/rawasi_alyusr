@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useInvoicesLogic } from './invoices_logic';
 import { THEME } from '@/lib/theme';
 import { formatCurrency, getInvoiceSummaryAndAging } from '@/lib/helpers'; 
@@ -7,29 +7,30 @@ import InvoiceAgingDashboard from '@/components/InvoiceAgingDashboard';
 
 import InvoiceFormModal from './InvoiceFormModal';
 import InvoicePrintModal from './InvoicePrintModal';
-import { OperationsCenter, PaginationPanel } from '@/components/postingputton';
+import { PaginationPanel } from '@/components/postingputton'; // احتفظنا بالـ Pagination فقط
+import RawasiSidebarManager from '@/components/RawasiSidebarManager'; // 🚀 السايد بار الذكي
 
-// --- [عنصر الجدول] ---
-// 👈 أضفنا permissions و onStamp للـ Props هنا
+// --- [عنصر الجدول الزجاجي (Apple UX)] ---
 const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAll, onPrint, onEdit, permissions, onStamp }: any) => {
   return (
-    <div style={{ background: 'white', borderRadius: '12px', overflowX: 'auto', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', direction: 'rtl', minWidth: '1050px' }}>
+    <div className="table-container fade-in-up">
+      <table>
         <thead>
-          <tr style={{ background: THEME.primary, color: 'white' }}>
-            <th style={{ padding: '15px', width: '50px' }}>
+          <tr>
+            <th style={{ width: '50px', textAlign: 'center' }}>
               <input 
                 type="checkbox" 
+                style={{ accentColor: THEME.goldAccent, width: '16px', height: '16px', cursor: 'pointer' }}
                 onChange={(e) => onSelectAll(e.target.checked)} 
                 checked={data.length > 0 && selectedIds.length === data.length}
               />
             </th>
-            <th style={{ padding: '15px', textAlign: 'right' }}>رقم الفاتورة</th>
-            <th style={{ padding: '15px', textAlign: 'right' }}>العميل / المشروع</th>
-            <th style={{ padding: '15px', textAlign: 'center' }}>الصافي</th>
-            <th style={{ padding: '15px', textAlign: 'center' }}>حالة الترحيل</th>
-            <th style={{ padding: '15px', textAlign: 'center' }}>حالة السداد</th>
-            <th style={{ padding: '15px', textAlign: 'center' }}>الإجراءات</th>
+            <th>رقم الفاتورة</th>
+            <th>العميل / المشروع</th>
+            <th style={{ textAlign: 'center' }}>الصافي</th>
+            <th style={{ textAlign: 'center' }}>حالة الترحيل</th>
+            <th style={{ textAlign: 'center' }}>حالة السداد</th>
+            <th style={{ textAlign: 'center' }}>الإجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -52,46 +53,38 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
             const isDraft = !inv.status || inv.status === 'مسودة';
 
             return (
-              <tr key={inv.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <tr key={inv.id}>
                 <td style={{ textAlign: 'center' }}>
                   <input 
                     type="checkbox" 
+                    style={{ accentColor: THEME.goldAccent, width: '16px', height: '16px', cursor: 'pointer' }}
                     checked={selectedIds.includes(inv.id)} 
                     onChange={() => onToggleSelect(inv.id)} 
                   />
                 </td>
-                <td style={{ padding: '12px' }}><strong>#{inv.invoice_number}</strong></td>
-                <td style={{ padding: '12px' }}>
-                  <div style={{ fontWeight: 'bold' }}>{inv.client_name}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b' }}>{projectNames}</div>
+                <td style={{ fontWeight: 800 }}>#{inv.invoice_number}</td>
+                <td>
+                  <div style={{ fontWeight: 700, color: THEME.primary }}>{inv.client_name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{projectNames}</div>
                 </td>
-                <td style={{ padding: '12px', textAlign: 'center', fontWeight: 900, color: THEME.primary }}>
+                <td style={{ textAlign: 'center' }} className="text-money">
                   {formatCurrency(total)}
                 </td>
                 
-                <td style={{ padding: '12px', textAlign: 'center' }}>
-                  <span style={{ 
-                    padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
-                    background: isDraft ? '#f1f5f9' : '#e0e7ff',
-                    color: isDraft ? '#64748b' : '#4338ca'
-                  }}>
+                <td style={{ textAlign: 'center' }}>
+                  <span className={`badge ${isDraft ? 'badge-draft' : 'badge-posted'}`}>
                     {inv.status || 'مسودة'}
                   </span>
                 </td>
 
-                <td style={{ padding: '12px', textAlign: 'center' }}>
-                  <span style={{ 
-                    padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
-                    background: isPaid ? '#dcfce7' : '#fef3c7',
-                    color: isPaid ? '#166534' : '#b45309',
-                    display: 'inline-flex', alignItems: 'center', gap: '5px'
-                  }}>
-                    {isPaid ? '✅ تم السداد' : '⏳ لم يتم'}
+                <td style={{ textAlign: 'center' }}>
+                  <span className={`badge ${isPaid ? 'badge-posted' : 'badge-cancelled'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    {isPaid ? '✅ مسددة' : '⏳ مستحقة'}
                   </span>
                 </td>
 
-                <td style={{ padding: '12px', textAlign: 'center' }}>
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                     
                     {!isPaid && !isDraft && (
                       <button 
@@ -106,36 +99,33 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
                           window.location.href = `/receipt-vouchers?${params.toString()}`;
                         }}
                         title="تحصيل المبلغ المتبقي"
-                        style={{ 
-                          background: '#10b981', color: 'white', border: 'none', 
-                          padding: '6px 12px', borderRadius: '8px', cursor: 'pointer',
-                          fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px',
-                          boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)'
-                        }}
+                        className="btn"
+                        style={{ padding: '6px 12px', background: 'rgba(52, 199, 89, 0.15)', color: '#28a745', fontSize: '11px', borderRadius: '8px' }}
                       >
-                        <span>تحصيل</span>
-                        <span>💰</span>
+                        <span>تحصيل</span> 💰
                       </button>
                     )}
 
-                    <button onClick={() => onPrint(inv)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px' }} title="طباعة">🖨️</button>
-                    <button onClick={() => onEdit(inv)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px' }} title="تعديل">📝</button>
+                    <button onClick={() => onPrint(inv)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px', transition: '0.3s' }} className="hover-scale" title="طباعة">🖨️</button>
+                    <button onClick={() => onEdit(inv)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px', transition: '0.3s' }} className="hover-scale" title="تعديل">📝</button>
                     
                     {/* 🔏 زر الختم يظهر فقط لو المستخدم أدمن */}
                     {permissions?.isAdmin && (
                         <button 
                             onClick={() => onStamp(inv.id, inv.is_stamped)}
                             style={{ 
-                                background: inv.is_stamped ? THEME.ruby : THEME.success, 
-                                color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', 
-                                padding: '6px', fontSize: '14px', display: 'flex', alignItems: 'center'
+                                background: inv.is_stamped ? 'rgba(255, 59, 48, 0.1)' : 'rgba(52, 199, 89, 0.1)', 
+                                color: inv.is_stamped ? '#ff3b30' : '#28a745', 
+                                border: 'none', borderRadius: '8px', cursor: 'pointer', 
+                                padding: '6px', fontSize: '14px', display: 'flex', alignItems: 'center',
+                                transition: '0.3s'
                             }}
+                            className="hover-scale"
                             title={inv.is_stamped ? "إلغاء الختم" : "ختم الفاتورة"}
                         >
                             {inv.is_stamped ? "🔓" : "🔏"}
                         </button>
                     )}
-
                   </div>
                 </td>
               </tr>
@@ -149,7 +139,7 @@ const InvoicesTable = ({ data, projects, selectedIds, onToggleSelect, onSelectAl
 export default function InvoicesPage() {
   const {
     invoices, allFiltered, projects, isLoading, isSaving,
-    permissions, handleToggleStamp, // 👈 استخراج الصلاحيات ودالة الختم
+    permissions, handleToggleStamp, 
     globalSearch, setGlobalSearch,
     dateFrom, setDateFrom,
     dateTo, setDateTo,
@@ -163,7 +153,6 @@ export default function InvoicesPage() {
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
-  
   const [toastMsg, setToastMsg] = useState('');
 
   const onPostWithNotification = async () => {
@@ -177,21 +166,14 @@ export default function InvoicesPage() {
   const onUnpostWithNotification = async () => {
     if (selectedIds.length === 0) return;
     await handleUnpostSelected(); 
-    setToastMsg(`↩️ تم التراجع عن ترحيل ${selectedIds.length} فاتورة بنجاح (عادت كمسودة)!`);
+    setToastMsg(`↩️ تم التراجع عن ترحيل ${selectedIds.length} فاتورة (عادت كمسودة)!`);
     setTimeout(() => setToastMsg(''), 4000); 
     setSelectedIds([]); 
   };
 
   const dataToProcess = allFiltered && allFiltered.length > 0 ? allFiltered : invoices;
-  
   const validForAging = dataToProcess.filter((inv: any) => inv.status && inv.status !== 'مسودة');
   const result = getInvoiceSummaryAndAging(validForAging);
-
-  const sidebarKPIs = [
-    { title: 'إجمالي المديونية (للمرحل)', value: formatCurrency(result.totalRemaining), color: THEME.primary, icon: '💰' },
-    { title: 'تحصيلات مستلمة', value: formatCurrency(result.totalPaidAmount), color: '#10b981', icon: '📥' },
-    { title: 'ديون متأخرة', value: formatCurrency(result.totalOverdue), color: '#ef4444', icon: '⚠️' },
-  ];
 
   const onToggleSelect = (id: string) => {
     setSelectedIds((p: string[]) => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -201,78 +183,115 @@ export default function InvoicesPage() {
     setSelectedIds(checked ? dataToProcess.map((i: any) => i.id) : []);
   };
 
-  const dateInputStyle: React.CSSProperties = {
-    padding: '10px', borderRadius: '8px', border: `1px solid #cbd5e1`,
-    fontSize: '13px', width: '100%', outline: 'none', background: 'white'
-  };
+  // 🚀 1. تجهيز الملخص للسايد بار
+  const sidebarSummary = useMemo(() => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="kpi-card" style={{ padding: '15px', borderRadius: '15px' }}>
+        <span className="summary-label">إجمالي المديونية 💰</span>
+        <span className="summary-value text-money">{formatCurrency(result.totalRemaining)}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="kpi-card" style={{ padding: '15px', borderRadius: '15px', background: 'rgba(52, 199, 89, 0.05)', borderColor: 'rgba(52, 199, 89, 0.2)' }}>
+          <span className="summary-label" style={{color: '#28a745'}}>محصل 📥</span>
+          <span className="summary-value" style={{fontSize: '14px', color: '#28a745'}}>{formatCurrency(result.totalPaidAmount)}</span>
+        </div>
+        <div className="kpi-card" style={{ padding: '15px', borderRadius: '15px', background: 'rgba(255, 59, 48, 0.05)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
+          <span className="summary-label" style={{color: '#ff3b30'}}>متأخر ⚠️</span>
+          <span className="summary-value" style={{fontSize: '14px', color: '#ff3b30'}}>{formatCurrency(result.totalOverdue)}</span>
+        </div>
+      </div>
+    </div>
+  ), [result.totalRemaining, result.totalPaidAmount, result.totalOverdue]);
 
-  return (
-    <div style={{ padding: '25px', background: '#f8fafc', minHeight: '100vh', direction: 'rtl', position: 'relative' }}>
-      
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', top: '30px', left: '50%', transform: 'translateX(-50%)',
-          background: '#10b981', color: 'white', padding: '15px 30px', borderRadius: '50px',
-          fontWeight: 'bold', fontSize: '15px', boxShadow: '0 10px 25px rgba(16,185,129,0.4)',
-          zIndex: 9999, animation: 'fadeInDown 0.5s ease'
-        }}>
-          {toastMsg}
+  // 🚀 2. تجهيز الأكشنز للسايد بار
+  const sidebarActions = useMemo(() => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <button className="btn btn-primary" onClick={handleAddNew} style={{ width: '100%', padding: '15px' }}>
+        <span style={{ fontSize: '18px' }}>➕</span> إنشاء فاتورة جديدة
+      </button>
+
+      {selectedIds.length > 0 && (
+        <div className="fade-in-up" style={{ padding: '15px', background: 'rgba(0,0,0,0.2)', borderRadius: '20px', marginTop: '10px' }}>
+          <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '10px', textAlign: 'center', fontWeight: 900 }}>
+            محدد ({selectedIds.length}) فواتير
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button className="btn" style={{ background: '#28a745', color: 'white', width: '100%' }} onClick={onPostWithNotification}>
+              🚀 اعتماد وترحيل
+            </button>
+            <button className="btn" style={{ background: '#eab308', color: 'white', width: '100%' }} onClick={onUnpostWithNotification}>
+              ↩️ فك الترحيل
+            </button>
+            <button className="btn btn-danger" style={{ width: '100%' }} onClick={handleDeleteSelected}>
+              🗑️ حذف المحدد
+            </button>
+          </div>
         </div>
       )}
+    </div>
+  ), [selectedIds.length, handleAddNew, handleDeleteSelected]); // eslint-disable-line
 
-      <OperationsCenter 
-        title="مركز عمليات الفواتير"
-        searchQuery={globalSearch}
-        onPostSelected={onPostWithNotification} 
-        onUnpostSelected={onUnpostWithNotification}
-        onSearchChange={setGlobalSearch}
-        onDeleteSelected={handleDeleteSelected}
-        selectedCount={selectedIds.length}
-        
-        selectedIds={selectedIds}
-        moduleType="invoices"
-        onSuccess={() => {
-          setSelectedIds([]); 
-        }}
-        
-        onAdd={handleAddNew}
-        onEdit={() => handleEdit(invoices.find(i => i.id === selectedIds[0]))}
-        
-        kpis={sidebarKPIs} 
-        filtersSlot={
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '20px' }}>
-            {!isLoading && (
-              <InvoiceAgingDashboard aging={{
-                ...result.aging,
-                totalOverdue: result.totalOverdue,
-                totalOpen: result.totalRemaining
-              }} />
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '15px', background: 'rgba(0,0,0,0.02)', borderRadius: '10px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>تصفية بالتاريخ:</label>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={dateInputStyle} />
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={dateInputStyle} />
-            </div>
-          </div>
-        }
+  // 🚀 3. تجهيز الفلاتر المخصصة (أعمار الديون)
+  const sidebarFilters = useMemo(() => (
+    !isLoading ? (
+      <div style={{ marginTop: '10px' }}>
+        <InvoiceAgingDashboard aging={{
+          ...result.aging,
+          totalOverdue: result.totalOverdue,
+          totalOpen: result.totalRemaining
+        }} />
+      </div>
+    ) : null
+  ), [isLoading, result]);
+
+  return (
+    <div style={{ padding: '30px', minHeight: '100vh', direction: 'rtl', position: 'relative' }}>
+      
+      {/* 🚀 مدير السايد بار (هياخد الداتا ويبعتها لمركز العمليات الرئيسي اللي على اليمين) */}
+      <RawasiSidebarManager 
+        summary={sidebarSummary}
+        actions={sidebarActions}
+        customFilters={sidebarFilters}
+        onSearch={(term) => setGlobalSearch(term)}
+        onDateFilter={(start, end) => { setDateFrom(start); setDateTo(end); }} // 👈 ربط التواريخ أوتوماتيك
+        watchDeps={[sidebarSummary, sidebarActions, sidebarFilters]} 
       />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ color: THEME.primary, fontWeight: 900, marginBottom: '20px', marginTop: 0 }}>📄 قائمة الفواتير والمستخلصات</h1>
+      <style>{`
+        .hover-scale:hover { transform: scale(1.15); }
+        .toast-glass {
+          position: fixed; top: 40px; left: 50%; transform: translateX(-50%);
+          background: rgba(52, 199, 89, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+          color: white; padding: 16px 32px; border-radius: 999px;
+          font-weight: 700; font-size: 15px; box-shadow: 0 15px 35px rgba(52,199,89,0.3);
+          border: 1px solid rgba(255,255,255,0.4);
+          z-index: 9999; animation: fadeInUp 0.5s cubic-bezier(0.15, 0.83, 0.66, 1);
+        }
+      `}</style>
+
+      {toastMsg && <div className="toast-glass">{toastMsg}</div>}
+
+      <div style={{ flex: 1, minWidth: 0, marginTop: '10px' }}>
+          <h1 style={{ fontWeight: 900, marginBottom: '25px', marginTop: 0, textShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+            📄 المستخلصات وفواتير المبيعات
+          </h1>
           
           {isLoading ? (
-            <div style={{ textAlign: 'center', padding: '100px', color: THEME.primary }}>⏳ جاري تحميل البيانات...</div>
+            <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: 'var(--text-muted)' }}>
+              ⏳ جاري جلب الفواتير...
+            </div>
           ) : (
             <>
+              {/* 🚀 الجدول الزجاجي الجديد */}
               <InvoicesTable 
-                data={dataToProcess} 
+                data={dataToProcess.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)} 
                 projects={projects} 
                 selectedIds={selectedIds}
                 onToggleSelect={onToggleSelect}
                 onSelectAll={onSelectAll}
                 onEdit={handleEdit}
-                permissions={permissions} // 👈 تمرير الصلاحيات للجدول
-                onStamp={handleToggleStamp} // 👈 تمرير دالة الختم للجدول
+                permissions={permissions} 
+                onStamp={handleToggleStamp} 
                 onPrint={(inv: any) => { 
                     let projNames = 'بدون مشروع';
                     if (inv.project_ids && inv.project_ids.length > 0 && projects) {
@@ -283,13 +302,16 @@ export default function InvoicesPage() {
                 }}
               />
 
-              <PaginationPanel 
-                totalItems={allFiltered.length}
-                currentPage={currentPage}
-                rowsPerPage={rowsPerPage}
-                onPageChange={setCurrentPage}
-                onRowsChange={setRowsPerPage}
-              />
+              {/* 🚀 الباجينيشن */}
+              <div style={{ marginTop: '20px' }}>
+                <PaginationPanel 
+                  totalItems={dataToProcess.length}
+                  currentPage={currentPage}
+                  rowsPerPage={rowsPerPage}
+                  onPageChange={setCurrentPage}
+                  onRowsChange={setRowsPerPage}
+                />
+              </div>
             </>
           )}
       </div>

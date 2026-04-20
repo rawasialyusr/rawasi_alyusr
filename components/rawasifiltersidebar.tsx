@@ -1,17 +1,17 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // 🚀 ضفنا useEffect هنا
+import { useSidebar } from '@/lib/SidebarContext';
 
-// 🎨 واجهة تعريف المتغيرات (Colors & Logo)
 interface RawasiSidebarProps {
-  onSearch: (term: string) => void;
-  onDateChange: (start: string, end: string) => void;
+  onSearch?: (term: string) => void;
+  onDateChange?: (start: string, end: string) => void;
   title?: string;
   extraFilters?: React.ReactNode;
-  extraActions?: React.ReactNode; // 🚀 الزراير المخصصة لكل صفحة
-  summarySlot?: React.ReactNode;  // 📊 كارد الملخص المخصص
-  accentColor?: string;    // لون التميز (الذهبي)
-  textColor?: string;      // لون النصوص
-  logoPath?: string;       // مسار الشعار
+  extraActions?: React.ReactNode;
+  summarySlot?: React.ReactNode;
+  accentColor?: string;
+  textColor?: string;
+  logoPath?: string;
 }
 
 export default function RawasiFilterSidebar({ 
@@ -30,7 +30,47 @@ export default function RawasiFilterSidebar({
   const [isPinned, setIsPinned] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
 
+  // 🚀 سحب البيانات اللي اتبعتت من الصفحات عن طريق الـ Manager
+  const { summary, actions, customFilters } = useSidebar();
+
   const isOpen = isHovered || isPinned;
+
+  // 🚀 السر هنا: زق وتكشيش الصفحة (The Squeeze Effect)
+  useEffect(() => {
+    // تحديد العناصر اللي عاوزين نكشيشها
+    const elementsToMove = [document.body];
+    const mainContent = document.querySelector('main'); 
+    if (mainContent) elementsToMove.push(mainContent as HTMLElement);
+
+    // تطبيق الستايل
+    const sidebarWidth = isOpen ? '320px' : '65px';
+    
+    elementsToMove.forEach(el => {
+        el.style.transition = 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
+        el.style.marginRight = '0px'; 
+        el.style.paddingRight = sidebarWidth;
+        el.style.width = '100%'; 
+        el.style.boxSizing = 'border-box';
+    });
+
+    // تنظيف عند الخروج عشان الصفحة ترجع لطبيعتها لو السايد بار اتشال
+    return () => {
+      elementsToMove.forEach(el => {
+        el.style.paddingRight = '0px';
+      });
+    };
+  }, [isOpen]);
+
+  // 🚀 بث أحداث البحث (Events) عشان الـ Manager يلقطها
+  const handleSearch = (val: string) => {
+    if (onSearch) onSearch(val);
+    window.dispatchEvent(new CustomEvent('globalSearch', { detail: val }));
+  };
+
+  const handleDateChange = (start: string, end: string) => {
+    if (onDateChange) onDateChange(start, end);
+    window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }));
+  };
 
   return (
     <>
@@ -85,19 +125,7 @@ export default function RawasiFilterSidebar({
         .sidebar-logo-img { width: 120px; height: auto; filter: drop-shadow(0 0 10px rgba(0,0,0,0.2)); }
 
         .action-grid {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 25px; flex-shrink: 0;
-        }
-
-        /* خليت الكلاس ده عام عشان تستخدمه من بره */
-        .rawasi-action-btn {
-          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 12px; padding: 12px 5px; color: ${textColor}; cursor: pointer;
-          display: flex; flex-direction: column; align-items: center; gap: 6px;
-          transition: 0.3s; font-family: 'Cairo'; backdrop-filter: blur(5px);
-        }
-        .rawasi-action-btn:hover {
-          background: rgba(255,255,255,0.15); border-color: ${accentColor};
-          transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+          display: flex; flex-direction: column; gap: 8px; margin-bottom: 25px; flex-shrink: 0;
         }
 
         .filter-section-title {
@@ -135,41 +163,84 @@ export default function RawasiFilterSidebar({
             <h2 style={{ fontSize: '18px', fontWeight: 900, marginTop: '10px', color: accentColor }}>{title}</h2>
           </div>
           
-          {/* 🚀 عرض كارد الملخص الخاص بالصفحة */}
-          {summarySlot && (
+          {/* دمج السامري من الـ Props القديمة أو من الـ Context الجديد */}
+          {(summarySlot || summary) && (
             <div style={{ marginBottom: '25px' }}>
-              {summarySlot}
+              {summary || summarySlot}
             </div>
           )}
           
-          {/* 🚀 عرض الزراير الخاصة بالصفحة */}
-          {extraActions && (
+          {/* دمج الأكشنز من الـ Props القديمة أو من الـ Context الجديد */}
+          {(extraActions || actions) && (
             <>
               <div className="filter-section-title">⚡ عمليات الصفحة</div>
               <div className="action-grid">
-                {extraActions}
+                {actions || extraActions}
               </div>
             </>
           )}
 
           <div className="filter-section-title">🔍 البحث والفلترة</div>
           <div style={{ flex: 1 }}>
-            <input type="text" className="filter-input" placeholder="ابحث هنا..." onChange={(e) => onSearch(e.target.value)} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <input type="date" className="filter-input" onChange={(e) => {
-                const d = { ...dates, start: e.target.value };
-                setDates(d);
-                onDateChange(d.start, d.end);
-              }} />
-              <input type="date" className="filter-input" onChange={(e) => {
-                const d = { ...dates, end: e.target.value };
-                setDates(d);
-                onDateChange(d.start, d.end);
-              }} />
-            </div>
-            {extraFilters}
-          </div>
+            
+            {/* 1️⃣ خانة البحث */}
+            <input 
+              type="text" 
+              className="filter-input" 
+              placeholder="ابحث هنا..." 
+              onChange={(e) => handleSearch(e.target.value)} 
+            />
 
+            {/* 2️⃣ حاوية التواريخ (ترتيب رأسي) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              
+              {/* تاريخ البداية */}
+              <div style={{ position: 'relative' }}>
+                <label className="date-label">من تاريخ</label>
+                <input 
+                  type="date" 
+                  className="filter-input date-field" 
+                  style={{ marginBottom: 0 }}
+                  onChange={(e) => {
+                    const d = { ...dates, start: e.target.value };
+                    setDates(d);
+                    handleDateChange(d.start, d.end);
+                  }} 
+                />
+              </div>
+
+              {/* تاريخ النهاية */}
+              <div style={{ position: 'relative' }}>
+                <label className="date-label">إلى تاريخ</label>
+                <input 
+                  type="date" 
+                  className="filter-input date-field" 
+                  style={{ marginBottom: 0 }}
+                  onChange={(e) => {
+                    const d = { ...dates, end: e.target.value };
+                    setDates(d);
+                    handleDateChange(d.start, d.end);
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* 3️⃣ الفلاتر المخصصة */}
+            {(extraFilters || customFilters) && (
+              <div className="animate-fade-in" style={{ 
+                marginTop: '20px', 
+                padding: '15px', 
+                background: 'rgba(0,0,0,0.2)', 
+                borderRadius: '15px', 
+                border: '1px solid rgba(255,255,255,0.05)' 
+              }}>
+                  <div className="filter-section-title" style={{ marginBottom: '10px', color: '#94a3b8', fontSize: '9px' }}>فلاتر إضافية</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {customFilters || extraFilters}
+                  </div>
+              </div>
+            )}
+          </div>
           <div style={{ textAlign: 'center', opacity: 0.4, fontSize: '10px', marginTop: '20px', paddingBottom: '20px' }}>
             نظام رواسي الموحد v2.0
           </div>

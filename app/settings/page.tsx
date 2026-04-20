@@ -1,9 +1,10 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import GlassContainer from '@/components/Glasscontainer';
 import { useBackupLogic } from './backup/backup_logic'; 
 import { useRestoreLogic } from './restore/restore_logic'; 
+import RawasiSidebarManager from '@/components/RawasiSidebarManager'; // 🚀 استدعاء مدير السايد بار
 
 const THEME = { 
   sandLight: '#F4F1EE', sandDark: '#E6D5C3', 
@@ -69,7 +70,7 @@ export default function SettingsPage() {
   // 👈 States الخاصة بالملف وعملية الرفع
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState({ text: '', type: '' }); // type: 'loading' | 'success' | 'error'
+  const [uploadMsg, setUploadMsg] = useState({ text: '', type: '' }); 
 
   // استدعاء دوال اللوجيك
   const { backupToExcel, backupToJSON, downloadTemplate } = useBackupLogic();
@@ -78,7 +79,7 @@ export default function SettingsPage() {
   const fetchProfiles = async () => {
     const { data } = await supabase.from('profiles').select('*').order('username');
     if (data) setProfiles(data);
-    setHealthStats(prev => ({ ...prev, orphans: 3 })); // مثال
+    setHealthStats(prev => ({ ...prev, orphans: 3 })); 
   };
 
   useEffect(() => { fetchProfiles(); }, []);
@@ -91,9 +92,9 @@ export default function SettingsPage() {
   const selectGroup = (tableIds: string[]) => {
       const allSelected = tableIds.every(id => selectedTables.includes(id));
       if (allSelected) {
-          setSelectedTables(prev => prev.filter(id => !tableIds.includes(id))); // Deselect
+          setSelectedTables(prev => prev.filter(id => !tableIds.includes(id))); 
       } else {
-          setSelectedTables(prev => Array.from(new Set([...prev, ...tableIds]))); // Select
+          setSelectedTables(prev => Array.from(new Set([...prev, ...tableIds]))); 
       }
   };
 
@@ -110,13 +111,11 @@ export default function SettingsPage() {
     setUploadMsg({ text: '⏳ جاري فحص الملف ومطابقة الأعمدة...', type: 'loading' });
 
     try {
-      // يجب أن تكون دالة processExcelRestore من نوع Async في اللوجيك لكي تعمل بامتياز
       await processExcelRestore(selectedFile);
       
       setUploadMsg({ text: '✅ تم مطابقة الأعمدة وحفظ البيانات في النظام بنجاح!', type: 'success' });
       setSelectedFile(null); 
       
-      // إخفاء رسالة النجاح بعد 5 ثواني
       setTimeout(() => setUploadMsg({ text: '', type: '' }), 5000);
       
     } catch (err: any) {
@@ -126,9 +125,79 @@ export default function SettingsPage() {
     }
   };
 
+  // 🚀 استخراج القيم الأساسية (Primitives) لمنع اللوب
+  const selectedCount = selectedTables.length;
+
+  // 🚀 بناء محتوى السايد بار (مركز العمليات)
+  const sidebarContent = useMemo(() => {
+      let summary = null;
+      let actions = null;
+
+      const actionBtnStyle: React.CSSProperties = {
+          width: '100%', padding: '12px', borderRadius: '12px', 
+          borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.1)',
+          background: 'rgba(255,255,255,0.05)', color: 'white', display: 'flex', alignItems: 'center',
+          gap: '10px', cursor: 'pointer', fontWeight: 900, fontSize: '13px', transition: '0.3s', marginBottom: '8px'
+      };
+
+      if (activeTab === 'backup') {
+          summary = (
+              <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(197, 160, 89, 0.3)`, textAlign: 'center' }}>
+                  <div style={{ fontSize: '30px', marginBottom: '10px' }}>📦</div>
+                  <p style={{ margin: 0, fontSize: '13px', color: THEME.goldAccent, fontWeight: 900 }}>الجداول المحددة</p>
+                  <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '28px', color: 'white' }}>{selectedCount}</h3>
+              </div>
+          );
+          // 🚀 نقلنا زراير التصدير هنا عشان الصفحة تنضف
+          actions = (
+              <>
+                  <button 
+                      onClick={() => backupToExcel(selectedTables)} 
+                      disabled={selectedCount === 0}
+                      style={{...actionBtnStyle, background: selectedCount ? THEME.success : 'rgba(255,255,255,0.05)', opacity: selectedCount ? 1 : 0.4}}
+                  >
+                      <span style={{fontSize:'18px'}}>📊</span> تصدير Excel
+                  </button>
+                  <button 
+                      onClick={() => backupToJSON(selectedTables)} 
+                      disabled={selectedCount === 0}
+                      style={{...actionBtnStyle, background: selectedCount ? THEME.coffeeDark : 'rgba(255,255,255,0.05)', opacity: selectedCount ? 1 : 0.4}}
+                  >
+                      <span style={{fontSize:'18px'}}>🛠️</span> تصدير JSON
+                  </button>
+              </>
+          );
+      } else if (activeTab === 'permissions') {
+          summary = (
+              <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(16, 185, 129, 0.3)`, textAlign: 'center' }}>
+                  <div style={{ fontSize: '30px', marginBottom: '10px' }}>🔐</div>
+                  <p style={{ margin: 0, fontSize: '13px', color: THEME.success, fontWeight: 900 }}>إدارة الصلاحيات</p>
+              </div>
+          );
+          actions = <button style={actionBtnStyle} onClick={() => window.print()}><span style={{fontSize:'18px'}}>🖨️</span> طباعة الصلاحيات</button>;
+      } else {
+          summary = (
+              <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(59, 130, 246, 0.3)`, textAlign: 'center' }}>
+                  <div style={{ fontSize: '30px', marginBottom: '10px' }}>🛡️</div>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#3b82f6', fontWeight: 900 }}>الرادار الأمني</p>
+              </div>
+          );
+          actions = <button style={actionBtnStyle} onClick={() => window.print()}><span style={{fontSize:'18px'}}>📑</span> طباعة التقرير</button>;
+      }
+
+      return { summary, actions };
+  }, [activeTab, selectedCount]); // 🚀 الاعتماد على الأرقام والنصوص فقط
+
   return (
     <div style={{ direction: 'rtl', padding: '30px', fontFamily: 'Cairo, sans-serif' }}>
       
+      {/* 🚀 إدراج مدير السايد بار المخفي هنا */}
+      <RawasiSidebarManager 
+          summary={sidebarContent.summary}
+          actions={sidebarContent.actions}
+          watchDeps={[activeTab, selectedCount]} 
+      />
+
       <style>{`
         .tab-btn {
           padding: 12px 25px;
@@ -187,12 +256,12 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
             <div>
               <h1 style={{ fontWeight: 900, color: THEME.coffeeDark, margin: '0 0 5px 0' }}>مركز قواعد البيانات</h1>
-              <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>تصدير، استيراد، وتحميل قوالب الإدخال الموحدة.</p>
+              <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>حدد الجداول التي تريد تصديرها من القائمة أدناه.</p>
             </div>
             
             {/* إحصائية سريعة */}
             <div style={{ background: THEME.sandDark, padding: '10px 20px', borderRadius: '12px', fontWeight: 900, color: THEME.coffeeDark }}>
-              الجداول المحددة: <span style={{ color: THEME.danger, fontSize: '18px' }}>{selectedTables.length}</span>
+              الجداول المحددة: <span style={{ color: THEME.danger, fontSize: '18px' }}>{selectedCount}</span>
             </div>
           </div>
 
@@ -203,7 +272,7 @@ export default function SettingsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
                 <h2 style={{ fontSize: '18px', color: THEME.coffeeDark, margin: 0, fontWeight: 900 }}>📦 هيكل النظام</h2>
                 <button onClick={selectAllTables} style={{ background: '#f1f5f9', border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, color: THEME.coffeeDark }}>
-                  {selectedTables.length === TABLE_GROUPS.flatMap(g => g.tables).length ? 'إلغاء التحديد' : 'تحديد الكل'}
+                  {selectedCount === TABLE_GROUPS.flatMap(g => g.tables).length ? 'إلغاء التحديد' : 'تحديد الكل'}
                 </button>
               </div>
 
@@ -234,37 +303,15 @@ export default function SettingsPage() {
               </div>
             </GlassContainer>
 
-            {/* 2. أزرار العمليات (اليمين) */}
+            {/* 2. منطقة الاستيراد (اليمين) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               
-              {/* التصدير */}
-              <div className="action-card">
-                <h3 style={{ margin: 0, color: THEME.coffeeDark, fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span>📤</span> تصدير البيانات
-                </h3>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>استخراج البيانات المحددة للتحليل أو الحفظ.</p>
-                
-                <button 
-                  disabled={selectedTables.length === 0} onClick={() => backupToExcel(selectedTables)} 
-                  style={{ background: THEME.success, color: 'white', padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 900, cursor: selectedTables.length === 0 ? 'not-allowed' : 'pointer', opacity: selectedTables.length === 0 ? 0.5 : 1 }}
-                >
-                  📊 تصدير Excel (للمراجعة)
-                </button>
-                
-                <button 
-                  disabled={selectedTables.length === 0} onClick={() => backupToJSON(selectedTables)} 
-                  style={{ background: THEME.coffeeDark, color: THEME.goldAccent, padding: '12px', borderRadius: '10px', border: 'none', fontWeight: 900, cursor: selectedTables.length === 0 ? 'not-allowed' : 'pointer', opacity: selectedTables.length === 0 ? 0.5 : 1 }}
-                >
-                  📦 تصدير JSON (نسخة تقنية)
-                </button>
-              </div>
-
-              {/* 👈 الاستيراد المطور بالرسائل والحالات */}
+              {/* 👈 الاستيراد المطور بالرسائل والحالات (تم نقل التصدير للسايد بار) */}
               <div className="action-card" style={{ border: `2px dashed ${THEME.coffeeMain}` }}>
                 <h3 style={{ margin: 0, color: THEME.coffeeDark, fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span>📥</span> استيراد وتحديث
+                  <span>📥</span> استيراد وتحديث النظام
                 </h3>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>ارفع ملفات (Excel/JSON) لتحديث النظام الذكي.</p>
+                <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>ارفع ملفات (Excel/JSON) ممتلئة بالبيانات لتحديث السيستم.</p>
                 
                 {/* منطقة اختيار الملف */}
                 <label style={{ 
@@ -286,7 +333,7 @@ export default function SettingsPage() {
                     onChange={(e) => { 
                       if (e.target.files && e.target.files[0]) {
                         setSelectedFile(e.target.files[0]);
-                        setUploadMsg({ text: '', type: '' }); // تصفير الرسايل
+                        setUploadMsg({ text: '', type: '' }); 
                       } 
                     }} 
                     style={{ display: 'none' }} 
