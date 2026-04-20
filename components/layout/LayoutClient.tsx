@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import RawasiFilterSidebar from '@/components/rawasifiltersidebar';
+import { useSidebar } from '@/lib/SidebarContext'; // 🚀 1. استدعاء مخزن السايد بار
 
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -14,6 +15,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   const [permissions, setPermissions] = useState<any>(null);
   const [userRole, setUserRole] = useState('');
   const dragStartPos = useRef({ x: 0, y: 0 });
+
+  // 🚀 2. سحب المحتوى الديناميكي للصفحة الحالية من المخزن
+  const { actions, summary } = useSidebar(); 
 
   useEffect(() => {
     const fetchAuth = async () => {
@@ -202,6 +206,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       {/* السايد بار العالمي الزجاجي */}
       <RawasiFilterSidebar 
         title={currentPageTitle}
+        extraActions={actions} // 🚀 3. تمرير الزراير المخصصة من المخزن
+        summarySlot={summary}  // 🚀 4. تمرير كارد الملخص المخصص من المخزن
         onSearch={(term) => window.dispatchEvent(new CustomEvent('globalSearch', { detail: term }))}
         onDateChange={(start, end) => window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }))}
       />

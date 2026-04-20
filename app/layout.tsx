@@ -2,9 +2,11 @@ import { Cairo } from "next/font/google";
 import LayoutClient from '../components/layout/LayoutClient';
 import "./globals.css";
 import AutoLogoutWrapper from '../components/AutoLogoutWrapper';
-import Providers from './providers'; // 🚀 استدعاء مزود البيانات الذكي (React Query)
-import NextTopLoader from 'nextjs-toploader'; // 🚀 استدعاء شريط التحميل العلوي
-import GlobalErrorBoundary from '../components/globalerrorboundary'; // 🛡️ استدعاء جدار الحماية
+import Providers from './providers';
+import NextTopLoader from 'nextjs-toploader';
+import GlobalErrorBoundary from '../components/globalerrorboundary';
+import { THEME } from '@/lib/theme'; 
+import { SidebarProvider } from '@/lib/SidebarContext'; // 🚀 1. استدعاء مخزن السايد بار
 
 const cairo = Cairo({ 
   subsets: ["arabic"],
@@ -12,16 +14,14 @@ const cairo = Cairo({
   display: 'swap',
 });
 
-// 📱 إعدادات شريط المتصفح في الموبايل بلون قهوة رواسي
 export const viewport = {
-  themeColor: "#43342E",
+  themeColor: THEME.coffeeDark,
 };
 
-// 🌐 هوية السيستم وربطه بملف الـ Manifest ليصبح تطبيق PWA
 export const metadata = {
   title: "رواسي - نظام الإدارة الموحد",
   description: "نظام إدارة العمالة والمشاريع والمصروفات",
-  manifest: "/manifest.json", // 🚀 ربط هوية التطبيق
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -31,53 +31,68 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={cairo.className} style={{ position: 'relative', minHeight: '100vh', backgroundColor: '#F4F1EE' }}>
+      <body className={cairo.className} style={{ position: 'relative', minHeight: '100vh', color: THEME.text }}>
         
-        {/* 🚀 شريط التحميل العلوي الفخم بستايل رواسي الذهبي */}
-        <NextTopLoader 
-            color="#C5A059" 
-            initialPosition={0.08} 
-            crawlSpeed={200} 
-            height={4} 
-            crawl={true} 
-            showSpinner={false} 
-            easing="ease" 
-            speed={200} 
-            shadow="0 0 15px #C5A059, 0 0 5px #C5A059" 
-            zIndex={99999} 
-        />
-
-        {/* 🏗️ ستايل العلامة المائية الخلفية */}
+        {/* 🎨 1. ستايل الخلفية الزجاجية (تظل ثابتة) */}
         <style dangerouslySetInnerHTML={{__html: `
+          .bg-master-container {
+            position: fixed; inset: 0; z-index: -4; 
+            background-color: ${THEME.sandLight}; 
+            overflow: hidden;
+          }
+          .bg-image-base {
+            position: absolute; inset: 0;
+            background-image: url('/ryc_login.jpeg'); 
+            background-size: cover;
+            background-position: center;
+            filter: blur(50px); 
+            transform: scale(1.1); 
+            opacity: 0.6; 
+          }
+          .bg-glass-tint {
+            position: absolute; inset: 0; z-index: -3;
+            background: linear-gradient(
+              135deg, 
+              rgba(244, 241, 238, 0.85) 0%, 
+              rgba(255, 255, 255, 0.9) 50%,
+              rgba(197, 160, 89, 0.15) 100% 
+            );
+            backdrop-filter: blur(10px) saturate(120%);
+          }
           .watermark-bg {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 60vw; /* حجم كبير متناسب مع الشاشة */
-            max-width: 700px;
-            opacity: 0.03; /* شفافية خفيفة جداً لتبدو كعلامة مائية حقيقية */
-            z-index: 0; /* في الخلفية */
-            pointer-events: none; /* السحر هنا: يمنع اللوجو من حجب نقرات الماوس على العناصر التي فوقه */
-            user-select: none; /* يمنع تحديد الصورة بالماوس */
-            /* filter: grayscale(100%); يمكنك تفعيل هذا السطر إذا أردت العلامة المائية رمادية تماماً */
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 60vw; max-width: 700px; opacity: 0.03; z-index: -2;
+            pointer-events: none; user-select: none;
           }
         `}} />
 
-        {/* العلامة المائية (Watermark) */}
-        <img src="/RYC_Logo.png" alt="علامة مائية رواسي" className="watermark-bg no-print" />
+        <div className="bg-master-container no-print">
+            <div className="bg-image-base"></div>
+            <div className="bg-glass-tint"></div>
+        </div>
 
-        {/* 🛡️ تغليف السيستم بجدار الحماية لمنع الشاشة البيضاء عند حدوث خطأ */}
+        <img src="/RYC_Logo.png" alt="علامة مائية" className="watermark-bg no-print" />
+
+        <NextTopLoader 
+            color={THEME.goldAccent} 
+            height={4} 
+            showSpinner={false} 
+            shadow={`0 0 15px ${THEME.goldAccent}`} 
+            zIndex={99999} 
+        />
+
+        {/* 🛡️ 5. السيستم مغلف بالمخازن المطلوبة */}
         <GlobalErrorBoundary>
-            {/* 🚀 تغليف السيستم بالـ Providers لتفعيل الكاشينج الذكي في كل الصفحات */}
             <Providers>
                 <AutoLogoutWrapper>
-                    <LayoutClient>
-                      {/* إعطاء المحتوى z-index أعلى ليكون فوق العلامة المائية دائمًا */}
-                      <div style={{ position: 'relative', zIndex: 10 }}>
-                          {children}
-                      </div>
-                    </LayoutClient>
+                    {/* 🚀 2. تغليف السايد بار لكل السيستم هنا */}
+                    <SidebarProvider> 
+                        <LayoutClient>
+                            <div style={{ position: 'relative', zIndex: 10 }}>
+                                {children}
+                            </div>
+                        </LayoutClient>
+                    </SidebarProvider>
                 </AutoLogoutWrapper>
             </Providers>
         </GlobalErrorBoundary>

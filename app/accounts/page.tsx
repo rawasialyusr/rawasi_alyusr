@@ -1,20 +1,11 @@
 "use client";
 import React, { useMemo } from 'react';
 import { useHierarchicalAccountsLogic } from './accounts_logic';
+import { THEME } from '@/lib/theme';
 
 // 🎨 تطبيق الإستاندرد الموحد للمنظومة
-const THEME = {
-  primary: '#0f172a',
-  accent: '#ca8a04',
-  accentLight: '#eab308',
-  white: '#ffffff',
-  slate: '#94a3b8',
-  debit: '#4ade80',  
-  credit: '#f87171', 
-  glassBg: 'rgba(15, 23, 42, 0.75)',
-  glassBorder: 'rgba(202, 138, 4, 0.3)',
-  danger: '#ef4444'
-};
+
+
 
 export default function HierarchicalLedgerPage() {
   // 🚀 استدعاء كل المتغيرات والدوال من اللوجيك (بما فيها التواريخ وزراير الأكشن)
@@ -74,7 +65,7 @@ export default function HierarchicalLedgerPage() {
 
         /* 🚀 مركز العمليات (Operations Center) */
         .operations-center {
-          background: rgba(15, 23, 42, 0.65);
+          background: rgba(191, 198, 213, 0.65);
           backdrop-filter: blur(20px);
           border: 1px solid ${THEME.glassBorder};
           border-radius: 24px;
@@ -86,7 +77,7 @@ export default function HierarchicalLedgerPage() {
         .op-header {
           display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
           color: ${THEME.accentLight}; font-size: 18px; font-weight: 900;
-          border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;
+          border-bottom: 1px solid rgba(162, 82, 82, 0.05); padding-bottom: 15px;
         }
 
         /* 🧮 كروت ميزان المراجعة داخل مركز العمليات */
@@ -94,11 +85,11 @@ export default function HierarchicalLedgerPage() {
           display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;
         }
         .summary-card {
-          background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
+          background: rgba(189, 162, 162, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
           border-radius: 16px; padding: 15px; text-align: center;
           transition: transform 0.3s ease, border-color 0.3s ease;
         }
-        .summary-card:hover { transform: translateY(-3px); border-color: ${THEME.accent}; background: rgba(255,255,255,0.05); }
+        .summary-card:hover { transform: translateY(-3px); border-color: ${THEME.accent}; background: rgba(194, 123, 123, 0.57); }
         .summary-title { color: ${THEME.slate}; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
         .summary-value { font-size: 24px; font-weight: 900; font-family: monospace; }
 
@@ -153,7 +144,7 @@ export default function HierarchicalLedgerPage() {
         .table-header {
           display: grid; grid-template-columns: 40px 2.5fr 1fr 1fr 1fr 1.2fr; 
           padding: 15px 20px; font-weight: 900; color: ${THEME.accent}; 
-          background: rgba(202, 138, 4, 0.1); border-radius: 12px; margin-bottom: 15px;
+          background: rgba(167, 149, 109, 0.1); border-radius: 12px; margin-bottom: 15px;
         }
 
         .acc-row { 

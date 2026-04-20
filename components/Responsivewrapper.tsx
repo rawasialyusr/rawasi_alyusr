@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { THEME } from '@/lib/theme';
 
 interface ResponsiveWrapperProps {
   children: React.ReactNode;

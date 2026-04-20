@@ -7,6 +7,8 @@ interface RawasiSidebarProps {
   onDateChange: (start: string, end: string) => void;
   title?: string;
   extraFilters?: React.ReactNode;
+  extraActions?: React.ReactNode; // 🚀 الزراير المخصصة لكل صفحة
+  summarySlot?: React.ReactNode;  // 📊 كارد الملخص المخصص
   accentColor?: string;    // لون التميز (الذهبي)
   textColor?: string;      // لون النصوص
   logoPath?: string;       // مسار الشعار
@@ -17,6 +19,8 @@ export default function RawasiFilterSidebar({
   onDateChange, 
   title = "لوحة التحكم", 
   extraFilters,
+  extraActions,
+  summarySlot,
   accentColor = '#C5A059',
   textColor = '#FFFFFF',
   logoPath = '/RYC_Logo.png'
@@ -28,22 +32,15 @@ export default function RawasiFilterSidebar({
 
   const isOpen = isHovered || isPinned;
 
-  // 📡 دالة إرسال الأوامر للصفحة الحالية
-  const dispatchAction = (actionType: string) => {
-    window.dispatchEvent(new CustomEvent('rawasi-action', { detail: actionType }));
-  };
-
   return (
     <>
       <style>{`
         .filter-sidebar {
           width: ${isOpen ? '320px' : '65px'};
-          /* 🌟 تأثير الزجاج والتدرج اللوني (Glassmorphism & Gradient) */
           background: linear-gradient(180deg, rgba(67, 52, 46, 0.98) 0%, rgba(140, 106, 93, 0.4) 100%);
           backdrop-filter: blur(25px) saturate(180%);
           -webkit-backdrop-filter: blur(25px) saturate(180%);
-          border-left: 1px solid rgba(255, 255, 255, 0.08); /* حافة زجاجية خفيفة */
-          
+          border-left: 1px solid rgba(255, 255, 255, 0.08);
           height: 100vh;
           position: fixed;
           right: 0;
@@ -58,141 +55,68 @@ export default function RawasiFilterSidebar({
         }
 
         .vertical-label-container {
-          position: absolute;
-          right: 0;
-          top: 0;
-          bottom: 0;
-          width: 65px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          pointer-events: none;
-          opacity: ${isOpen ? 0 : 1};
-          transition: opacity 0.3s ease;
+          position: absolute; right: 0; top: 0; bottom: 0; width: 65px;
+          display: flex; align-items: center; justify-content: center;
+          pointer-events: none; opacity: ${isOpen ? 0 : 1}; transition: opacity 0.3s ease;
         }
 
         .vertical-text {
-          writing-mode: vertical-rl;
-          transform: rotate(180deg);
-          font-weight: 900;
-          font-size: 20px;
-          letter-spacing: 6px;
-          color: ${accentColor};
-          opacity: 0.6;
-          text-shadow: 0 2px 10px rgba(0,0,0,0.3); /* ظل خفيف عشان الكلمة تبرز فوق الزجاج */
-          white-space: nowrap;
+          writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 900;
+          font-size: 20px; letter-spacing: 6px; color: ${accentColor}; opacity: 0.6;
+          text-shadow: 0 2px 10px rgba(0,0,0,0.3); white-space: nowrap;
         }
 
-        /* 🚀 تم إضافة Scroll أنيق عشان الشاشات الصغيرة */
         .filter-content {
-          width: 320px;
-          padding: 25px;
-          opacity: ${isOpen ? 1 : 0};
-          transform: translateX(${isOpen ? '0' : '40px'});
-          transition: all 0.4s ease;
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          overflow-y: auto; 
-          overflow-x: hidden;
+          width: 320px; padding: 25px; opacity: ${isOpen ? 1 : 0};
+          transform: translateX(${isOpen ? '0' : '40px'}); transition: all 0.4s ease;
+          display: flex; flex-direction: column; height: 100%; overflow-y: auto; overflow-x: hidden;
         }
 
-        /* ستايل السكرول بار */
         .filter-content::-webkit-scrollbar { width: 4px; }
         .filter-content::-webkit-scrollbar-track { background: transparent; }
         .filter-content::-webkit-scrollbar-thumb { background: ${accentColor}44; border-radius: 10px; }
         .filter-content::-webkit-scrollbar-thumb:hover { background: ${accentColor}88; }
 
         .sidebar-logo-container {
-          text-align: center;
-          margin-bottom: 30px;
-          padding-bottom: 20px;
-          border-bottom: 1px solid rgba(255,255,255,0.1);
-          flex-shrink: 0;
+          text-align: center; margin-bottom: 30px; padding-bottom: 20px;
+          border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;
         }
         
-        .sidebar-logo-img {
-          width: 120px;
-          height: auto;
-          filter: drop-shadow(0 0 10px rgba(0,0,0,0.2));
-        }
+        .sidebar-logo-img { width: 120px; height: auto; filter: drop-shadow(0 0 10px rgba(0,0,0,0.2)); }
 
         .action-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-          margin-bottom: 25px;
-          flex-shrink: 0;
+          display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 25px; flex-shrink: 0;
         }
 
-        .action-btn {
-          background: rgba(255,255,255,0.05); /* زيادة الشفافية عشان تليق مع الزجاج */
-          border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 12px;
-          padding: 12px 5px;
-          color: ${textColor};
-          cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 6px;
-          transition: 0.3s;
-          font-family: 'Cairo';
-          backdrop-filter: blur(5px);
+        /* خليت الكلاس ده عام عشان تستخدمه من بره */
+        .rawasi-action-btn {
+          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 12px; padding: 12px 5px; color: ${textColor}; cursor: pointer;
+          display: flex; flex-direction: column; align-items: center; gap: 6px;
+          transition: 0.3s; font-family: 'Cairo'; backdrop-filter: blur(5px);
         }
-
-        .action-btn:hover {
-          background: rgba(255,255,255,0.15);
-          border-color: ${accentColor};
-          transform: translateY(-2px);
-          box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        .rawasi-action-btn:hover {
+          background: rgba(255,255,255,0.15); border-color: ${accentColor};
+          transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
 
         .filter-section-title {
-          font-size: 10px;
-          font-weight: 900;
-          color: ${accentColor};
-          margin-bottom: 12px;
-          letter-spacing: 1px;
-          text-transform: uppercase;
-          flex-shrink: 0;
+          font-size: 10px; font-weight: 900; color: ${accentColor};
+          margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase; flex-shrink: 0;
         }
 
         .filter-input {
-          width: 100%;
-          background: rgba(255,255,255,0.08); /* شفافية أعلى لتأثير زجاجي */
-          border: 1px solid rgba(255,255,255,0.15);
-          border-radius: 10px;
-          padding: 10px;
-          color: white;
-          margin-bottom: 15px;
-          outline: none;
-          font-size: 13px;
-          transition: 0.3s;
+          width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 10px; padding: 10px; color: white; margin-bottom: 15px; outline: none;
+          font-size: 13px; transition: 0.3s;
         }
-
-        .filter-input:focus {
-          border-color: ${accentColor};
-          background: rgba(255,255,255,0.15);
-          box-shadow: 0 0 15px rgba(197, 160, 89, 0.2);
-        }
+        .filter-input:focus { border-color: ${accentColor}; background: rgba(255,255,255,0.15); box-shadow: 0 0 15px rgba(197, 160, 89, 0.2); }
 
         .pin-btn-sidebar {
-          position: absolute;
-          left: 15px;
-          top: 15px;
-          background: ${isPinned ? accentColor : 'rgba(255,255,255,0.1)'};
-          border: 1px solid rgba(255,255,255,0.1);
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: 0.3s;
-          z-index: 1001;
-          backdrop-filter: blur(5px);
+          position: absolute; left: 15px; top: 15px; background: ${isPinned ? accentColor : 'rgba(255,255,255,0.1)'};
+          border: 1px solid rgba(255,255,255,0.1); width: 32px; height: 32px; border-radius: 8px;
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+          transition: 0.3s; z-index: 1001; backdrop-filter: blur(5px);
         }
       `}</style>
 
@@ -211,17 +135,22 @@ export default function RawasiFilterSidebar({
             <h2 style={{ fontSize: '18px', fontWeight: 900, marginTop: '10px', color: accentColor }}>{title}</h2>
           </div>
           
-          <div className="filter-section-title">⚡ العمليات الأساسية</div>
-          <div className="action-grid">
-            <button className="action-btn" style={{ gridColumn: 'span 2', border: `1px solid ${accentColor}55`, background: `${accentColor}22` }} onClick={() => dispatchAction('add')}>
-              <span style={{ fontSize: '20px' }}>➕</span>
-              <span style={{ fontSize: '12px', fontWeight: 900 }}>إضافة جديد</span>
-            </button>
-            <button className="action-btn" onClick={() => dispatchAction('edit')}><span>✏️</span><span style={{ fontSize: '11px' }}>تحرير</span></button>
-            <button className="action-btn" onClick={() => dispatchAction('delete')}><span>🗑️</span><span style={{ fontSize: '11px' }}>حذف</span></button>
-            <button className="action-btn" onClick={() => dispatchAction('post')}><span>📤</span><span style={{ fontSize: '11px' }}>ترحيل</span></button>
-            <button className="action-btn" onClick={() => dispatchAction('unpost')}><span>🔓</span><span style={{ fontSize: '11px' }}>فك ترحيل</span></button>
-          </div>
+          {/* 🚀 عرض كارد الملخص الخاص بالصفحة */}
+          {summarySlot && (
+            <div style={{ marginBottom: '25px' }}>
+              {summarySlot}
+            </div>
+          )}
+          
+          {/* 🚀 عرض الزراير الخاصة بالصفحة */}
+          {extraActions && (
+            <>
+              <div className="filter-section-title">⚡ عمليات الصفحة</div>
+              <div className="action-grid">
+                {extraActions}
+              </div>
+            </>
+          )}
 
           <div className="filter-section-title">🔍 البحث والفلترة</div>
           <div style={{ flex: 1 }}>

@@ -3,9 +3,12 @@ import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
+import { useRouter } from 'next/navigation'; // 🛡️ استدعاء التوجيه للحماية
+import { parseDbError } from '@/lib/helpers'; // 🛡️ مترجم الأخطاء الذكي
 
 export function useProfileLogic() {
     const queryClient = useQueryClient();
+    const router = useRouter(); // 🛡️ لعمل الطرد التلقائي لو مفيش جلسة
 
     // 🎛️ 1. حالات الواجهة والفلاتر (UI States & Filters)
     const [activeTab, setActiveTab] = useState('tasks');
@@ -17,15 +20,45 @@ export function useProfileLogic() {
         endDate: ''    
     });
 
-    // 🧠 2. المحرك الأساسي: جلب البيانات الذكي (React Query)
+    // 🧠 2. المحرك الأساسي: جلب البيانات الذكي المربوط (Joined Query)
     const { data, isLoading } = useQuery({
         queryKey: ['employeeProfileData'],
         queryFn: async () => {
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError || !session) throw new Error('غير مسجل الدخول');
+            
+            // 🛡️ حماية 1: طرد المستخدم لصفحة الدخول لو الجلسة منتهية أو غير موجودة
+            if (sessionError || !session) {
+                router.replace('/login');
+                throw new Error('الجلسة منتهية، جاري تحويلك...');
+            }
 
-            // جلب البروفايل
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+            // 🚀 الربط الذكي: جلب البروفايل ودمجه مع بيانات الشريك (الموظف) في استعلام واحد
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select(`
+                    *,
+                    partners (
+                        id,
+                        name,
+                        phone,
+                        job_role,
+                        identity_image_url
+                    )
+                `)
+                .eq('id', session.user.id)
+                .single();
+
+            if (profileError) throw profileError;
+
+            // 🚀 تجهيز البيانات للواجهة: سحب البيانات الأساسية من جدول الشركاء كأولوية
+            const partner = profile?.partners || null;
+            const enhancedProfile = {
+                ...profile,
+                display_name: partner?.name || profile.nickname || 'موظف رواسي',
+                username: partner?.phone || profile.username || '---', // 📱 الجوال هو اليوزر نيم
+                profession: partner?.job_role || 'موظف',               // 👔 المهنة
+                avatar: profile.avatar_url || partner?.identity_image_url // 📸 الصورة
+            };
 
             // جلب المهام والإشعارات والطلبات بالتوازي (Performance Boost)
             const [tasksRes, notesRes, requestsRes] = await Promise.all([
@@ -34,19 +67,16 @@ export function useProfileLogic() {
                 supabase.from('user_requests').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false })
             ]);
 
-            let partnerData = null;
             let advData = [], dedData = [], logsData = [], payrollData = null;
 
-            // جلب البيانات المالية لو الموظف مربوط بمقاول/شريك
+            // جلب البيانات المالية لو الموظف مربوط بـ partner_id
             if (profile?.partner_id) {
-                const { data: partner } = await supabase.from('partners').select('*').eq('id', profile.partner_id).single();
-                partnerData = partner;
-
                 const [advRes, dedRes, payrollRes, logsRes] = await Promise.all([
                     supabase.from('emp_adv').select('*').eq('partner_id', profile.partner_id).eq('is_deleted', false).order('created_at', { ascending: false }),
                     supabase.from('emp_ded').select('*').eq('partner_id', profile.partner_id).eq('is_deleted', false).order('created_at', { ascending: false }),
                     supabase.from('payroll_slips').select('net_salary').eq('emp_id', profile.partner_id).order('created_at', { ascending: false }).limit(1),
-                    supabase.from('labor_daily_logs').select('*').eq('worker_name', partner.name).order('work_date', { ascending: false })
+                    // سحب يوميات العامل بناءً على اسمه المربوط في جدول الشركاء
+                    supabase.from('labor_daily_logs').select('*').eq('worker_name', partner?.name).order('work_date', { ascending: false })
                 ]);
                 
                 advData = advRes.data || [];
@@ -56,8 +86,8 @@ export function useProfileLogic() {
             }
 
             return {
-                profile,
-                partnerData,
+                profile: enhancedProfile, // 🚀 إرجاع البروفايل المدمج
+                partnerData: partner,
                 tasks: tasksRes.data || [],
                 notifications: notesRes.data || [],
                 userRequests: requestsRes.data || [],
@@ -149,7 +179,6 @@ export function useProfileLogic() {
         if (!userProfile?.id) return;
         const channel = supabase.channel('profile-realtime-updates')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'user_tasks', filter: `user_id=eq.${userProfile.id}` }, () => {
-                // تحديث المهام صامتاً إذا قامت الإدارة بتعديلها
                 queryClient.invalidateQueries({ queryKey: ['employeeProfileData'] });
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userProfile.id}` }, () => {
@@ -161,7 +190,7 @@ export function useProfileLogic() {
         return () => { supabase.removeChannel(channel); };
     }, [queryClient, userProfile?.id]);
 
-    // 🚀 6. عمليات الإرسال الذكية (Mutations) مع التنبيهات
+    // 🚀 6. عمليات الإرسال الذكية (Mutations) مدعومة بـ parseDbError للحماية
     const invalidateAndRefresh = () => queryClient.invalidateQueries({ queryKey: ['employeeProfileData'] });
 
     const requestMutation = useMutation({
@@ -170,7 +199,7 @@ export function useProfileLogic() {
             if (error) throw error;
         },
         onSuccess: () => { toast.success('تم رفع الطلب للإدارة بنجاح 🚀'); invalidateAndRefresh(); },
-        onError: () => toast.error('حدث خطأ أثناء رفع الطلب ❌')
+        onError: (error) => toast.error(parseDbError(error)) // 🛡️ استخدام المترجم
     });
 
     const taskMutation = useMutation({
@@ -183,7 +212,7 @@ export function useProfileLogic() {
             else toast.success('تم إرسال تقرير عدم الإنجاز ⚠️');
             invalidateAndRefresh(); 
         },
-        onError: () => toast.error('لم نتمكن من تحديث حالة المهمة ❌')
+        onError: (error) => toast.error(parseDbError(error)) // 🛡️ استخدام المترجم
     });
 
     const profileMutation = useMutation({
@@ -192,22 +221,23 @@ export function useProfileLogic() {
             if (error) throw error;
         },
         onSuccess: () => { toast.success('تم حفظ بيانات البروفايل 💾'); invalidateAndRefresh(); },
-        onError: () => toast.error('حدث خطأ أثناء الحفظ ❌')
+        onError: (error) => toast.error(parseDbError(error)) // 🛡️ استخدام المترجم
     });
 
     const notificationMutation = useMutation({
         mutationFn: async () => await supabase.from('notifications').update({ is_read: true }).eq('user_id', userProfile?.id),
-        onSuccess: invalidateAndRefresh
+        onSuccess: invalidateAndRefresh,
+        onError: (error) => toast.error(parseDbError(error)) // 🛡️ استخدام المترجم
     });
 
-    // 🔄 تصدير الدوال المتوافقة مع واجهة المستخدم (بدون كسر الكود القديم)
+    // 🔄 تصدير الدوال
     const createRequest = async (data: any) => requestMutation.mutateAsync(data);
     const submitTaskUpdate = async (taskId: string, status: string, note?: string) => taskMutation.mutateAsync({ taskId, status, note });
     const updateProfileInfo = async (data: any) => profileMutation.mutateAsync(data);
     const markAllNotificationsAsRead = async () => notificationMutation.mutateAsync();
     const refreshProfile = () => { toast.success('تم تحديث البيانات 🔄'); invalidateAndRefresh(); };
 
-    // دالة الرفع الوحيدة مع Toast مخصص للتحميل
+    // דالة رفع الصورة الشخصية
     const uploadAvatar = async (file: File) => {
         if (!userProfile?.id) return;
         const toastId = toast.loading('جاري رفع الصورة... ⏳');
@@ -219,12 +249,11 @@ export function useProfileLogic() {
             await profileMutation.mutateAsync({ avatar_url: publicUrl });
             toast.success('تم تحديث الصورة الشخصية 📸', { id: toastId });
         } catch (error) { 
-            toast.error('فشل في رفع الصورة ❌', { id: toastId }); 
+            toast.error(parseDbError(error), { id: toastId }); // 🛡️ استخدام المترجم
             console.error(error); 
         } 
     };
 
-    // حالة التحميل أثناء الحفظ لتغيير شكل الأزرار
     const isSaving = requestMutation.isPending || taskMutation.isPending || profileMutation.isPending || notificationMutation.isPending;
 
     // 📦 إرجاع كل البيانات كما كانت تماماً لضمان عدم تلف صفحة UI
