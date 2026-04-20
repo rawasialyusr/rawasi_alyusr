@@ -1,64 +1,92 @@
 "use client";
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { THEME } from '@/lib/theme';
+import { useEffect, useState, createContext, useContext } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-interface AuthGuardProps {
-  children: React.ReactNode;
-  allowedRoles?: string[]; // مثال: ['admin', 'accountant']
-}
+// 1. إنشاء "Context" عشان الصلاحيات تكون متاحة في أي صفحة أو زرار
+const AuthContext = createContext<{
+  user: any;
+  profile: any;
+  loading: boolean;
+  can: (module: string, action: string) => boolean;
+} | null>(null);
 
-export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    const checkPermissions = async () => {
-      setIsLoading(true);
+    const checkUser = async () => {
+      setLoading(true);
       
-      // 1. التأكد إن فيه مستخدم مسجل دخول أصلاً
+      // جلب بيانات الجلسة الحالية
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
-        router.push('/login');
+        // لو مش مسجل دخول، ارجع لصفحة اللوجن (إلا لو إنت فيها أصلاً)
+        if (pathname !== "/login") router.replace("/login");
+        setLoading(false);
         return;
       }
 
-      // 2. لو الصفحة محتاجة صلاحيات معينة، هنشيك على دور المستخدم
-      if (allowedRoles && allowedRoles.length > 0) {
-        const { data: profile } = await supabase
-          .from('profiles') // اسم جدول المستخدمين عندك
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
+      setUser(session.user);
 
-        const userRole = profile?.role || 'viewer';
+      // 🛡️ جلب البروفايل مع مصفوفة الصلاحيات (الـ JSONB)
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
 
-        // لو دوره مش موجود في المسموح ليهم
-        if (!allowedRoles.includes(userRole) && userRole !== 'admin') {
-          router.push('/unauthorized'); // وديه لصفحة "غير مصرح لك"
-          return;
-        }
-      }
-
-      setIsAuthorized(true);
-      setIsLoading(false);
+      setProfile(profileData);
+      setLoading(false);
     };
 
-    checkPermissions();
-  }, [allowedRoles, router]);
+    checkUser();
 
-  if (isLoading) {
+    // الاستماع لتغييرات حالة الدخول (لو عمل Logout مثلاً)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+        setProfile(null);
+        router.replace("/login");
+      }
+    });
+
+    return () => authListener.subscription.unsubscribe();
+  }, [router, pathname]);
+
+  // 🚀 دالة الفحص السحرية "can"
+  // بنمرر لها اسم الموديول (مثلاً invoices) والأكشن (مثلاً stamp)
+  const can = (module: string, action: string) => {
+    if (profile?.is_admin) return true; // المدير معاه كل الصلاحيات
+    
+    const perms = profile?.permissions || {};
+    // التأكد إن الموديول موجود جواه الأكشن المطلوب
+    return Array.isArray(perms[module]) && perms[module].includes(action);
+  };
+
+  if (loading) {
     return (
-      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: THEME.slate }}>
-        <h2 style={{ color: THEME.primary, fontWeight: 900 }}>🔐 جاري التحقق من صلاحيات الوصول...</h2>
+      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F4F1EE" }}>
+        <div className="loader">⏳ جاري تأمين الاتصال برواسي...</div>
       </div>
     );
   }
 
-  if (!isAuthorized) return null;
-
-  return <>{children}</>;
+  return (
+    <AuthContext.Provider value={{ user, profile, loading, can }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
+
+// هوك (Hook) مخصص عشان تستخدم الصلاحيات في أي مكان بسهولة
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used within AuthGuard");
+  return context;
+};
