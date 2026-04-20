@@ -4,7 +4,7 @@ import React from 'react';
 import { useEmpAdvLogic } from './emp_adv.logic';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
-import GlassContainer from '@/components/Glasscontainer'; 
+import GlassContainer from '@/components/GlassContainer'; 
 import { OperationsCenter } from '@/components/postingputton'; 
 import AuthGuard from '@/components/authGuard';
 

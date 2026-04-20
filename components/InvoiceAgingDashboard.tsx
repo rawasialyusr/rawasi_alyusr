@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
 import { formatCurrency } from '@/lib/helpers';
-import GlassContainer from '@/components/Glasscontainer';
+import GlassContainer from '@/components/GlassContainer';
 
 // واجهة البيانات اللي هتيجي من دالة getInvoiceAging
 interface AgingStats {

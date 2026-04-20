@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchAllSupabaseData, formatCurrency } from '@/lib/helpers';
-import GlassContainer from '@/components/Glasscontainer';
+import GlassContainer from '@/components/GlassContainer';
 import { THEME } from '@/lib/theme';
 
 export default function MasterDashboard() {

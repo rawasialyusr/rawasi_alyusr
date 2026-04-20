@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import GlassContainer from '@/components/Glasscontainer';
+import GlassContainer from '@/components/GlassContainer';
 import { useRestoreLogic } from './restore_logic'; 
 import { THEME } from '@/lib/theme';
 

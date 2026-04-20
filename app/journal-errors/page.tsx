@@ -5,7 +5,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import { useJournalErrorsLogic } from './JournalErrors_logic';
 import AuthGuard from '@/components/authGuard'; 
-import GlassContainer from '@/components/Glasscontainer'; 
+import GlassContainer from '@/components/GlassContainer'; 
 import { OperationsCenter } from '@/components/postingputton'; 
 
 export default function JournalMaintenancePage() {

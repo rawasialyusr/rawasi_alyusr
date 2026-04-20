@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import GlassContainer from '@/components/Glasscontainer';
+import GlassContainer from '@/components/GlassContainer';
 
 const THEME = {
   primary: '#0f172a',

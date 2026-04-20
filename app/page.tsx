@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import { THEME } from '@/lib/theme';
-import GlassContainer from '@/components/Glasscontainer';
+import GlassContainer from '@/components/GlassContainer';
 import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
 
