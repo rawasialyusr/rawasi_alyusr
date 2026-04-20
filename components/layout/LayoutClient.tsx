@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import RawasiFilterSidebar from '@/components/rawasifiltersidebar';
 
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -14,7 +15,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   const [userRole, setUserRole] = useState('');
   const dragStartPos = useRef({ x: 0, y: 0 });
 
-  // 1. جلب الصلاحيات والتحقق من المستخدم
   useEffect(() => {
     const fetchAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -22,12 +22,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         if (pathname !== '/login') router.replace('/login');
         return;
       }
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, permissions')
-        .eq('id', session.user.id)
-        .single();
-      
+      const { data: profile } = await supabase.from('profiles').select('role, permissions').eq('id', session.user.id).single();
       if (profile) {
         setUserRole(profile.role);
         setPermissions(profile.permissions || {});
@@ -36,7 +31,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     fetchAuth();
   }, [pathname, router]);
 
-  // 2. مصفوفة المنيو الكاملة
   const menuGroups = [
     {
       group: "الداشبورد والملخصات",
@@ -117,6 +111,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   if (pathname === '/login') return <>{children}</>;
 
+  const currentPageTitle = menuGroups.flatMap(g => g.items).find(i => i.path === pathname)?.title || "إدارة النظام";
+
   return (
     <>
       <style>{`
@@ -124,17 +120,19 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         
         @keyframes floatPulse {
           0%, 100% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.2); transform: scale(1); }
-          50% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4), 0 0 20px 2px rgba(197, 160, 89, 0.2); transform: scale(1.05); }
+          50% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4), 0 0 25px 5px rgba(197, 160, 89, 0.3); transform: scale(1.05); }
         }
         
+        /* 🌟 1. الزر العائم (Glassy FAB) */
         .fab-main {
           position: fixed; bottom: ${position.y}px; left: ${position.x}px; width: 85px; height: 85px; z-index: 10000;
-          background: linear-gradient(145deg, #1A1513, #2a221d);
-          border: 2px solid ${isOpen ? '#C5A059' : 'rgba(197, 160, 89, 0.4)'}; 
+          background: linear-gradient(145deg, rgba(67, 52, 46, 0.85), rgba(26, 21, 19, 0.95));
+          backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+          border: 1px solid ${isOpen ? '#C5A059' : 'rgba(197, 160, 89, 0.3)'}; 
           border-radius: 50%;
           cursor: ${isDragging ? 'grabbing' : 'grab'};
           display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
           transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
           animation: floatPulse 4s infinite ease-in-out;
           overflow: hidden;
@@ -142,18 +140,16 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         }
 
         .fab-logo {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          transition: all 0.5s ease;
-          filter: ${isOpen ? 'drop-shadow(0 0 8px #C5A059)' : 'none'};
-          transform: ${isOpen ? 'scale(1.1)' : 'scale(1)'};
+          width: 100%; height: 100%; object-fit: contain; transition: all 0.5s ease;
+          filter: ${isOpen ? 'drop-shadow(0 0 10px #C5A059)' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))'};
+          transform: ${isOpen ? 'scale(1.15)' : 'scale(1)'};
         }
 
+        /* 🌟 2. خلفية المنيو (Glassy Overlay) */
         .overlay-screen {
           position: fixed; inset: 0; z-index: 9000;
-          background: radial-gradient(circle at center, rgba(20, 20, 25, 0.85) 0%, rgba(5, 5, 10, 0.95) 100%);
-          backdrop-filter: blur(25px) saturate(150%);
+          background: radial-gradient(circle at center, rgba(40, 30, 25, 0.6) 0%, rgba(15, 12, 10, 0.9) 100%);
+          backdrop-filter: blur(30px) saturate(200%); -webkit-backdrop-filter: blur(30px) saturate(200%);
           clip-path: circle(${isOpen ? '150%' : '0%'} at calc(${position.x + 42.5}px) calc(100% - ${position.y + 42.5}px));
           transition: clip-path 0.8s cubic-bezier(0.77, 0, 0.175, 1);
           display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
@@ -161,13 +157,17 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         }
 
         .command-center { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 40px; margin-top: 20px; }
-        .group-header { color: #C5A059; font-weight: 900; font-size: 16px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; margin-bottom: 20px; text-align: right; display: block; position: relative; }
-        .group-header::after { content: ''; position: absolute; right: 0; bottom: -1px; width: 50px; height: 3px; background: #C5A059; border-radius: 5px; }
+        .group-header { color: #C5A059; font-weight: 900; font-size: 16px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; margin-bottom: 20px; text-align: right; display: block; position: relative; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .group-header::after { content: ''; position: absolute; right: 0; bottom: -1px; width: 50px; height: 3px; background: #C5A059; border-radius: 5px; box-shadow: 0 0 10px #C5A059; }
         .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
         a { text-decoration: none; outline: none; }
         
+        /* 🌟 3. كروت المنيو (Glassmorphism Cards) */
         .nav-card {
-          background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
+          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
           padding: 20px; border-radius: 20px; text-align: center; color: #fff; cursor: pointer;
           position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 15px;
           transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); opacity: 0;
@@ -176,31 +176,47 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
         @keyframes popIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
 
-        .nav-card:hover { background: rgba(197, 160, 89, 0.08); border-color: rgba(197, 160, 89, 0.4); transform: translateY(-8px); }
-        .icon-wrapper { background: rgba(255,255,255,0.04); width: 65px; height: 65px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; transition: 0.4s; }
-        .nav-card.active { background: rgba(197, 160, 89, 0.15); border-color: #C5A059; }
-        .nav-card.active .icon-wrapper { background: #C5A059; }
+        .nav-card:hover { 
+            background: linear-gradient(135deg, rgba(197, 160, 89, 0.2) 0%, rgba(197, 160, 89, 0.05) 100%);
+            border-color: rgba(197, 160, 89, 0.5); 
+            transform: translateY(-8px); 
+            box-shadow: 0 12px 40px 0 rgba(197, 160, 89, 0.25);
+        }
+
+        /* 🌟 4. الأيقونات داخل الكروت (Glassy Icons) */
+        .icon-wrapper { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 65px; height: 65px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; transition: 0.4s; 
+            box-shadow: inset 0 2px 5px rgba(255,255,255,0.05);
+        }
+        .nav-card.active { 
+            background: linear-gradient(135deg, rgba(197, 160, 89, 0.3) 0%, rgba(197, 160, 89, 0.1) 100%); 
+            border-color: #C5A059; 
+            box-shadow: 0 8px 32px 0 rgba(197, 160, 89, 0.3);
+        }
+        .nav-card.active .icon-wrapper { background: #C5A059; border-color: #C5A059; box-shadow: 0 0 15px rgba(197, 160, 89, 0.5); }
       `}</style>
 
-      {/* 🚀 الزر العائم الآن يحمل لوجو رواسي */}
-      <div 
-        className="fab-main" 
-        onMouseDown={onMouseDown} 
-        onClick={() => !isDragging && setIsOpen(!isOpen)}
-        title={isOpen ? "إغلاق القائمة" : "فتح قائمة رواسي"}
-      >
-        <img 
-          src="/RYC_Logo.png" 
-          alt="رواسي" 
-          className="fab-logo"
-        />
+      {/* السايد بار العالمي الزجاجي */}
+      <RawasiFilterSidebar 
+        title={currentPageTitle}
+        onSearch={(term) => window.dispatchEvent(new CustomEvent('globalSearch', { detail: term }))}
+        onDateChange={(start, end) => window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }))}
+      />
+
+      {/* الزر العائم */}
+      <div className="fab-main no-print" onMouseDown={onMouseDown} onClick={() => !isDragging && setIsOpen(!isOpen)} title={isOpen ? "إغلاق القائمة" : "فتح قائمة رواسي"}>
+        <img src="/RYC_Logo.png" alt="رواسي" className="fab-logo" />
       </div>
 
-      <nav className="overlay-screen" onClick={() => setIsOpen(false)} style={{ pointerEvents: isOpen ? 'auto' : 'none' }}>
+      {/* شاشة القائمة الزجاجية */}
+      <nav className="overlay-screen no-print" onClick={() => setIsOpen(false)} style={{ pointerEvents: isOpen ? 'auto' : 'none' }}>
         <div className="command-center" onClick={(e) => e.stopPropagation()}>
           <div style={{ textAlign: 'center', marginBottom: '10px', opacity: isOpen ? 1 : 0, transition: '1s 0.3s' }}>
-             <h2 style={{ color: 'white', fontWeight: 900, margin: 0, fontSize: '28px' }}>نظام إدارة <span style={{ color: '#C5A059' }}>رواسي اليسر</span></h2>
-             <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '5px' }}>تحكم كامل في كافة وحدات النظام</p>
+             <h2 style={{ color: 'white', fontWeight: 900, margin: 0, fontSize: '32px', textShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>نظام إدارة <span style={{ color: '#C5A059' }}>رواسي اليسر</span></h2>
+             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', marginTop: '5px' }}>تحكم كامل في كافة وحدات النظام</p>
           </div>
 
           {menuGroups.map((group, gIdx) => (
@@ -212,20 +228,11 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                   const isActive = pathname === item.path;
 
                   return (
-                    <Link 
-                      key={iIdx} 
-                      href={item.path}
-                      onClick={() => setIsOpen(false)}
-                    >
-                        <div 
-                          className={`nav-card ${isActive ? 'active' : ''}`} 
-                          style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}
-                        >
-                          <div className="icon-wrapper">
-                            {item.icon}
-                          </div>
-                          <span style={{ fontWeight: 800, fontSize: '15px', letterSpacing: '0.5px', color: 'white' }}>{item.title}</span>
-                          {isActive && <div style={{ position: 'absolute', top: '10px', right: '10px', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 10px #10b981' }}></div>}
+                    <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
+                        <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
+                          <div className="icon-wrapper">{item.icon}</div>
+                          <span style={{ fontWeight: 800, fontSize: '15px', letterSpacing: '0.5px', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{item.title}</span>
+                          {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
                         </div>
                     </Link>
                   );
@@ -234,11 +241,23 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             </div>
           ))}
           
-          {/* زر تسجيل الخروج الإضافي أسفل القائمة */}
-          <div style={{ textAlign: 'center', marginTop: '40px' }}>
+          <div style={{ textAlign: 'center', marginTop: '50px' }}>
              <button 
                onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
-               style={{ background: 'transparent', border: '1px solid #be123c', color: '#be123c', padding: '10px 30px', borderRadius: '12px', cursor: 'pointer', fontWeight: 900 }}
+               style={{ 
+                   background: 'linear-gradient(135deg, rgba(190, 18, 60, 0.1) 0%, rgba(190, 18, 60, 0.02) 100%)', 
+                   backdropFilter: 'blur(5px)',
+                   border: '1px solid rgba(190, 18, 60, 0.4)', 
+                   color: '#ff4d4d', 
+                   padding: '12px 35px', 
+                   borderRadius: '15px', 
+                   cursor: 'pointer', 
+                   fontWeight: 900,
+                   boxShadow: '0 8px 32px 0 rgba(190, 18, 60, 0.15)',
+                   transition: 'all 0.3s'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(190, 18, 60, 0.2)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseOut={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(190, 18, 60, 0.1) 0%, rgba(190, 18, 60, 0.02) 100%)'; e.currentTarget.style.transform = 'translateY(0)' }}
              >
                تسجيل الخروج من النظام
              </button>
@@ -246,8 +265,13 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         </div>
       </nav>
 
-      {/* تأثير الضباب على المحتوى */}
-      <div style={{ filter: isOpen ? 'blur(15px) grayscale(50%)' : 'none', transform: isOpen ? 'scale(0.98)' : 'scale(1)', transition: 'all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1)' }}>
+      {/* محتوى الصفحة (مع بلور إضافي أثناء فتح القائمة) */}
+      <div style={{ 
+          marginRight: '65px', 
+          filter: isOpen ? 'blur(20px) grayscale(30%)' : 'none', 
+          transform: isOpen ? 'scale(0.97)' : 'scale(1)', 
+          transition: 'all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1)' 
+      }}>
         {children}
       </div>
     </>

@@ -31,7 +31,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={cairo.className}>
+      <body className={cairo.className} style={{ position: 'relative', minHeight: '100vh', backgroundColor: '#F4F1EE' }}>
         
         {/* 🚀 شريط التحميل العلوي الفخم بستايل رواسي الذهبي */}
         <NextTopLoader 
@@ -47,30 +47,25 @@ export default function RootLayout({
             zIndex={99999} 
         />
 
-        {/* 🏗️ ستايل اللوجو العائم (CSS فقط لتجنب أخطاء السيرفر) */}
+        {/* 🏗️ ستايل العلامة المائية الخلفية */}
         <style dangerouslySetInnerHTML={{__html: `
-          .rawasi-logo-container {
+          .watermark-bg {
             position: fixed;
-            bottom: 30px;
-            left: 30px;
-            z-index: 100;
-            opacity: 0.8;
-            transition: opacity 0.3s ease;
-          }
-          .rawasi-logo-container:hover {
-            opacity: 1;
-          }
-          .rawasi-logo-img {
-            width: 80px;
-            height: auto;
-            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60vw; /* حجم كبير متناسب مع الشاشة */
+            max-width: 700px;
+            opacity: 0.03; /* شفافية خفيفة جداً لتبدو كعلامة مائية حقيقية */
+            z-index: 0; /* في الخلفية */
+            pointer-events: none; /* السحر هنا: يمنع اللوجو من حجب نقرات الماوس على العناصر التي فوقه */
+            user-select: none; /* يمنع تحديد الصورة بالماوس */
+            /* filter: grayscale(100%); يمكنك تفعيل هذا السطر إذا أردت العلامة المائية رمادية تماماً */
           }
         `}} />
 
-        {/* اللوجو العائم */}
-        <div className="rawasi-logo-container no-print">
-            <img src="/RYC_Logo.png" alt="رواسي" className="rawasi-logo-img" />
-        </div>
+        {/* العلامة المائية (Watermark) */}
+        <img src="/RYC_Logo.png" alt="علامة مائية رواسي" className="watermark-bg no-print" />
 
         {/* 🛡️ تغليف السيستم بجدار الحماية لمنع الشاشة البيضاء عند حدوث خطأ */}
         <GlobalErrorBoundary>
@@ -78,7 +73,10 @@ export default function RootLayout({
             <Providers>
                 <AutoLogoutWrapper>
                     <LayoutClient>
-                      {children}
+                      {/* إعطاء المحتوى z-index أعلى ليكون فوق العلامة المائية دائمًا */}
+                      <div style={{ position: 'relative', zIndex: 10 }}>
+                          {children}
+                      </div>
                     </LayoutClient>
                 </AutoLogoutWrapper>
             </Providers>
