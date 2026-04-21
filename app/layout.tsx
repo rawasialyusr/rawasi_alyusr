@@ -6,7 +6,9 @@ import Providers from './providers';
 import NextTopLoader from 'nextjs-toploader';
 import GlobalErrorBoundary from '../components/globalerrorboundary';
 import { THEME } from '@/lib/theme'; 
-import { SidebarProvider } from '@/lib/SidebarContext'; // 🚀 1. استدعاء مخزن السايد بار
+import { SidebarProvider } from '@/lib/SidebarContext'; 
+import AuthGuard from "../components/authGuard"; // 🛡️ 1. استدعاء الحارس هنا
+import { ToastProvider } from '@/lib/toast-context'; // 🔔 1. استدعاء مزود الإشعارات المركزي
 
 const cairo = Cairo({ 
   subsets: ["arabic"],
@@ -33,7 +35,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <body className={cairo.className} style={{ position: 'relative', minHeight: '100vh', color: THEME.text }}>
         
-        {/* 🎨 1. ستايل الخلفية الزجاجية (تظل ثابتة) */}
+        {/* ستايل الخلفية - سليم كما هو */}
         <style dangerouslySetInnerHTML={{__html: `
           .bg-master-container {
             position: fixed; inset: 0; z-index: -4; 
@@ -81,19 +83,23 @@ export default function RootLayout({
             zIndex={99999} 
         />
 
-        {/* 🛡️ 5. السيستم مغلف بالمخازن المطلوبة */}
         <GlobalErrorBoundary>
             <Providers>
-                <AutoLogoutWrapper>
-                    {/* 🚀 2. تغليف السايد بار لكل السيستم هنا */}
-                    <SidebarProvider> 
-                        <LayoutClient>
-                            <div style={{ position: 'relative', zIndex: 10 }}>
-                                {children}
-                            </div>
-                        </LayoutClient>
-                    </SidebarProvider>
-                </AutoLogoutWrapper>
+                {/* 🔔 2. تغليف السيستم بمزود الإشعارات */}
+                <ToastProvider>
+                    <AutoLogoutWrapper>
+                        {/* 🛡️ 3. تغليف السيستم بالحارس (AuthGuard) */}
+                        <AuthGuard> 
+                            <SidebarProvider> 
+                                <LayoutClient>
+                                    <div style={{ position: 'relative', zIndex: 10 }}>
+                                        {children}
+                                    </div>
+                                </LayoutClient>
+                            </SidebarProvider>
+                        </AuthGuard>
+                    </AutoLogoutWrapper>
+                </ToastProvider>
             </Providers>
         </GlobalErrorBoundary>
         

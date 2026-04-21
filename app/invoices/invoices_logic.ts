@@ -1,8 +1,13 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase'; 
+import { useRouter } from 'next/navigation'; // لاستخدامه في زر التسديد
+import { useToast } from '@/lib/toast-context'; // 🚀 استدعاء الهوك المركزي
 
 export function useInvoicesLogic() {
+    const router = useRouter();
+    const { showToast } = useToast(); // 🚀 تفعيل نظام الإشعارات
+    
     const [invoices, setInvoices] = useState<any[]>([]);
     const [projects, setProjects] = useState<any[]>([]); 
     const [isLoading, setIsLoading] = useState(true);
@@ -20,24 +25,31 @@ export function useInvoicesLogic() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [currentRecord, setCurrentRecord] = useState<any>({ lines: [] });
 
-    // 🚀 جلب صلاحيات المستخدم الحالي (هل هو أدمن؟)
+    // 💰 حالات مودال سند القبض (السداد)
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+    const [selectedInvoiceForPay, setSelectedInvoiceForPay] = useState<any>(null);
+
+    // 🚀 جلب صلاحيات المستخدم الحالي
     useEffect(() => {
         const fetchAuth = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('role, permissions')
+                    .select('role, permissions, is_admin')
                     .eq('id', session.user.id)
                     .single();
+                
+                const userRole = String(profile?.role || '').toLowerCase();
                 setPermissions({ 
-                    isAdmin: profile?.role === 'admin', 
+                    isAdmin: userRole === 'admin' || profile?.is_admin === true, 
                     ...profile?.permissions 
                 });
             }
         };
         fetchAuth();
     }, []);
+    
 
     const fetchFullData = useCallback(async () => {
         setIsLoading(true);
@@ -55,13 +67,37 @@ export function useInvoicesLogic() {
 
     useEffect(() => { fetchFullData(); }, [fetchFullData]);
 
+    // 🔍 فلترة البيانات + إضافة منطق "حالة السداد" و "المبالغ المتبقية"
     const allFiltered = useMemo(() => {
         return invoices.filter(inv => {
-            const matchesSearch = inv.invoice_number?.toLowerCase().includes(globalSearch.toLowerCase()) || 
-                                  inv.client_name?.toLowerCase().includes(globalSearch.toLowerCase());
-            return matchesSearch;
+            const searchLower = globalSearch.toLowerCase();
+            const matchesSearch = 
+                inv.invoice_number?.toLowerCase().includes(searchLower) || 
+                inv.client_name?.toLowerCase().includes(searchLower);
+            
+            let matchesDate = true;
+            const invDate = inv.date ? new Date(inv.date) : null;
+            if (invDate) {
+                if (dateFrom) matchesDate = matchesDate && invDate >= new Date(dateFrom);
+                if (dateTo) matchesDate = matchesDate && invDate <= new Date(dateTo);
+            }
+            return matchesSearch && matchesDate;
+        }).map(inv => {
+            const total = Number(inv.total_amount || 0);
+            const paid = Number(inv.paid_amount || 0);
+            const balance = total - paid;
+            
+            let paymentStatus = 'unpaid'; 
+            if (paid >= total && total > 0) paymentStatus = 'paid'; 
+            else if (paid > 0) paymentStatus = 'partial'; 
+
+            return {
+                ...inv,
+                remaining_amount: balance,
+                payment_display_status: paymentStatus
+            };
         });
-    }, [invoices, globalSearch]);
+    }, [invoices, globalSearch, dateFrom, dateTo]);
 
     const paginatedInvoices = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -74,193 +110,183 @@ export function useInvoicesLogic() {
         pending: allFiltered.filter(i => i.status !== 'مُعتمد').length
     }), [allFiltered]);
 
-    const handleAddNew = () => { setCurrentRecord({ lines: [], date: new Date().toISOString() }); setIsEditModalOpen(true); };
-    const handleEdit = (inv: any) => { setCurrentRecord(inv); setIsEditModalOpen(true); };
+    // =========================================================================
+    // 💰 [تعديل] دالة فتح مودال السداد - تجميع الأسماء قبل الفتح
+    // =========================================================================
+    const handleOpenPaymentModal = async (inv: any) => {
+        const balance = Number(inv.total_amount || 0) - Number(inv.paid_amount || 0);
+        
+        // 🚀 سحب كائنات المشاريع كاملة من مصفوفة الـ IDs
+        const selectedProjects = projects.filter(p => inv.project_ids?.includes(p.id));
+        
+        // 🚀 سحب اسم البارتنر
+        const pName = inv.client_name || inv.partners?.name || '';
 
-    // =========================================================================
-    // 🔏 0. ختم الفاتورة (صلاحية للأدمن فقط)
-    // =========================================================================
-    const handleToggleStamp = async (id: string, currentStatus: boolean) => {
-        if (!permissions.isAdmin) {
-            alert("🚫 عذراً، هذه الصلاحية مخصصة للمدير العام فقط!");
+        setSelectedInvoiceForPay({
+            id: undefined, 
+            invoice_id: inv.id,
+            invoice_number: inv.invoice_number,
+            partner_id: inv.partner_id,
+            partner_name: pName, // للعرض في المودال
+            selected_projects: selectedProjects, // للعرض كبادجات
+            project_ids: inv.project_ids || [], 
+            amount: balance > 0 ? balance : 0,
+            payment_method: 'تحويل بنكي'
+        });
+        
+        setIsReceiptModalOpen(true);
+    };
+
+    // 💰 وظيفة التسديد السريع القديمة
+    const handlePayInvoice = (inv: any) => {
+        const balance = Number(inv.total_amount || 0) - Number(inv.paid_amount || 0);
+        if (balance <= 0) {
+            showToast("هذه الفاتورة مسددة بالكامل ✅", "info"); // 🚀 تعديل لـ Toast
             return;
         }
+        const params = new URLSearchParams({
+            invoice_id: inv.id,
+            amount: balance.toString(),
+            client_name: inv.client_name || '',
+            ref: inv.invoice_number || ''
+        });
+        router.push(`/ReceiptVouchers?${params.toString()}`);
+    };
 
+    const handleAddNew = () => { 
+        setCurrentRecord({ lines: [], date: new Date().toISOString(), project_ids: [], selected_projects: [] }); 
+        setIsEditModalOpen(true); 
+    };
+
+    // =========================================================================
+    // 📝 [تعديل] دالة التعديل - تجميع الأسماء قبل الفتح
+    // =========================================================================
+    const handleEdit = (inv: any) => {
+        // 🚀 سحب كائنات المشاريع كاملة للعرض في مودال الفاتورة
+        const mappedProjects = projects.filter(p => inv.project_ids?.includes(p.id));
+        
+        setCurrentRecord({
+            ...inv,
+            client_name: inv.client_name || inv.partners?.name || '',
+            selected_projects: mappedProjects
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleToggleStamp = async (id: string, currentStatus: boolean) => {
+        if (!permissions.isAdmin) {
+            showToast("🚫 عذراً، هذه الصلاحية مخصصة للمدير العام فقط!", "error"); // 🚀 تعديل لـ Toast
+            return;
+        }
         setIsLoading(true);
         try {
-            const { error } = await supabase
-                .from('invoices')
-                .update({ is_stamped: !currentStatus }) // نعكس الحالة الحالية (ختم/إلغاء ختم)
-                .eq('id', id);
-
+            const { error } = await supabase.from('invoices').update({ is_stamped: !currentStatus }).eq('id', id);
             if (error) throw error;
-            
-            // تحديث البيانات في الشاشة فوراً
             fetchFullData(); 
+            showToast("تم تحديث حالة الختم بنجاح ✨", "success"); // 🚀 إضافة إشعار نجاح
         } catch (error) {
-            console.error("Stamp Error:", error);
-            alert("حدث خطأ أثناء محاولة ختم الفاتورة!");
+            showToast("حدث خطأ أثناء محاولة ختم الفاتورة! ❌", "error"); // 🚀 تعديل لـ Toast
         } finally {
             setIsLoading(false);
         }
     };
 
-    // =========================================================================
-    // 🚀 1. الترحيل: إنشاء الهيدر ثم السطور (مطابق تماماً لجدول journal_lines)
-    // =========================================================================
     const handlePostSelected = async () => {
         if (!selectedIds.length) return;
-        
         setIsLoading(true);
         try {
             const toPost = invoices.filter(inv => selectedIds.includes(inv.id) && inv.status !== 'مُعتمد');
-            
-            if (toPost.length === 0) {
-                alert("الفواتير المختارة مُرحلة بالفعل!");
-                return;
+            if (toPost.length === 0) { 
+                showToast("الفواتير المختارة مُرحلة بالفعل! ⚠️", "warning"); // 🚀 تعديل لـ Toast
+                return; 
             }
 
             for (const inv of toPost) {
                 const invDate = inv.date || new Date().toISOString().split('T')[0];
-                const unifiedNotes = `فاتورة #${inv.invoice_number} | ${inv.client_name}`;
-                const unifiedProjectId = (inv.project_ids && inv.project_ids.length > 0) ? inv.project_ids[0] : null;
-
-                // 1- حفظ رأس القيد في journal_headers
                 const { data: newHeader, error: headerErr } = await supabase
                     .from('journal_headers')
-                    .insert({
-                        entry_date: invDate,
-                        description: unifiedNotes,
-                        status: 'posted',
-                        reference_id: inv.id
-                    })
-                    .select('id')
-                    .single();
+                    .insert({ entry_date: invDate, description: `فاتورة #${inv.invoice_number} | ${inv.client_name}`, status: 'posted', reference_id: inv.id })
+                    .select('id').single();
 
                 if (headerErr) throw headerErr;
                 const headerId = newHeader.id;
-
                 const linesToInsert: any[] = [];
 
-                // 🛠️ دالة مساعدة لإنشاء السطر بناءً على أعمدة جدولك الفعلية
                 const addJLine = (accId: string, debit: number, credit: number, label: string) => {
                     if (accId && (debit > 0 || credit > 0)) {
                         linesToInsert.push({
-                            header_id: headerId,           // ✅ المسمى الصحيح في جدولك
-                            account_id: accId,             // الحساب
-                            partner_id: inv.partner_id,    // العميل
-                            project_id: unifiedProjectId,  // المشروع
-                            item_name: inv.description || label, // البند
+                            header_id: headerId,
+                            account_id: accId,
+                            partner_id: inv.partner_id,
+                            project_id: (inv.project_ids && inv.project_ids[0]) || null,
+                            item_name: inv.description || label,
                             quantity: Number(inv.quantity) || 1, 
                             unit_price: Number(inv.unit_price) || 0,
-                            debit: debit,                  // مدين
-                            credit: credit,                // دائن
-                            notes: `${label}: ${inv.invoice_number}` // الملاحظات
+                            debit: debit, credit: credit,
+                            notes: `${label}: ${inv.invoice_number}`
                         });
                     }
                 };
 
-                // --- توزيع أطراف القيد المحاسبي ---
-                // أ- الإيرادات (دائن بالإجمالي)
                 addJLine(inv.credit_account_id, 0, Number(inv.line_total), "إيراد مبيعات");
-                
-                // ب- ضريبة القيمة المضافة (دائن)
-                if (!inv.skip_zatca && Number(inv.tax_amount) > 0) {
-                    addJLine(inv.tax_acc_id, 0, Number(inv.tax_amount), "ضريبة قيمة مضافة");
-                }
-
-                // ج- ذمة العميل (مدين بالصافي)
+                if (!inv.skip_zatca && Number(inv.tax_amount) > 0) addJLine(inv.tax_acc_id, 0, Number(inv.tax_amount), "ضريبة قيمة مضافة");
                 addJLine(inv.debit_account_id, Number(inv.total_amount), 0, "مستحق على العميل");
-                
-                // د- خصم خامات (مدين)
-                if (Number(inv.materials_discount) > 0) {
-                    addJLine(inv.materials_acc_id, Number(inv.materials_discount), 0, "خصم خامات");
-                }
-                
-                // هـ- محتجز ضمان (مدين)
-                if (Number(inv.guarantee_amount) > 0) {
-                    addJLine(inv.guarantee_acc_id, Number(inv.guarantee_amount), 0, "محتجز ضمان أعمال");
-                }
+                if (Number(inv.materials_discount) > 0) addJLine(inv.materials_acc_id, Number(inv.materials_discount), 0, "خصم خامات");
+                if (Number(inv.guarantee_amount) > 0) addJLine(inv.guarantee_acc_id, Number(inv.guarantee_amount), 0, "محتجز ضمان أعمال");
 
-                // 2- حفظ السطور في جدول journal_lines
                 const { error: jErr } = await supabase.from('journal_lines').insert(linesToInsert);
                 if (jErr) throw jErr;
             }
 
-            // 3- تحديث حالة الفواتير في جدول invoices
-            const { error: upErr } = await supabase
-                .from('invoices')
-                .update({ status: 'مُعتمد' })
-                .in('id', selectedIds);
-            
-            if (upErr) throw upErr;
-
-            alert(`✅ تم ترحيل ${toPost.length} فاتورة بنجاح ومزامنة القيود!`);
+            await supabase.from('invoices').update({ status: 'مُعتمد' }).in('id', selectedIds);
             fetchFullData();
             setSelectedIds([]);
-
+            showToast(`✅ تم ترحيل ${toPost.length} فاتورة بنجاح!`, "success"); // 🚀 تعديل لـ Toast
         } catch (error: any) {
-            console.error("💥 خطأ في الترحيل:", error.message);
-            alert("حدث خطأ أثناء الترحيل، راجع كونسول المتصفح.");
+            showToast("حدث خطأ أثناء الترحيل! ❌", "error"); // 🚀 تعديل لـ Toast
         } finally {
             setIsLoading(false);
         }
     };
 
-    // =========================================================================
-    // 🔙 2. فك الترحيل: مسح السطور ثم الهيدر (باستخدام header_id)
-    // =========================================================================
     const handleUnpostSelected = async () => {
         if(!selectedIds.length) return;
         setIsLoading(true);
         try {
-            const { data: headers } = await supabase
-                .from('journal_headers')
-                .select('id')
-                .in('reference_id', selectedIds);
-
+            const { data: headers } = await supabase.from('journal_headers').select('id').in('reference_id', selectedIds);
             if (headers && headers.length > 0) {
                 const headerIds = headers.map(h => h.id);
                 await supabase.from('journal_lines').delete().in('header_id', headerIds);
                 await supabase.from('journal_headers').delete().in('id', headerIds);
             }
-            
             await supabase.from('invoices').update({ status: 'معلق' }).in('id', selectedIds);
             fetchFullData();
             setSelectedIds([]);
-            alert("✅ تم فك الترحيل وحذف القيود المحاسبية.");
+            showToast("تم تعليق الفواتير بنجاح 🔴", "success"); // 🚀 إضافة إشعار نجاح
         } catch (error: any) {
-            console.error("💥 خطأ فك الترحيل:", error.message);
+            console.error(error.message);
+            showToast("حدث خطأ أثناء التراجع عن الترحيل! ❌", "error"); // 🚀 تعديل لـ Toast
         } finally {
             setIsLoading(false);
         }
     };
 
-    // =========================================================================
-    // 🗑️ 3. الحذف: تنظيف محاسبي كامل قبل حذف الفاتورة
-    // =========================================================================
     const handleDeleteSelected = async () => {
-        if(!selectedIds.length || !confirm("حذف المختار؟")) return;
+        if(!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي؟")) return;
         setIsLoading(true);
         try {
-            const { data: headers } = await supabase
-                .from('journal_headers')
-                .select('id')
-                .in('reference_id', selectedIds);
-
+            const { data: headers } = await supabase.from('journal_headers').select('id').in('reference_id', selectedIds);
             if (headers && headers.length > 0) {
                 const headerIds = headers.map(h => h.id);
-                await supabase.from('journal_lines').delete().in('journal_header_id', headerIds);
+                await supabase.from('journal_lines').delete().in('header_id', headerIds);
                 await supabase.from('journal_headers').delete().in('id', headerIds);
             }
-
             await supabase.from('invoices').delete().in('id', selectedIds);
-            
             fetchFullData();
             setSelectedIds([]);
+            showToast("تم الحذف النهائي بنجاح 🗑️", "success"); // 🚀 إضافة إشعار نجاح
         } catch (error) {
-            console.error("Delete Error:", error);
-            alert("حدث خطأ أثناء الحذف!");
+            showToast("حدث خطأ أثناء الحذف! ❌", "error"); // 🚀 تعديل لـ Toast
         } finally {
             setIsLoading(false);
         }
@@ -270,7 +296,6 @@ export function useInvoicesLogic() {
         setIsSaving(true);
         try {
             const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
-
             const invoiceHeader = {
                 invoice_number: record.invoice_number,
                 date: record.date,
@@ -302,27 +327,18 @@ export function useInvoicesLogic() {
             };
 
             let savedInvoiceId = record.id;
-
             if (record.id) {
                 const { error: headErr } = await supabase.from('invoices').update(invoiceHeader).eq('id', record.id);
                 if (headErr) throw headErr;
             } else {
-                const { data: newHead, error: headErr } = await supabase
-                    .from('invoices')
-                    .insert([invoiceHeader])
-                    .select('id')
-                    .single();
-                
+                const { data: newHead, error: headErr } = await supabase.from('invoices').insert([invoiceHeader]).select('id').single();
                 if (headErr) throw headErr;
                 savedInvoiceId = newHead.id;
             }
 
             const linesToSave = record.lines || record.items || [];
             if (savedInvoiceId && linesToSave.length > 0) {
-                if (record.id) {
-                    await supabase.from('invoice_lines').delete().eq('invoice_id', savedInvoiceId);
-                }
-
+                if (record.id) await supabase.from('invoice_lines').delete().eq('invoice_id', savedInvoiceId);
                 const preparedLines = linesToSave.map((line: any) => ({
                     invoice_id: savedInvoiceId,
                     item_id: cleanId(line.item_id),
@@ -332,17 +348,15 @@ export function useInvoicesLogic() {
                     unit_price: Number(line.unit_price) || 0,
                     total_price: Number(line.total_price) || (Number(line.quantity) * Number(line.unit_price)) || 0
                 }));
-
                 const { error: linesErr } = await supabase.from('invoice_lines').insert(preparedLines);
                 if (linesErr) throw linesErr;
             }
 
             setIsEditModalOpen(false);
             fetchFullData(); 
-            
+            showToast("تم حفظ بيانات الفاتورة بنجاح 💾", "success"); // 🚀 إضافة إشعار نجاح
         } catch (error: any) {
-            console.error("Save Error:", error);
-            alert("حدث خطأ أثناء الحفظ!");
+            showToast("حدث خطأ أثناء الحفظ! ❌", "error"); // 🚀 تعديل لـ Toast
         } finally {
             setIsSaving(false);
         }
@@ -354,11 +368,14 @@ export function useInvoicesLogic() {
         projects,
         isLoading,
         isSaving,
-        
-        // 👈 تصدير الصلاحيات ودالة الختم عشان تستخدمهم في الـ page.tsx
         permissions,
         handleToggleStamp,
-        
+        handlePayInvoice,
+        isReceiptModalOpen, 
+        setIsReceiptModalOpen,
+        selectedInvoiceForPay, 
+        setSelectedInvoiceForPay, 
+        handleOpenPaymentModal,
         globalSearch, setGlobalSearch,
         dateFrom, setDateFrom,
         dateTo, setDateTo,

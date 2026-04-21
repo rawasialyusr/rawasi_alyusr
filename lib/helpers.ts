@@ -460,3 +460,15 @@ export const fetchAllSupabaseData = async (
   console.log(`🏁 اكتمل السحب! إجمالي بيانات [${tableName}]: ${allData.length} صف.`);
   return allData;
 };
+// 🛡️ دالة فحص الصلاحيات الموحدة (Global Permission Checker)
+export const canUser = (profile: any, module: string, action: string): boolean => {
+  // 1. لو المستخدم "مدير نظام" (Admin) يفتح له كل الأبواب
+  if (profile?.is_admin) return true;
+
+  // 2. الوصول لصلاحيات الموديول من الـ JSONB
+  const userPermissions = profile?.permissions || {};
+  const moduleActions = userPermissions[module];
+
+  // 3. التأكد إن الصلاحية مصفوفة (Array) وبتحتوي على الفعل المطلوب
+  return Array.isArray(moduleActions) && moduleActions.includes(action);
+};

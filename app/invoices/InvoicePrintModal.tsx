@@ -4,7 +4,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency, formatDate, tafqeet } from '@/lib/helpers';
 import ZatcaQRCode from './ZatcaQRCode';
 import { supabase } from '@/lib/supabase'; 
-import { QRCodeSVG } from 'qrcode.react'; // 🚀 1. استدعاء مكتبة الباركود
+import { QRCodeSVG } from 'qrcode.react';
 
 interface InvoicePrintModalProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ interface InvoicePrintModalProps {
 export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrintModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [fetchedPartner, setFetchedPartner] = useState<any>(null);
+  const [fetchedProjects, setFetchedProjects] = useState<string>(''); 
   const [isDownloading, setIsDownloading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -30,11 +31,21 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
           if (partnerData) setFetchedPartner(partnerData);
         }
 
+        if (data?.project_ids && data.project_ids.length > 0) {
+            const { data: projectsData } = await supabase
+                .from('projects')
+                .select('Property')
+                .in('id', data.project_ids);
+            if (projectsData) {
+                setFetchedProjects(projectsData.map(p => p.Property).join(' - '));
+            }
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('role, username, full_name, signature_url') // 🚀 2. ضفنا signature_url هنا
+            .select('role, username, full_name, signature_url')
             .eq('id', session.user.id)
             .single();
           if (profile) setCurrentUser(profile);
@@ -63,18 +74,22 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
             <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
             <style>
               @page { size: A4 portrait; margin: 0; }
-              body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; font-family: 'Cairo', sans-serif; }
+              body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; font-family: 'Cairo', sans-serif; color: #0f172a; }
               * { box-sizing: border-box; }
               
-              /* إجبار المتصفح على عرض الورقة بالكامل بدون قص */
-              #invoice-paper { 
+              .a4-paper { 
                  box-shadow: none !important; 
                  border: none !important; 
                  width: 210mm !important; 
-                 min-height: 296.5mm !important; 
-                 padding: 10mm 15mm !important; 
+                 height: 296.5mm !important; 
+                 overflow: hidden !important; 
+                 padding: 12mm 15mm !important; 
                  margin: 0 !important;
+                 page-break-after: avoid !important;
               }
+              
+              .print-table th { background-color: #f8fafc !important; color: #475569 !important; border-bottom: 2px solid #e2e8f0 !important; }
+              .print-table td { border-bottom: 1px solid #f1f5f9 !important; }
             </style>
           </head>
           <body>
@@ -106,12 +121,7 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
         margin:       0, 
         filename:     fileName,
         image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  {
-          scale: 2, 
-          useCORS: true,
-          scrollY: 0,
-          windowWidth: element.scrollWidth 
-        },
+        html2canvas:  { scale: 2, useCORS: true, scrollY: 0, windowWidth: element.scrollWidth },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
@@ -148,7 +158,6 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
       ? (currentUser?.full_name || currentUser?.username || 'توقيع إلكتروني') 
       : (data?.accountant_name || '');
 
-  // 🚀 3. تجهيز بيانات الـ QR Code للتوقيع
   const signatureQRData = `
 تم الاعتماد بواسطة: ${accountantName}
 رقم الفاتورة: ${data?.invoice_number || '---'}
@@ -161,228 +170,233 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px' }}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '950px', maxHeight: '95vh', borderRadius: '15px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', padding: '20px' }}>
+      
+      <style>{`
+        .pdf-scroll-area { width: 100%; overflow-y: auto; display: flex; justify-content: center; padding-bottom: 40px; }
+        .pdf-scroll-area::-webkit-scrollbar { display: none; } /* إخفاء السكرول بار لشكل أنظف */
+      `}</style>
+
+      {/* 🎛️ شريط الأدوات الطائر (Floating Action Bar - Apple Style) */}
+      <div style={{ background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(30px)', padding: '10px 20px', borderRadius: '100px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', flexShrink: 0, border: '1px solid rgba(255,255,255,0.5)' }}>
+        <span style={{ fontWeight: 900, color: THEME.primary, fontSize: '14px', marginRight: '10px' }}>معاينة الطباعة</span>
+        <div style={{ width: '1px', height: '20px', background: '#cbd5e1' }}></div>
+        <button onClick={handleDownloadPDF} disabled={isDownloading} style={{ padding: '8px 20px', background: 'transparent', color: THEME.primary, border: 'none', borderRadius: '50px', cursor: isDownloading ? 'wait' : 'pointer', fontWeight: 800, transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = '#f1f5f9'} onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}>
+            {isDownloading ? '⏳ جاري التجهيز...' : '📥 تحميل PDF'}
+        </button>
+        <button onClick={handlePrint} style={{ padding: '8px 25px', background: THEME.primary, color: 'white', border: 'none', borderRadius: '50px', cursor: 'pointer', fontWeight: 900, boxShadow: `0 4px 15px ${THEME.primary}40`, transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+            طباعة
+        </button>
+        <button onClick={onClose} style={{ padding: '8px 20px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '50px', cursor: 'pointer', fontWeight: 800, transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = '#e2e8f0'} onMouseOut={(e) => e.currentTarget.style.background = '#f1f5f9'}>
+            إغلاق
+        </button>
+      </div>
+
+      <div className="pdf-scroll-area">
         
-        <div style={{ padding: '15px 25px', background: THEME.primary, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ color: 'white', margin: 0, fontWeight: 900 }}>🖨️ معاينة طباعة الفاتورة</h3>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={handleDownloadPDF} disabled={isDownloading} style={{ padding: '8px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: isDownloading ? 'wait' : 'pointer', fontWeight: 900 }}>
-                {isDownloading ? '⏳ جاري التجهيز...' : '📥 تحميل PDF'}
-            </button>
-            <button onClick={handlePrint} style={{ padding: '8px 20px', background: THEME.accent, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 900 }}>طباعة</button>
-            <button onClick={onClose} style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>إغلاق</button>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#e2e8f0', padding: '20px' }}>
+        {/* 📄 الورقة البيضاء (Crisp White A4) */}
+        <div 
+          className="a4-paper"
+          id="invoice-paper"
+          ref={printRef} 
+          style={{ 
+            width: '210mm', 
+            height: '296.5mm', 
+            overflow: 'hidden', 
+            backgroundColor: '#ffffff', 
+            position: 'relative', 
+            padding: '12mm 15mm', 
+            direction: 'rtl', 
+            fontFamily: "'Cairo', sans-serif",
+            boxSizing: 'border-box',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', /* ظل ناعم زي الورقة الحقيقية */
+            borderRadius: '4px',
+            color: '#0f172a'
+          }}
+        >
           
-          <div 
-            id="invoice-paper"
-            ref={printRef} 
-            style={{ 
-              width: '210mm', 
-              minHeight: '296.5mm', 
-              margin: '0 auto',     
-              display: 'flex', 
-              flexDirection: 'column', 
-              backgroundColor: 'white', 
-              position: 'relative', 
-              padding: '10mm 15mm', 
-              direction: 'rtl', 
-              fontFamily: "'Cairo', sans-serif",
-              boxSizing: 'border-box',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.15)' 
-            }}
-          >
-            
-            <img 
-              src="/in-Logo.png" 
-              alt="Watermark" 
-              onError={handleImageError}
-              style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '75%', opacity: 0.08, pointerEvents: 'none', zIndex: 0 }} 
-            />
+          <img 
+            src="/in-Logo.png" 
+            alt="Watermark" 
+            onError={handleImageError}
+            style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70%', opacity: 0.03, pointerEvents: 'none', zIndex: 0, filter: 'grayscale(100%)' }} 
+          />
 
-            <div style={{ flex: 1, position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', borderBottom: `2px solid ${THEME.primary}`, paddingBottom: '10px' }}>
-                 <div>
+          <div style={{ flex: 1, position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
+            
+            {/* --- الهيدر النظيف (Clean Header) --- */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '1px solid #e2e8f0', paddingBottom: '20px' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <img 
                       src="/in-Logo.png" 
                       alt="Logo" 
                       onError={handleImageError}
-                      style={{ height: '65px', marginRight: '70px', display: 'block' }} 
+                      style={{ height: '75px', objectFit: 'contain' }} 
                     />
-                    <h2 style={{ margin: '5px 0', color: THEME.primary, fontWeight: 900, fontSize: '20px' }}>مؤسسة طفله عبدالله السبيعي للمقاولات</h2>
-                    <div style={{ fontSize: '12px' }}>
-                       <p style={{ margin: '2px 0' }}>الرقم الضريبي: 312487477800003</p>
-                       <p style={{ margin: '2px 0' }}>الرقم الموحد : 7051013519 </p>
+                    <div>
+                      <h2 style={{ margin: '0 0 5px 0', color: THEME.primary, fontWeight: 900, fontSize: '20px', letterSpacing: '-0.5px' }}>مؤسسة طفله عبدالله السبيعي للمقاولات</h2>
+                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', gap: '15px' }}>
+                         <span>الرقم الضريبي: <strong style={{color: '#334155'}}>312487477800003</strong></span>
+                         <span>الرقم الموحد: <strong style={{color: '#334155'}}>7051013519</strong></span>
+                      </div>
                     </div>
                  </div>
-                 <div style={{ textAlign: 'left' }}>
-                    <h1 style={{ color: THEME.primary, margin: 0, fontSize: '24px' }}>فاتورة ضريبية</h1>
-                    <p style={{ color: '#666', fontSize: '13px', margin: 0 }}>Tax Invoice</p>
-                    <div style={{ marginTop: '5px' }}>
+                 <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <h1 style={{ color: '#0f172a', margin: '0 0 2px 0', fontSize: '24px', fontWeight: 900, letterSpacing: '-1px' }}>فاتورة ضريبية</h1>
+                    <p style={{ color: '#94a3b8', fontSize: '11px', margin: '0 0 10px 0', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>Tax Invoice</p>
+                    <div style={{ padding: '2px', background: 'white', border: '1px solid #f1f5f9', borderRadius: '8px' }}>
                        <ZatcaQRCode record={data} />
                     </div>    
                  </div>
-              </div>
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                 <div style={{ padding: '10px', border: '1px solid #eee', borderRadius: '8px' }}>
-                    <h4 style={{ margin: '0 0 5px 0', borderBottom: '1px solid #eee', fontSize: '13px', paddingBottom: '5px' }}>بيانات العميل</h4>
-                    <p style={{ margin: '3px 0', fontSize: '12px' }}><strong>الاسم:</strong> {customerName}</p>
-                    <p style={{ margin: '3px 0', fontSize: '12px' }}><strong>الضريبة:</strong> {customerVat}</p>
-                    <div style={{ marginTop: '3px', fontSize: '12px', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
-                       <strong>العنوان:</strong>
-                       <span style={{ flex: 1, whiteSpace: 'normal', lineHeight: '1.6', direction: 'rtl', unicodeBidi: 'isolate' }}>
-                         <bdi dir="rtl">{customerAddress}</bdi>
-                       </span>
+            {/* --- بيانات العميل والفاتورة (Minimalist Layout) --- */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', fontSize: '13px' }}>
+                 <div style={{ flex: 1, paddingRight: '15px', borderRight: `3px solid ${THEME.accent}` }}>
+                    <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 800, marginBottom: '8px' }}>مُصدرة إلى (BILLED TO)</div>
+                    <div style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', marginBottom: '4px' }}>{customerName}</div>
+                    <div style={{ color: '#475569', marginBottom: '2px' }}>الرقم الضريبي: <span style={{fontWeight: 700}}>{customerVat}</span></div>
+                    <div style={{ color: '#475569' }}>العنوان: <span style={{fontWeight: 700}}>{customerAddress}</span></div>
+                 </div>
+
+                 <div style={{ flex: 1, paddingRight: '15px', borderRight: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 800, marginBottom: '8px' }}>تفاصيل الفاتورة (INVOICE DETAILS)</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: '#64748b' }}>رقم الفاتورة:</span>
+                        <span style={{ fontWeight: 900, color: '#0f172a' }}>#{data.invoice_number}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: '#64748b' }}>تاريخ الإصدار:</span>
+                        <span style={{ fontWeight: 700, color: '#0f172a' }}>{formatDate(data.date)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>المشروع المرتبط:</span>
+                        <span style={{ fontWeight: 700, color: '#0f172a', textAlign: 'left', maxWidth: '60%' }}>{fetchedProjects || data._projectNames || '---'}</span>
                     </div>
                  </div>
-                 <div style={{ padding: '10px', border: '1px solid #eee', borderRadius: '8px' }}>
-                    <h4 style={{ margin: '0 0 5px 0', borderBottom: '1px solid #eee', fontSize: '13px', paddingBottom: '5px' }}>بيانات الفاتورة</h4>
-                    <p style={{ margin: '3px 0', fontSize: '12px' }}><strong>رقم الفاتورة:</strong> #{data.invoice_number}</p>
-                    <p style={{ margin: '3px 0', fontSize: '12px' }}><strong>تاريخ الإصدار:</strong> {formatDate(data.date)}</p>
-                    
-                    <div style={{ marginTop: '3px', fontSize: '12px', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
-                       <strong>المشروع:</strong>
-                       <span style={{ flex: 1, whiteSpace: 'normal', lineHeight: '1.6', direction: 'rtl', unicodeBidi: 'isolate' }}>
-                         <bdi dir="rtl">{data._projectNames || '---'}</bdi>
-                       </span>
-                    </div>
-                 </div>
-              </div>
+            </div>
 
-              <table style={{ width: '100%', marginBottom: '10px', borderCollapse: 'collapse', fontSize: '12px' }}>
+            {/* --- جدول الأصناف (Clean Table) --- */}
+            <table className="print-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginBottom: '20px' }}>
                  <thead>
-                    <tr style={{ background: THEME.primary, color: 'white' }}>
-                       <th style={{ border: '1px solid #ddd', padding: '7px' }}>م</th>
-                       <th style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'right' }}>البيان</th>
-                       <th style={{ border: '1px solid #ddd', padding: '7px' }}>الوحدة</th>
-                       <th style={{ border: '1px solid #ddd', padding: '7px' }}>الكمية</th>
-                       <th style={{ border: '1px solid #ddd', padding: '7px' }}>السعر</th>
-                       <th style={{ border: '1px solid #ddd', padding: '7px' }}>الإجمالي</th>
+                    <tr>
+                       <th style={{ padding: '12px 8px', textAlign: 'center', width: '50px', color: '#64748b', fontSize: '11px', borderBottom: '2px solid #e2e8f0' }}>#</th>
+                       <th style={{ padding: '12px 8px', textAlign: 'right', color: '#64748b', fontSize: '11px', borderBottom: '2px solid #e2e8f0' }}>البيان / الوصف</th>
+                       <th style={{ padding: '12px 8px', textAlign: 'center', width: '80px', color: '#64748b', fontSize: '11px', borderBottom: '2px solid #e2e8f0' }}>الوحدة</th>
+                       <th style={{ padding: '12px 8px', textAlign: 'center', width: '80px', color: '#64748b', fontSize: '11px', borderBottom: '2px solid #e2e8f0' }}>الكمية</th>
+                       <th style={{ padding: '12px 8px', textAlign: 'center', width: '100px', color: '#64748b', fontSize: '11px', borderBottom: '2px solid #e2e8f0' }}>السعر</th>
+                       <th style={{ padding: '12px 8px', textAlign: 'left', width: '120px', color: '#64748b', fontSize: '11px', borderBottom: '2px solid #e2e8f0' }}>الإجمالي</th>
                     </tr>
                  </thead>
                  <tbody>
                     {invoiceLines.map((line: any, index: number) => (
                       <tr key={index}>
-                         <td style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'center' }}>{index + 1}</td>
-                         <td style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'right', whiteSpace: 'normal', lineHeight: '1.6', direction: 'rtl', unicodeBidi: 'isolate' }}>
+                         <td style={{ padding: '14px 8px', textAlign: 'center', color: '#94a3b8', fontWeight: 600, borderBottom: '1px solid #f1f5f9' }}>{index + 1}</td>
+                         <td style={{ padding: '14px 8px', textAlign: 'right', color: '#0f172a', fontWeight: 700, borderBottom: '1px solid #f1f5f9' }}>
                            <bdi dir="rtl">{line.description}</bdi>
                          </td>
-                         <td style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'center' }}>{line.unit}</td>
-                         <td style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'center' }}>{line.quantity}</td>
-                         <td style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'center' }}>{formatCurrency(line.unit_price)}</td>
-                         <td style={{ border: '1px solid #ddd', padding: '7px', textAlign: 'center' }}>{formatCurrency(line.total_price)}</td>
+                         <td style={{ padding: '14px 8px', textAlign: 'center', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{line.unit}</td>
+                         <td style={{ padding: '14px 8px', textAlign: 'center', color: '#0f172a', fontWeight: 800, borderBottom: '1px solid #f1f5f9' }}>{line.quantity}</td>
+                         <td style={{ padding: '14px 8px', textAlign: 'center', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(line.unit_price)}</td>
+                         <td style={{ padding: '14px 8px', textAlign: 'left', color: '#0f172a', fontWeight: 800, borderBottom: '1px solid #f1f5f9' }}>{formatCurrency(line.total_price)}</td>
                       </tr>
                     ))}
                  </tbody>
-              </table>
+            </table>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '20px' }}>
-                 <div style={{ width: '48%', padding: '15px', border: `1px solid #e2e8f0`, borderRadius: '10px', background: '#f8fafc' }}>
-                    <p style={{ fontWeight: 900, fontSize: '13px', marginBottom: '8px', color: '#64748b' }}>المبلغ الإجمالي كتابةً:</p>
-                    <p style={{ color: THEME.primary, fontWeight: 900, fontSize: '14px', lineHeight: '1.8', margin: 0 }}> 
-                      {tafqeet(data.total_amount || data.net_amount)} 
-                    </p>
+            {/* --- ملخص الحسابات (Refined Totals) --- */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 'auto', marginBottom: '20px' }}>
+                 
+                 <div style={{ width: '50%', paddingRight: '10px' }}>
+                    <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 800, marginBottom: '5px' }}>المبلغ الإجمالي كتابةً:</div>
+                    <div style={{ color: '#0f172a', fontWeight: 800, fontSize: '13px', lineHeight: '1.8' }}> 
+                      فقط {tafqeet(data.total_amount || data.net_amount)} لا غير.
+                    </div>
                  </div>
 
-                 <div style={{ width: '48%', fontSize: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
-                       <span style={{ color: '#475569' }}>إجمالي الأعمال:</span>
-                       <strong>{formatCurrency(data.line_total || data.total_amount || 0)}</strong>
+                 <div style={{ width: '40%', fontSize: '13px', color: '#334155' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc' }}>
+                       <span style={{ color: '#64748b' }}>إجمالي الأعمال:</span>
+                       <strong style={{ color: '#0f172a' }}>{formatCurrency(data.line_total || data.total_amount || 0)}</strong>
                     </div>
 
                     {data.materials_discount > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9', color: '#ef4444' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc', color: '#dc2626' }}>
                          <span>يُخصم (مواد):</span>
                          <strong style={{ direction: 'ltr' }}>- {formatCurrency(data.materials_discount)}</strong>
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
-                       <span style={{ color: '#475569', fontWeight: 'bold' }}>الإجمالي الخاضع للضريبة:</span>
-                       <strong style={{ color: THEME.primary }}>{formatCurrency(data.taxable_amount || data.line_total || data.total_amount || 0)}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc' }}>
+                       <span style={{ color: '#64748b' }}>الخاضع للضريبة:</span>
+                       <strong style={{ color: '#0f172a' }}>{formatCurrency(data.taxable_amount || data.line_total || data.total_amount || 0)}</strong>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
-                       <span style={{ color: '#475569' }}>ضريبة القيمة المضافة (15%):</span>
-                       <strong>{formatCurrency(data.tax_amount || 0)}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc' }}>
+                       <span style={{ color: '#64748b' }}>ضريبة القيمة المضافة (15%):</span>
+                       <strong style={{ color: '#0f172a' }}>{formatCurrency(data.tax_amount || 0)}</strong>
                     </div>
 
                     {data.guarantee_amount > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9', color: '#ef4444' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc', color: '#dc2626' }}>
                          <span>يُخصم ضمان أعمال ({data.guarantee_percent}%):</span>
                          <strong style={{ direction: 'ltr' }}>- {formatCurrency(data.guarantee_amount)}</strong>
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 15px', background: THEME.primary, color: 'white', borderRadius: '10px', marginTop: '12px' }}>
-                       <span style={{ fontWeight: 900, fontSize: '14px' }}>الصافي المستحق:</span>
-                       <span style={{ fontWeight: 900, fontSize: '16px' }}>{formatCurrency(data.total_amount)}</span>
+                    {/* الصافي النهائي - Clean Box */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: `2px solid ${THEME.primary}`, marginTop: '10px' }}>
+                       <span style={{ fontWeight: 900, fontSize: '15px', color: THEME.primary }}>الصافي المستحق:</span>
+                       <span style={{ fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>{formatCurrency(data.total_amount)}</span>
                     </div>
                  </div>
+            </div>
+
+            {/* --- التوقيعات والأختام --- */}
+            {(showStamp || showAccountant) && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', padding: '0 40px' }}>
+                 {showAccountant ? (
+                   <div style={{ textAlign: 'center' }}>
+                      <p style={{ fontWeight: 800, fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>توقيع المحاسب المعتمد</p>
+                      {currentUser?.signature_url ? (
+                          <img src={currentUser.signature_url} alt="توقيع المحاسب" style={{ maxHeight: '50px', transform: 'rotate(-2deg)', filter: 'grayscale(100%) brightness(0.8)' }} />
+                      ) : (
+                          <div style={{ border: '1px dashed #e2e8f0', padding: '5px', borderRadius: '8px' }}>
+                              <QRCodeSVG value={signatureQRData} size={45} level="L" fgColor="#475569" />
+                          </div>
+                      )}
+                   </div>
+                 ) : ( <div style={{ width: '100px' }}></div> )}
+
+                 {showStamp ? (
+                   <div style={{ textAlign: 'center' }}>
+                      <img src="/company-stamp.png" alt="ختم الشركة" onError={handleImageError} style={{ maxHeight: '70px', opacity: 0.85, mixBlendMode: 'multiply' }} />
+                   </div>
+                 ) : ( <div style={{ width: '100px' }}></div> )}
               </div>
-
-              {(showStamp || showAccountant) && (
-                <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '30px', paddingBottom: '20px' }}>
-                   {showStamp ? (
-                     <div style={{ textAlign: 'center' }}>
-                        {/* <p style={{ fontWeight: 900, fontSize: '13px', margin: '0 0 5px 0' }}>ختم الشركة</p> */}
-                        <img 
-                          src="/company-stamp.png" 
-                          alt="ختم الشركة" 
-                          onError={handleImageError}
-                          style={{ maxHeight: '75px' }} 
-                        />
-                     </div>
-                   ) : (
-                     <div style={{ width: '100px' }}></div> 
-                   )}
-                   
-                   {/* 🚀 4. الذكاء الاصطناعي: لو مفيش صورة، هيعرض QR Code بدل النص */}
-                   {showAccountant ? (
-                     <div style={{ textAlign: 'center' }}>
-                        <p style={{ fontWeight: 900, fontSize: '13px', margin: '0 0 5px 0' }}>توقيع المحاسب</p>
-                        
-                        {currentUser?.signature_url ? (
-                            <img 
-                               src={currentUser.signature_url} 
-                               alt="توقيع المحاسب" 
-                               style={{ maxHeight: '65px', transform: 'rotate(-2deg)' }} 
-                            />
-                        ) : (
-                            <div style={{ background: 'white', padding: '5px', borderRadius: '8px', border: `1px dashed ${THEME.border}`, display: 'inline-block', marginTop: '5px' }}>
-                                <QRCodeSVG value={signatureQRData} size={60} level="L" />
-                            </div>
-                        )}
-                     </div>
-                   ) : (
-                     <div style={{ width: '100px' }}></div>
-                   )}
-                </div>
-              )}
-            </div>
-
-            <div style={{ 
-              marginTop: 'auto',
-              borderTop: `2px solid ${THEME.primary}`, 
-              paddingTop: '10px', 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              fontSize: '11px', 
-              color: '#444',
-              position: 'relative',
-              zIndex: 10
-            }}>
-               <div><strong>العنوان:</strong> الدمام - حي الفيصليه - شارع السعيره</div>
-               <div><strong>جوال:</strong> 0578018944</div>
-               <div><strong>جوال:</strong> 0547606876</div>
-               <div>rawasi.alyusr@gmail.com</div>
-            </div>
-
+            )}
           </div>
+
+          {/* --- الفوتر النظيف --- */}
+          <div style={{ 
+            borderTop: `1px solid #e2e8f0`, 
+            paddingTop: '15px', 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            fontSize: '11px', 
+            color: '#64748b',
+            fontWeight: 600,
+            position: 'relative',
+            zIndex: 10
+          }}>
+             <div>الدمام - حي الفيصليه - شارع السعيره</div>
+             <div style={{ display: 'flex', gap: '15px' }}>
+                 <span>0578018944</span>
+                 <span>0547606876</span>
+             </div>
+             <div>rawasi.alyusr@gmail.com</div>
+          </div>
+
         </div>
       </div>
     </div>

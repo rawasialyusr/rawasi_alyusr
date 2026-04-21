@@ -4,7 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import RawasiFilterSidebar from '@/components/rawasifiltersidebar';
-import { useSidebar } from '@/lib/SidebarContext'; // 🚀 1. استدعاء مخزن السايد بار
+import { useSidebar } from '@/lib/SidebarContext'; 
 
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -16,7 +16,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   const [userRole, setUserRole] = useState('');
   const dragStartPos = useRef({ x: 0, y: 0 });
 
-  // 🚀 2. سحب المحتوى الديناميكي للصفحة الحالية من المخزن
   const { actions, summary } = useSidebar(); 
 
   useEffect(() => {
@@ -26,10 +25,16 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         if (pathname !== '/login') router.replace('/login');
         return;
       }
-      const { data: profile } = await supabase.from('profiles').select('role, permissions').eq('id', session.user.id).single();
+      
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+      
       if (profile) {
-        setUserRole(profile.role);
+        setUserRole(profile.role || (profile.is_admin ? 'admin' : 'user'));
         setPermissions(profile.permissions || {});
+        
+        // لوج للتأكد من البيانات
+        console.log("🛡️ User Role:", profile.role);
+        console.log("📊 Permissions Map:", profile.permissions);
       }
     };
     fetchAuth();
@@ -84,9 +89,36 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     }
   ];
 
+  // 🛡️ دالة التحقق "الذكية" المحدثة للربط بين الكود والداتا بيز
   const canView = (moduleId: string) => {
-    if (userRole === 'admin' || moduleId === 'home') return true;
-    return permissions?.[moduleId]?.view === true;
+    if (moduleId === 'home' || moduleId === 'profile') return true;
+    if (userRole === 'admin' || permissions?.is_admin === true) return true;
+
+    const idMap: Record<string, string> = {
+      'invoices': 'boq',
+      'labor_logs': 'labor',
+      'projects': 'sites',
+      'employees': 'all_emp',
+      'emp_adv': 'emp_adv',
+      'emp_ded': 'emp_ded'
+    };
+
+    const targetIdInDb = idMap[moduleId] || moduleId;
+    const moduleData = permissions?.[targetIdInDb];
+
+    if (!moduleData) return false;
+
+    if (typeof moduleData === 'object' && !Array.isArray(moduleData)) {
+      return moduleData.view === true || moduleData.show === true;
+    }
+
+    if (Array.isArray(moduleData)) {
+      return moduleData.includes('view');
+    }
+
+    if (typeof moduleData === 'boolean') return moduleData;
+
+    return false;
   };
 
   const onMouseDown = (e: React.MouseEvent) => { 
@@ -111,14 +143,15 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     };
   }, [isDragging]);
 
-  let animationDelayCounter = 0;
-
   if (pathname === '/login') return <>{children}</>;
 
   const currentPageTitle = menuGroups.flatMap(g => g.items).find(i => i.path === pathname)?.title || "إدارة النظام";
 
+  // 🚀 تعريف العداد هنا قبل البدء في رسم القائمة لحل مشكلة الـ ReferenceError
+  let animationDelayCounter = 0;
+
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'row-reverse', minHeight: '100vh' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
         
@@ -127,7 +160,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           50% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4), 0 0 25px 5px rgba(197, 160, 89, 0.3); transform: scale(1.05); }
         }
         
-        /* 🌟 1. الزر العائم (Glassy FAB) */
         .fab-main {
           position: fixed; bottom: ${position.y}px; left: ${position.x}px; width: 85px; height: 85px; z-index: 10000;
           background: linear-gradient(145deg, rgba(67, 52, 46, 0.85), rgba(26, 21, 19, 0.95));
@@ -149,7 +181,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           transform: ${isOpen ? 'scale(1.15)' : 'scale(1)'};
         }
 
-        /* 🌟 2. خلفية المنيو (Glassy Overlay) */
         .overlay-screen {
           position: fixed; inset: 0; z-index: 9000;
           background: radial-gradient(circle at center, rgba(40, 30, 25, 0.6) 0%, rgba(15, 12, 10, 0.9) 100%);
@@ -166,7 +197,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
         a { text-decoration: none; outline: none; }
         
-        /* 🌟 3. كروت المنيو (Glassmorphism Cards) */
         .nav-card {
           background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -184,45 +214,38 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             background: linear-gradient(135deg, rgba(197, 160, 89, 0.2) 0%, rgba(197, 160, 89, 0.05) 100%);
             border-color: rgba(197, 160, 89, 0.5); 
             transform: translateY(-8px); 
-            box-shadow: 0 12px 40px 0 rgba(197, 160, 89, 0.25);
         }
 
-        /* 🌟 4. الأيقونات داخل الكروت (Glassy Icons) */
         .icon-wrapper { 
             background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255,255,255,0.1);
             width: 65px; height: 65px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; transition: 0.4s; 
-            box-shadow: inset 0 2px 5px rgba(255,255,255,0.05);
         }
         .nav-card.active { 
             background: linear-gradient(135deg, rgba(197, 160, 89, 0.3) 0%, rgba(197, 160, 89, 0.1) 100%); 
             border-color: #C5A059; 
-            box-shadow: 0 8px 32px 0 rgba(197, 160, 89, 0.3);
         }
-        .nav-card.active .icon-wrapper { background: #C5A059; border-color: #C5A059; box-shadow: 0 0 15px rgba(197, 160, 89, 0.5); }
+        .nav-card.active .icon-wrapper { background: #C5A059; box-shadow: 0 0 15px rgba(197, 160, 89, 0.5); }
       `}</style>
 
       {/* السايد بار العالمي الزجاجي */}
       <RawasiFilterSidebar 
         title={currentPageTitle}
-        extraActions={actions} // 🚀 3. تمرير الزراير المخصصة من المخزن
-        summarySlot={summary}  // 🚀 4. تمرير كارد الملخص المخصص من المخزن
+        extraActions={actions}
+        summarySlot={summary}
         onSearch={(term) => window.dispatchEvent(new CustomEvent('globalSearch', { detail: term }))}
         onDateChange={(start, end) => window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }))}
       />
 
       {/* الزر العائم */}
-      <div className="fab-main no-print" onMouseDown={onMouseDown} onClick={() => !isDragging && setIsOpen(!isOpen)} title={isOpen ? "إغلاق القائمة" : "فتح قائمة رواسي"}>
+      <div className="fab-main no-print" onMouseDown={onMouseDown} onClick={() => !isDragging && setIsOpen(!isOpen)} title={isOpen ? "إغلاق" : "فتح"}>
         <img src="/RYC_Logo.png" alt="رواسي" className="fab-logo" />
       </div>
 
-      {/* شاشة القائمة الزجاجية */}
       <nav className="overlay-screen no-print" onClick={() => setIsOpen(false)} style={{ pointerEvents: isOpen ? 'auto' : 'none' }}>
         <div className="command-center" onClick={(e) => e.stopPropagation()}>
-          <div style={{ textAlign: 'center', marginBottom: '10px', opacity: isOpen ? 1 : 0, transition: '1s 0.3s' }}>
-             <h2 style={{ color: 'white', fontWeight: 900, margin: 0, fontSize: '32px', textShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>نظام إدارة <span style={{ color: '#C5A059' }}>رواسي اليسر</span></h2>
-             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', marginTop: '5px' }}>تحكم كامل في كافة وحدات النظام</p>
+          {/* شريط معلومات للمساعدة في التأكد */}
+          <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '5px 15px', borderRadius: '10px', fontSize: '12px', textAlign: 'center', color: '#fff', marginBottom: '15px' }}>
+            بوابة الإدارة المركزية | الدور الحالي: {userRole}
           </div>
 
           {menuGroups.map((group, gIdx) => (
@@ -237,7 +260,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                     <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
                         <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
                           <div className="icon-wrapper">{item.icon}</div>
-                          <span style={{ fontWeight: 800, fontSize: '15px', letterSpacing: '0.5px', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{item.title}</span>
+                          <span style={{ fontWeight: 800, fontSize: '15px', color: 'white' }}>{item.title}</span>
                           {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
                         </div>
                     </Link>
@@ -246,40 +269,21 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
               </div>
             </div>
           ))}
-          
-          <div style={{ textAlign: 'center', marginTop: '50px' }}>
-             <button 
-               onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
-               style={{ 
-                   background: 'linear-gradient(135deg, rgba(190, 18, 60, 0.1) 0%, rgba(190, 18, 60, 0.02) 100%)', 
-                   backdropFilter: 'blur(5px)',
-                   border: '1px solid rgba(190, 18, 60, 0.4)', 
-                   color: '#ff4d4d', 
-                   padding: '12px 35px', 
-                   borderRadius: '15px', 
-                   cursor: 'pointer', 
-                   fontWeight: 900,
-                   boxShadow: '0 8px 32px 0 rgba(190, 18, 60, 0.15)',
-                   transition: 'all 0.3s'
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(190, 18, 60, 0.2)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseOut={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(190, 18, 60, 0.1) 0%, rgba(190, 18, 60, 0.02) 100%)'; e.currentTarget.style.transform = 'translateY(0)' }}
-             >
-               تسجيل الخروج من النظام
-             </button>
-          </div>
         </div>
       </nav>
 
-      {/* محتوى الصفحة (مع بلور إضافي أثناء فتح القائمة) */}
-      <div style={{ 
+      <main style={{ 
+          flex: 1, 
           marginRight: '65px', 
+          minHeight: '100vh',
+          position: 'relative',
+          zIndex: 1,
           filter: isOpen ? 'blur(20px) grayscale(30%)' : 'none', 
           transform: isOpen ? 'scale(0.97)' : 'scale(1)', 
           transition: 'all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1)' 
       }}>
         {children}
-      </div>
-    </>
+      </main>
+    </div>
   );
 }

@@ -88,16 +88,15 @@ export function useReceiptVouchersLogic() {
     }, [allFiltered, currentPage, rowsPerPage]);
 
     // =========================================================================
-    // 📊 6. المؤشرات (KPIs) - 🚀 (تم إصلاح مشكلة التكرار في الحسابات هنا)
+    // 📊 6. المؤشرات (KPIs)
     // =========================================================================
     const kpis = useMemo(() => {
-        // التأكد من عدم تكرار السندات في الحسبة (باستخدام Map لفلترة الـ IDs المتكررة)
         const uniqueReceipts = Array.from(new Map(allFiltered.map(item => [item.id, item])).values());
         
         return {
             total: uniqueReceipts.length,
             posted: uniqueReceipts.filter(i => i.status === 'مُعتمد').length,
-            pending: uniqueReceipts.filter(i => i.status !== 'مُعتمد').length, // تشمل المسودة والمسترجع
+            pending: uniqueReceipts.filter(i => i.status !== 'مُعتمد').length,
             totalAmount: uniqueReceipts.reduce((sum, r) => sum + Number(r.amount || 0), 0)
         };
     }, [allFiltered]);
@@ -132,10 +131,54 @@ export function useReceiptVouchersLogic() {
                 }
                 break;
         }
-    }, [receipts, focusedIndex, isEditModalOpen, canUserEdit]); // تم إضافة canUserEdit لتجنب تحذيرات eslint
+    }, [receipts, focusedIndex, isEditModalOpen, canUserEdit]);
 
     // =========================================================================
-    // 🚀 8. الترحيل المالي (Post)
+    // 💾 [جديد] 8. حفظ السند (إضافة / تعديل)
+    // =========================================================================
+    const handleSave = async (record: any) => {
+        setIsLoading(true);
+        try {
+            const voucherData = {
+                receipt_number: record.receipt_number || `RV-${Date.now()}`, // سيتجاهل إذا كان الـ DB يُولد تلقائياً
+                date: record.date,
+                payment_method: record.payment_method,
+                amount: Number(record.amount || 0),
+                invoice_id: record.invoice_id || null,
+                partner_id: record.partner_id || null,
+                project_ids: record.project_ids || [],
+                safe_bank_acc_id: record.safe_bank_acc_id || null,
+                partner_acc_id: record.partner_acc_id || null,
+                notes: record.notes || '',
+                status: record.status || 'مسودة',
+                
+                // 🚀 حقول الخصم الجديدة
+                discount_amount: Number(record.discount_amount || 0),
+                discount_notes: record.discount_notes || '',
+                discount_acc_id: record.discount_acc_id || null,
+            };
+
+            if (record.id) {
+                // تعديل
+                const { error } = await supabase.from('receipt_vouchers').update(voucherData).eq('id', record.id);
+                if (error) throw error;
+            } else {
+                // إضافة جديدة
+                const { error } = await supabase.from('receipt_vouchers').insert([voucherData]);
+                if (error) throw error;
+            }
+
+            setIsEditModalOpen(false);
+            fetchFullData();
+        } catch (error: any) {
+            alert("خطأ أثناء الحفظ: " + error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // =========================================================================
+    // 🚀 9. الترحيل المالي (Post) - 🚀 محدث لدعم الخصم
     // =========================================================================
     const handlePostSelected = async () => {
         if (!selectedIds.length || !permissions.canPost) return;
@@ -144,7 +187,7 @@ export function useReceiptVouchersLogic() {
             const toPost = allData.filter(rec => selectedIds.includes(rec.id) && rec.status !== 'مُعتمد');
             
             for (const rec of toPost) {
-                const unifiedNotes = `سند قبض #${rec.receipt_number} | ${rec.partners?.name || ''}`;
+                const unifiedNotes = rec.notes || `سند قبض #${rec.receipt_number} | ${rec.partners?.name || ''}`;
                 
                 const { data: header, error: hErr } = await supabase.from('journal_headers').insert({
                     entry_date: rec.date,
@@ -155,16 +198,36 @@ export function useReceiptVouchersLogic() {
                 if (hErr) throw hErr;
 
                 const mainProjectId = rec.project_ids?.[0] || null;
+                const paidAmount = Number(rec.amount || 0);
+                const discountAmount = Number(rec.discount_amount || 0);
+                const totalCredit = paidAmount + discountAmount; // العميل يتم تخفيض مديونيته بالمُحصل + الخصم
 
                 const lines = [
-                    { header_id: header.id, account_id: rec.safe_bank_acc_id, debit: Number(rec.amount), credit: 0, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes },
-                    { header_id: header.id, account_id: rec.partner_acc_id, debit: 0, credit: Number(rec.amount), partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes }
+                    // 1. مدين: حساب الصندوق/البنك بالمبلغ المحصل الفعلي
+                    { header_id: header.id, account_id: rec.safe_bank_acc_id, debit: paidAmount, credit: 0, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes },
+                    // 2. دائن: حساب العميل بإجمالي المبلغ (المحصل + الخصم)
+                    { header_id: header.id, account_id: rec.partner_acc_id, debit: 0, credit: totalCredit, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes }
                 ];
+
+                // 3. مدين: حساب الخصم المسموح به (إذا وجد)
+                if (discountAmount > 0 && rec.discount_acc_id) {
+                    lines.push({ 
+                        header_id: header.id, 
+                        account_id: rec.discount_acc_id, 
+                        debit: discountAmount, 
+                        credit: 0, 
+                        partner_id: rec.partner_id, 
+                        project_id: mainProjectId, 
+                        notes: rec.discount_notes || 'خصم مسموح به' 
+                    });
+                }
+
                 await supabase.from('journal_lines').insert(lines);
 
+                // تحديث الفاتورة: نزيد المبلغ المدفوع بـ (المحصل + الخصم)
                 if (rec.invoice_id) {
                     const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
-                    await supabase.from('invoices').update({ paid_amount: (inv?.paid_amount || 0) + Number(rec.amount) }).eq('id', rec.invoice_id);
+                    await supabase.from('invoices').update({ paid_amount: (inv?.paid_amount || 0) + totalCredit }).eq('id', rec.invoice_id);
                 }
             }
 
@@ -180,7 +243,7 @@ export function useReceiptVouchersLogic() {
     };
 
     // =========================================================================
-    // 🔙 9. فك الترحيل (Unpost)
+    // 🔙 10. فك الترحيل (Unpost) - 🚀 محدث لدعم عكس الخصم
     // =========================================================================
     const handleUnpostSelected = async () => {
         if (!selectedIds.length || !permissions.canUnpost) return;
@@ -190,8 +253,9 @@ export function useReceiptVouchersLogic() {
             
             const toUnpost = allData.filter(r => selectedIds.includes(r.id) && r.invoice_id && r.status === 'مُعتمد');
             for (const rec of toUnpost) {
+                const totalReversed = Number(rec.amount || 0) + Number(rec.discount_amount || 0);
                 const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
-                await supabase.from('invoices').update({ paid_amount: Math.max(0, (inv?.paid_amount || 0) - Number(rec.amount)) }).eq('id', rec.invoice_id);
+                await supabase.from('invoices').update({ paid_amount: Math.max(0, (inv?.paid_amount || 0) - totalReversed) }).eq('id', rec.invoice_id);
             }
 
             await supabase.from('receipt_vouchers').update({ status: 'مسودة' }).in('id', selectedIds);
@@ -204,7 +268,7 @@ export function useReceiptVouchersLogic() {
     };
 
     // =========================================================================
-    // 🔙 10. إرجاع السداد (Refund) - 🚀 (العملية الجديدة)
+    // 🔙 11. إرجاع السداد (Refund) - 🚀 محدث لدعم عكس الخصم
     // =========================================================================
     const handleRefundSelected = async () => {
         if (!selectedIds.length) return;
@@ -212,24 +276,21 @@ export function useReceiptVouchersLogic() {
 
         setIsLoading(true);
         try {
-            // نجلب فقط السندات التي تم ترحيلها (مُعتمدة)
             const toRefund = allData.filter(r => selectedIds.includes(r.id) && r.status === 'مُعتمد');
 
             for (const rec of toRefund) {
-                // 1. حذف القيود المحاسبية المرتبطة بالسند
                 await supabase.from('journal_headers').delete().eq('reference_id', rec.id);
 
-                // 2. عكس أثر السداد في الفاتورة (خصم المبلغ المدفوع منها لترجع مديونية)
                 if (rec.invoice_id) {
+                    const totalReversed = Number(rec.amount || 0) + Number(rec.discount_amount || 0);
                     const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
                     if (inv) {
-                        const newAmount = Math.max(0, Number(inv.paid_amount || 0) - Number(rec.amount));
+                        const newAmount = Math.max(0, Number(inv.paid_amount || 0) - totalReversed);
                         await supabase.from('invoices').update({ paid_amount: newAmount }).eq('id', rec.invoice_id);
                     }
                 }
             }
 
-            // 3. تحديث حالة السند ليصبح "مسترجع"
             await supabase.from('receipt_vouchers').update({ status: 'مسترجع' }).in('id', selectedIds);
 
             alert("✅ تم إرجاع السداد بنجاح");
@@ -243,7 +304,7 @@ export function useReceiptVouchersLogic() {
     };
 
     // =========================================================================
-    // 📝 11. الإضافة، التعديل، والحذف
+    // 📝 12. الإضافة، التعديل، والحذف
     // =========================================================================
     const handleAddNew = () => {
         if (!permissions.canAdd) return alert("ليست لديك صلاحية الإضافة");
@@ -272,8 +333,8 @@ export function useReceiptVouchersLogic() {
         receipts, allFiltered, isLoading, globalSearch, setGlobalSearch,
         selectedIds, setSelectedIds, currentPage, setCurrentPage,
         rowsPerPage, setRowsPerPage, kpis, isEditModalOpen, setIsEditModalOpen,
-        currentRecord, setCurrentRecord, handleAddNew, handleEdit, 
-        handlePostSelected, handleUnpostSelected, handleRefundSelected, handleDeleteSelected, // 👈 تم إضافة Refund هنا
+        currentRecord, setCurrentRecord, handleAddNew, handleEdit, handleSave, // 👈 تم إضافة handleSave هنا
+        handlePostSelected, handleUnpostSelected, handleRefundSelected, handleDeleteSelected, 
         focusedIndex, setFocusedIndex, handleTableKeyDown,
         permissions, setPermissions, canUserEdit, fetchFullData 
     };

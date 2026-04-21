@@ -2,10 +2,9 @@
 import React, { useMemo } from 'react';
 import { useHierarchicalAccountsLogic } from './accounts_logic';
 import { THEME } from '@/lib/theme';
+import { useAuth } from '@/components/authGuard'; // 🛡️ 1. استدعاء مقص الصلاحيات المركزي
 
 // 🎨 تطبيق الإستاندرد الموحد للمنظومة
-
-
 
 export default function HierarchicalLedgerPage() {
   // 🚀 استدعاء كل المتغيرات والدوال من اللوجيك (بما فيها التواريخ وزراير الأكشن)
@@ -15,6 +14,15 @@ export default function HierarchicalLedgerPage() {
     selectedIds, toggleSelection, handleDelete, handleAdd, handleEdit,
     startDate, setStartDate, endDate, setEndDate
   } = useHierarchicalAccountsLogic();
+
+  // 🛡️ 2. سحب دالة فحص الصلاحيات بأمان تام
+  let can = (module: string, action: string) => true; // القيمة الافتراضية لو الهوك مش شغال
+  try {
+      const auth = useAuth();
+      if (auth && auth.can) can = auth.can;
+  } catch (e) {
+      // تجاهل الخطأ لإبقاء النظام يعمل
+  }
 
   // 🧮 حساب إجماليات ميزان المراجعة بناءً على الشجرة المعروضة
   const summary = useMemo(() => {
@@ -233,12 +241,18 @@ export default function HierarchicalLedgerPage() {
             </div>
           </div>
 
-          {/* 3. زراير الأكشن والتحكم بالشجرة (تم تفعيل الإضافة والتعديل هنا) */}
+          {/* 3. زراير الأكشن والتحكم بالشجرة (تم تفعيل المقص هنا ✂️🛡️) */}
           <div className="actions-row">
             <div className="actions-group">
-              <button className="btn-action btn-add" onClick={handleAdd}>➕ حساب جديد</button>
-              <button className="btn-action btn-edit" onClick={() => handleEdit(selectedIds)} disabled={selectedIds.length !== 1}>✏️ تعديل</button>
-              <button className="btn-action btn-delete" onClick={() => handleDelete(selectedIds)} disabled={selectedIds.length === 0}>🗑️ حذف</button>
+              {can('accounts', 'create') && (
+                <button className="btn-action btn-add" onClick={handleAdd}>➕ حساب جديد</button>
+              )}
+              {can('accounts', 'edit') && (
+                <button className="btn-action btn-edit" onClick={() => handleEdit(selectedIds)} disabled={selectedIds.length !== 1}>✏️ تعديل</button>
+              )}
+              {can('accounts', 'delete') && (
+                <button className="btn-action btn-delete" onClick={() => handleDelete(selectedIds)} disabled={selectedIds.length === 0}>🗑️ حذف</button>
+              )}
             </div>
             
             <div className="actions-group">

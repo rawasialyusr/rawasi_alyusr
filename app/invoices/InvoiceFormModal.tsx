@@ -1,197 +1,55 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
-
-// --- [مكون البحث الذكي - Smart Autocomplete] ---
-const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,code', displayCol = 'name', multi = false, selectedValues = [] }: any) => {
-    const [search, setSearch] = useState<string>(''); 
-    const [results, setResults] = useState<any[]>([]);
-    const [show, setShow] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    
-    const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
-    const listRef = useRef<HTMLDivElement>(null);
-
-    const loadInitialData = async (query = '') => {
-        if (!table) return;
-        setIsLoading(true);
-        let q = supabase.from(table).select('*').limit(15); 
-        
-        if (table === 'accounts') {
-            q = q.eq('is_transactional', true);
-        }
-
-        if (query) {
-            const orQuery = searchCols.split(',').map((col: string) => `${col}.ilike.%${query}%`).join(',');
-            q = q.or(orQuery);
-        }
-        
-        const { data, error } = await q;
-        if (!error) setResults((data as any[]) || []);
-        setIsLoading(false);
-    };
-
-    useEffect(() => {
-        const searchLen = search?.length || 0; 
-        if (searchLen < 1 && !show) { 
-            setResults([]); 
-            return; 
-        }
-
-        const timer = setTimeout(() => {
-            if (show && searchLen > 0) loadInitialData(search);
-        }, 200);
-        
-        return () => clearTimeout(timer);
-    }, [search, table, show]);
-
-    useEffect(() => {
-        if (highlightedIndex >= 0 && listRef.current) {
-            const container = listRef.current;
-            const activeElement = container.children[highlightedIndex] as HTMLElement;
-            if (activeElement) {
-                const elementTop = activeElement.offsetTop;
-                const elementBottom = elementTop + activeElement.clientHeight;
-                const containerTop = container.scrollTop;
-                const containerBottom = containerTop + container.clientHeight;
-
-                if (elementTop < containerTop) {
-                    container.scrollTop = elementTop;
-                } else if (elementBottom > containerBottom) {
-                    container.scrollTop = elementBottom - container.clientHeight;
-                }
-            }
-        }
-    }, [highlightedIndex]);
-
-    const handleItemSelect = (item: any, e?: React.MouseEvent | React.KeyboardEvent) => {
-        if (e) e.stopPropagation();
-        const displayName = item[displayCol] || item.Property || item.project_name || item.item_name || item.name || item.description || 'بدون اسم';
-        
-        if (multi) {
-            onSelect(item);
-        } else {
-            onSelect(item);
-            setSearch(displayName);
-            setShow(false);
-            setHighlightedIndex(-1);
-        }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (!show && e.key !== 'Tab') {
-            if (e.key === 'ArrowDown') {
-                setShow(true);
-                loadInitialData(search || '');
-            }
-            return;
-        }
-
-        switch (e.key) {
-            case 'ArrowDown':
-                e.preventDefault();
-                setHighlightedIndex(prev => (prev < results.length - 1 ? prev + 1 : prev));
-                break;
-            case 'ArrowUp':
-                e.preventDefault();
-                setHighlightedIndex(prev => (prev > 0 ? prev - 1 : prev));
-                break;
-            case 'Enter':
-                e.preventDefault();
-                if (highlightedIndex >= 0 && results[highlightedIndex]) {
-                    handleItemSelect(results[highlightedIndex]);
-                }
-                break;
-            case 'Escape':
-                e.preventDefault();
-                setShow(false);
-                setHighlightedIndex(-1);
-                break;
-            case 'Tab':
-                setShow(false);
-                setHighlightedIndex(-1);
-                break;
-        }
-    };
-
-    return (
-        <div style={{ position: 'relative', flex: 1 }}>
-            <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary }}>{label}</label>
-            <input 
-                type="text" 
-                placeholder={placeholder || (isLoading ? '⏳ جاري التحميل...' : '🔍 ابحث هنا...')}
-                value={search ?? ''} 
-                onChange={(e) => { setSearch(e.target.value); setShow(true); setHighlightedIndex(-1); }}
-                onFocus={() => { setShow(true); loadInitialData(search || ''); }}
-                onKeyDown={handleKeyDown} 
-                style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}`, background: 'rgba(255,255,255,0.5)', outline: 'none', transition: 'all 0.2s' }}
-            />
-            {show && results.length > 0 && (
-                <>
-                    <div onClick={() => { setShow(false); setHighlightedIndex(-1); }} style={{ position: 'fixed', inset: 0, zIndex: 1999 }} />
-                    <div ref={listRef} className="cinematic-scroll" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', zIndex: 2000, borderRadius: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', maxHeight: '200px', overflowY: 'auto', padding: '5px', border: '1px solid #eee' }}>
-                        {results.map((item: any, index: number) => {
-                            const displayName = item[displayCol] || item.Property || item.project_name || item.item_name || item.name || item.description || 'بدون اسم';
-                            const displayCode = item.project_code || item.item_code || item.code; 
-                            
-                            const isSelected = multi ? selectedValues.some((v: any) => v.id === item.id) : false;
-                            const isHighlighted = index === highlightedIndex; 
-
-                            return (
-                                <div key={item.id} 
-                                     onClick={(e) => handleItemSelect(item, e)} 
-                                     style={{ 
-                                         padding: '12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', 
-                                         fontSize: '13px', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '10px',
-                                         background: isSelected ? '#f0fdf4' : (isHighlighted ? '#f1f5f9' : 'transparent'),
-                                         borderLeft: isHighlighted ? `4px solid ${THEME.primary}` : '4px solid transparent'
-                                     }}>
-                                    
-                                    {multi && (
-                                        <input 
-                                            type="checkbox" 
-                                            checked={isSelected} 
-                                            readOnly 
-                                            style={{ width: '18px', height: '18px', accentColor: THEME.success, cursor: 'pointer' }}
-                                        />
-                                    )}
-
-                                    <div>
-                                        <span style={{ fontWeight: 'bold', color: THEME.primary }}>{displayCode ? `[${displayCode}] ` : ''}</span> 
-                                        {displayName}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-};
+import { useToast } from '@/lib/toast-context'; // 🚀 استدعاء الهوك المركزي للإشعارات
+import SmartCombo from '@/components/SmartCombo'; // 🚀 1. حقن السوبر كومبوننت هنا
 
 
-// --- [المودال الرئيسي] ---
-export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, onSave, isSaving }: any) {
+// --- [المودال الرئيسي للفاتورة] ---
+export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, onSave, isSaving, projects }: any) {
+    const { showToast } = useToast(); 
+
     if (!isOpen || !record) return null;
 
-    // 🚀 1. إعطاء القيم الافتراضية لأول مرة فقط (عشان الزرار ميعلقش)
+    // 🚀 1. سحب البيانات بشكل ذكي ومؤكد (العقارات والعميل)
     useEffect(() => {
-        if (record && !record.invoice_number) {
-            setRecord((prev: any) => ({
-                ...prev,
-                invoice_number: `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
-                date: prev.date || new Date().toISOString(),
-                tax_acc_id: prev.tax_acc_id || '990c949c-5f32-40d7-8d36-5fe45a6c892c', 
-                materials_acc_id: prev.materials_acc_id || '85e61a6a-8c85-4219-a733-3b2180dfe043',
-                guarantee_acc_id: prev.guarantee_acc_id || '8bf39cb1-4028-4c9e-817d-27c239873030'
-            }));
-        }
-    }, [record?.id]); 
+        let updates: any = {};
+        let needsUpdate = false;
 
-    // 🚀 2. الحسابات الفورية (تشتغل بس لما الأرقام أو زرار الضريبة يتغير)
+        // أ. الفاتورة الجديدة
+        if (!record.invoice_number) {
+            updates.invoice_number = `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+            updates.date = record.date || new Date().toISOString();
+            updates.tax_acc_id = record.tax_acc_id || '990c949c-5f32-40d7-8d36-5fe45a6c892c'; 
+            updates.materials_acc_id = record.materials_acc_id || '85e61a6a-8c85-4219-a733-3b2180dfe043';
+            updates.guarantee_acc_id = record.guarantee_acc_id || '8bf39cb1-4028-4c9e-817d-27c239873030';
+            needsUpdate = true;
+        }
+
+        // ب. سحب العقارات المرتبطة بالفاتورة
+        if (record.id && !record.selected_projects && record.project_ids && projects?.length > 0) {
+            const mappedProjects = projects.filter((p: any) => record.project_ids.includes(p.id));
+            if (mappedProjects.length > 0) {
+                updates.selected_projects = mappedProjects;
+                needsUpdate = true;
+            }
+        }
+
+        // ج. سحب اسم العميل لو كان متخزن جوه object الـ partners
+        if (record.id && !record.client_name && record.partners?.name) {
+            updates.client_name = record.partners.name;
+            needsUpdate = true;
+        }
+
+        // لو جمعنا أي داتا ناقصة، بنحدثها فوراً
+        if (needsUpdate) {
+            setRecord((prev: any) => ({ ...prev, ...updates }));
+        }
+    }, [record?.id, projects?.length]); // 👈 ربطناها بطول المصفوفة عشان نتجنب الـ Infinite Loops
+
+    // 🚀 2. الحسابات الفورية
     useEffect(() => {
         if (!record) return; 
         const qty = Number(record.quantity || 0);
@@ -203,7 +61,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         const guaranteePercent = Number(record.guarantee_percent || 0);
         const guaranteeAmount = (taxableAmount * guaranteePercent) / 100;
         
-        // 🔥 سحر التفعيل والإيقاف: لو skip_zatca شغالة يبقى الضريبة 0 كأنها مش موجودة نهائي
         const taxAmount = record.skip_zatca ? 0 : (taxableAmount * 0.15); 
         const finalTotal = taxableAmount + taxAmount - guaranteeAmount;
 
@@ -212,7 +69,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         const dueDateCalculated = new Date(invoiceDate);
         dueDateCalculated.setDate(dueDateCalculated.getDate() + days);
 
-        // التحديث يحصل فقط لو في تغيير فعلي (لمنع التعليق)
         if (
             record.line_total !== lineTotal ||
             record.taxable_amount !== taxableAmount ||
@@ -233,80 +89,174 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         }
     }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca]); 
 
+    // 🚀 3. دالة التحقق قبل الحفظ المرتبطة بالـ Toast
+    const handleValidateAndSave = () => {
+        if (!record.date) {
+            showToast("يرجى التأكد من إدخال تاريخ الفاتورة ⚠️", "warning");
+            return;
+        }
+        if (!record.partner_id) {
+            showToast("يرجى اختيار العميل (البارتنر) أولاً ⚠️", "warning");
+            return;
+        }
+        if (Number(record.total_amount) <= 0 && Number(record.line_total) <= 0) {
+            showToast("تنبيه: إجمالي الفاتورة 0، يرجى التأكد من السعر والكمية ⚠️", "warning");
+            // لن نمنع الحفظ هنا تحسباً لوجود فواتير مجانية، مجرد تنبيه
+        }
+        
+        onSave(record);
+    };
+
     return (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(12px)' }}>
             
             <style>{`
                 .cinematic-scroll::-webkit-scrollbar { width: 6px; }
                 .cinematic-scroll::-webkit-scrollbar-track { background: transparent; }
-                .cinematic-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
-                .cinematic-scroll::-webkit-scrollbar-thumb:hover { background: ${THEME.primary}40; }
+                .cinematic-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+                .cinematic-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+
+                .glass-input-field {
+                    width: 100%; padding: 12px; border-radius: 12px;
+                    background: rgba(255, 255, 255, 0.65);
+                    border: 1px solid rgba(255, 255, 255, 0.8);
+                    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+                    outline: none; transition: all 0.2s;
+                    font-weight: 700; color: #1e293b;
+                }
+                .glass-input-field:focus {
+                    background: #ffffff; border-color: ${THEME.accent};
+                    box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.15);
+                }
+                
+                .btn-glass-save {
+                    background: linear-gradient(135deg, #10b981, #059669);
+                    color: white; border: none; padding: 16px; border-radius: 16px;
+                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
+                    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+                }
+                .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); box-shadow: 0 15px 35px rgba(16, 185, 129, 0.5); }
+                .btn-glass-save:active:not(:disabled) { transform: scale(0.98); }
+                .btn-glass-save:disabled { opacity: 0.7; cursor: not-allowed; }
+
+                .btn-glass-cancel {
+                    background: rgba(255, 255, 255, 0.6);
+                    color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px;
+                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
+                }
+                .btn-glass-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
+
+                /* 📱 التجاوب مع شاشات الجوال (Mobile Responsiveness) */
+                @media (max-width: 768px) {
+                    .glass-modal-container {
+                        width: 95% !important;
+                        padding: 20px !important;
+                        max-height: 95vh !important;
+                    }
+                    .modal-header-title {
+                        flex-direction: column;
+                        align-items: flex-start !important;
+                        gap: 15px;
+                    }
+                    .modal-header-title h2 { font-size: 20px !important; }
+                    .responsive-form-grid {
+                        grid-template-columns: 1fr !important;
+                        gap: 15px !important;
+                    }
+                    .responsive-form-grid > div {
+                        grid-column: span 1 !important;
+                    }
+                    .responsive-summary-grid {
+                        grid-template-columns: 1fr 1fr !important;
+                        gap: 12px !important;
+                        padding: 15px !important;
+                    }
+                    .responsive-summary-grid > div {
+                        padding: 10px !important;
+                    }
+                    .responsive-summary-grid div:nth-child(2) { font-size: 16px !important; }
+                    .responsive-actions {
+                        flex-direction: column !important;
+                        gap: 10px !important;
+                        margin-top: 20px !important;
+                    }
+                    .responsive-actions button {
+                        width: 100% !important;
+                        padding: 14px !important;
+                    }
+                }
             `}</style>
 
-            <div className="cinematic-scroll" style={{ 
-                width: '900px', maxHeight: '90vh', background: 'rgba(255, 255, 255, 0.85)', 
-                backdropFilter: 'blur(20px)', borderRadius: '25px', padding: '35px', 
-                boxShadow: '0 25px 50px rgba(0,0,0,0.2)', overflowY: 'auto', direction: 'rtl',
-                border: '1px solid rgba(255,255,255,0.3)'
+            <div className="cinematic-scroll glass-modal-container" style={{ 
+                width: '950px', maxHeight: '92vh', background: 'rgba(248, 250, 252, 0.85)', 
+                backdropFilter: 'blur(25px)', borderRadius: '30px', padding: '40px', 
+                boxShadow: '0 30px 60px rgba(0,0,0,0.25)', overflowY: 'auto', direction: 'rtl',
+                border: '1px solid rgba(255,255,255,0.7)'
             }}>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: `2px solid ${THEME.accent}`, paddingBottom: '10px' }}>
-                    <h2 style={{ color: THEME.primary, fontWeight: 900, margin: 0 }}>
-                        📑 إنشاء / تعديل فاتورة ذكية
+                <div className="modal-header-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: `2px solid ${THEME.accent}50`, paddingBottom: '15px' }}>
+                    <h2 style={{ color: THEME.primary, fontWeight: 900, margin: 0, fontSize: '26px' }}>
+                        📑 {record.id ? 'تعديل الفاتورة' : 'إنشاء فاتورة جديدة'}
                     </h2>
 
-                    {/* 🚀 زرار الـ Turn ON / Turn OFF الجديد */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: record?.skip_zatca ? '#fee2e2' : '#dcfce3', padding: '8px 15px', borderRadius: '12px', cursor: 'pointer', transition: '0.3s' }} 
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: record?.skip_zatca ? '#fee2e2' : '#dcfce3', padding: '10px 18px', borderRadius: '15px', cursor: 'pointer', transition: '0.3s', border: `1px solid ${record?.skip_zatca ? '#fca5a5' : '#86efac'}` }} 
                          onClick={() => setRecord({ ...record, skip_zatca: !record.skip_zatca })}>
                         
-                        <div style={{ width: '36px', height: '20px', background: record?.skip_zatca ? '#cbd5e1' : THEME.success, borderRadius: '20px', position: 'relative', transition: '0.3s' }}>
-                            <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', left: record?.skip_zatca ? '2px' : '18px', transition: '0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }} />
+                        <div style={{ width: '40px', height: '22px', background: record?.skip_zatca ? '#cbd5e1' : THEME.success, borderRadius: '20px', position: 'relative', transition: '0.3s' }}>
+                            <div style={{ width: '18px', height: '18px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', left: record?.skip_zatca ? '2px' : '20px', transition: '0.3s', boxShadow: '0 2px 5px rgba(0,0,0,0.3)' }} />
                         </div>
                         
-                        <span style={{ fontSize: '12px', fontWeight: 900, color: record?.skip_zatca ? '#64748b' : THEME.success }}>
-                            {record?.skip_zatca ? '❌ الضريبة: معطلة (إيقاف الدالة)' : '✅ الضريبة: مفعلة (15%)'}
+                        <span style={{ fontSize: '13px', fontWeight: 900, color: record?.skip_zatca ? '#dc2626' : THEME.success }}>
+                            {record?.skip_zatca ? '❌ الضريبة: معطلة (0%)' : '✅ الضريبة: مفعلة (15%)'}
                         </span>
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px' }}>
                     
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>تاريخ الفاتورة</label>
-                        <input type="date" value={record.date?.split('T')[0] ?? ''} onChange={(e) => setRecord({...record, date: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}` }} />
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ الفاتورة</label>
+                        <input type="date" value={record.date?.split('T')[0] ?? ''} onChange={(e) => setRecord({...record, date: e.target.value})} className="glass-input-field" />
                     </div>
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>رقم الفاتورة</label>
-                        <input type="text" value={record.invoice_number ?? ''} readOnly style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#e2e8f0', border: `1px solid ${THEME.border}`, fontWeight: 'bold', color: THEME.primary }} />
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>رقم الفاتورة (تلقائي)</label>
+                        <input type="text" value={record.invoice_number ?? ''} readOnly className="glass-input-field" style={{ background: 'rgba(226, 232, 240, 0.6)', color: THEME.primary }} />
                     </div>
 
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary }}>📅 فترة السداد (بالأيام)</label>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>📅 فترة السداد (بالأيام)</label>
                         <input 
                             type="number" 
                             placeholder="مثلاً: 30" 
                             value={record.due_in_days ?? ''} 
                             onChange={(e) => setRecord({...record, due_in_days: e.target.value})} 
-                            style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `2px solid ${THEME.accent}50`, fontWeight: 'bold', outline: 'none' }} 
+                            className="glass-input-field"
+                            style={{ border: `2px solid ${THEME.accent}70` }} 
                         />
                         {record.due_date && (
-                            <div style={{ fontSize: '10px', marginTop: '6px', color: '#64748b', fontWeight: 'bold' }}>
-                                تاريخ الاستحقاق: {new Date(record.due_date).toLocaleDateString('ar-EG')}
+                            <div style={{ fontSize: '11px', marginTop: '8px', color: '#475569', fontWeight: 800 }}>
+                                الاستحقاق: <span style={{color: THEME.primary}}>{new Date(record.due_date).toLocaleDateString('ar-EG')}</span>
                             </div>
                         )}
                     </div>
 
+                    {/* 🚀 الحقن هنا: العميل */}
                     <SmartCombo 
                         label="العميل (البارتنر)" 
+                        icon="👤"
                         table="partners" 
                         searchCols="name,code" displayCol="name"
+                        initialDisplay={record.client_name || record.partners?.name || ''} 
                         onSelect={(p: any) => setRecord({...record, partner_id: p.id, client_name: p.name})} 
-                        placeholder={record.client_name ? record.client_name : undefined} 
+                        allowAddNew={true} // 💡 إضافة سريعة لو العميل مش موجود
+                        enableClear={true}
                     />
                     
                     <div style={{ gridColumn: 'span 1' }}>
+                        {/* 🚀 الحقن هنا: المشاريع المتعددة */}
                         <SmartCombo 
-                            label="العقار / العماير (متعدد)" 
+                            label="العقار / العماير (إختيار متعدد)" 
+                            icon="🏢"
                             table="projects" 
                             searchCols="Property,project_name,project_code" 
                             displayCol="Property" 
@@ -333,11 +283,11 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                                 setRecord(updateData);
                             }} 
                         />
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
                             {(record.selected_projects || []).map((proj: any) => (
-                                <div key={proj.id} style={{ background: '#f0f9ff', border: `1px solid ${THEME.primary}40`, color: THEME.primary, padding: '5px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div key={proj.id} style={{ background: 'rgba(255,255,255,0.8)', border: `1px solid ${THEME.primary}30`, color: THEME.primary, padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
                                     {proj.Property || proj.project_name}
-                                    <span style={{ cursor: 'pointer', color: THEME.ruby }} onClick={() => {
+                                    <span style={{ cursor: 'pointer', color: THEME.ruby, fontSize: '14px' }} onClick={() => {
                                         const newSelected = record.selected_projects.filter((c:any) => c.id !== proj.id);
                                         setRecord({...record, selected_projects: newSelected, project_ids: newSelected.map((c:any)=>c.id)});
                                     }}>✖</span>
@@ -346,11 +296,14 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         </div>
                     </div>
                     
+                    {/* 🚀 الحقن هنا: البند */}
                     <SmartCombo 
                         label="البند (BOQ)" 
+                        icon="🛠️"
                         table="boq_items" 
                         searchCols="item_name,item_code" 
                         displayCol="item_name" 
+                        initialDisplay={record.description || ''}
                         onSelect={(b: any) => setRecord({
                             ...record, 
                             boq_id: b.id, 
@@ -358,20 +311,21 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                             unit: b.unit_of_measure || record.unit, 
                             unit_price: b.price || record.unit_price 
                         })} 
+                        enableClear={true}
                     />
 
                     <div style={{ gridColumn: 'span 3' }}>
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>البيان التفصيلي</label>
-                        <textarea value={record.description ?? ''} onChange={(e) => setRecord({...record, description: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}`, height: '60px' }} />
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>البيان التفصيلي</label>
+                        <textarea value={record.description ?? ''} onChange={(e) => setRecord({...record, description: e.target.value})} className="glass-input-field" style={{ height: '70px', resize: 'none' }} />
                     </div>
 
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>العدد / الكمية</label>
-                        <input type="number" value={record.quantity ?? ''} onChange={(e) => setRecord({...record, quantity: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}` }} />
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>العدد / الكمية</label>
+                        <input type="number" value={record.quantity ?? ''} onChange={(e) => setRecord({...record, quantity: e.target.value})} className="glass-input-field" />
                     </div>
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>الوحدة</label>
-                        <select value={record.unit ?? 'عدد'} onChange={(e) => setRecord({...record, unit: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}` }}>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>الوحدة</label>
+                        <select value={record.unit ?? 'عدد'} onChange={(e) => setRecord({...record, unit: e.target.value})} className="glass-input-field" style={{ appearance: 'auto' }}>
                             {record.unit && !['متر طولي', 'متر مربع', 'متر مكعب', 'مقطوعية', 'عدد'].includes(record.unit) && (
                                 <option value={record.unit}>{record.unit}</option>
                             )}
@@ -382,38 +336,42 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                             <option value="عدد">عدد</option>
                         </select>
                     </div>
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>سعر الوحدة</label>
-                        <input type="number" value={record.unit_price ?? ''} onChange={(e) => setRecord({...record, unit_price: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}` }} />
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>سعر الوحدة</label>
+                        <input type="number" value={record.unit_price ?? ''} onChange={(e) => setRecord({...record, unit_price: e.target.value})} className="glass-input-field" />
                     </div>
 
+                    {/* 🚀 الحقن هنا: الحسابات */}
                     <SmartCombo 
                         label="حساب المدين (من حـ/)" 
+                        icon="💳"
                         table="accounts" 
                         searchCols="name,code" displayCol="name"
                         onSelect={(a: any) => setRecord({...record, debit_account_id: a.id})} 
                     />
                     <SmartCombo 
                         label="حساب الدائن (إلى حـ/)" 
+                        icon="🏦"
                         table="accounts" 
                         searchCols="name,code" displayCol="name"
                         onSelect={(a: any) => setRecord({...record, credit_account_id: a.id})} 
                     />
                     
-                    <div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '15px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '10px' }}>الإجمالي قبل الخصم</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: THEME.primary }}>{formatCurrency(record.line_total ?? 0)}</div>
+                    <div style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)', padding: '15px', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800 }}>الإجمالي قبل الخصم</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900, color: THEME.primary }}>{formatCurrency(record.line_total ?? 0)}</div>
                     </div>
 
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.ruby }}>خصم خامات العميل (-)</label>
-                        <input type="number" value={record.materials_discount ?? ''} onChange={(e) => setRecord({...record, materials_discount: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `2px solid ${THEME.ruby}30` }} />
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.ruby, display: 'block', marginBottom: '6px' }}>خصم خامات العميل (-)</label>
+                        <input type="number" value={record.materials_discount ?? ''} onChange={(e) => setRecord({...record, materials_discount: e.target.value})} className="glass-input-field" style={{ border: `2px solid ${THEME.ruby}50` }} />
                     </div>
                     
                     <div style={{ gridColumn: 'span 2' }}>
                         {Number(record.materials_discount) > 0 && (
                             <SmartCombo 
                                 label="ترحل الخامات إلى حساب:" 
+                                icon="📦"
                                 table="accounts" 
                                 searchCols="name,code" displayCol="name"
                                 placeholder={record.materials_acc_id === '85e61a6a-8c85-4219-a733-3b2180dfe043' ? '[217] مخزون خامات العميل (افتراضي)' : '🔍 اختر حساب...'}
@@ -422,15 +380,16 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         )}
                     </div>
 
-                    <div className="field">
-                        <label style={{ fontSize: '12px', fontWeight: 900 }}>نسبة ضمان الأعمال %</label>
-                        <input type="number" value={record.guarantee_percent ?? ''} onChange={(e) => setRecord({...record, guarantee_percent: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}` }} />
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>نسبة ضمان الأعمال %</label>
+                        <input type="number" value={record.guarantee_percent ?? ''} onChange={(e) => setRecord({...record, guarantee_percent: e.target.value})} className="glass-input-field" />
                     </div>
 
                     <div style={{ gridColumn: 'span 2' }}>
                         {Number(record.guarantee_percent) > 0 && (
                             <SmartCombo 
                                 label="ترحل استقطاعات الضمان إلى حساب:" 
+                                icon="🛡️"
                                 table="accounts" 
                                 searchCols="name,code" displayCol="name"
                                 placeholder={record.guarantee_acc_id === '8bf39cb1-4028-4c9e-817d-27c239873030' ? '[124] تأمينات محتجزة لدى الغير (افتراضي)' : '🔍 اختر حساب...'}
@@ -441,33 +400,35 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
 
                 </div>
 
-                <div style={{ marginTop: '30px', padding: '20px', background: THEME.primary, borderRadius: '20px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', textAlign: 'center' }}>
-                    <div>
-                        <div style={{ fontSize: '11px', opacity: 0.8 }}>خاضع للضريبة</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900 }}>{formatCurrency(record.taxable_amount ?? 0)}</div>
+                {/* 💳 ملخص الفاتورة (Glass Neon Panels) */}
+                <div className="responsive-summary-grid" style={{ marginTop: '35px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>خاضع للضريبة</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900 }}>{formatCurrency(record.taxable_amount ?? 0)}</div>
                     </div>
-                    <div>
-                        <div style={{ fontSize: '11px', opacity: 0.8 }}>مبلغ الضريبة (15%)</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900 }}>{formatCurrency(record.tax_amount ?? 0)}</div>
-                        <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '2px' }}>{record.skip_zatca ? 'الدالة معطلة (0)' : 'ترحل آلياً لحساب [215]'}</div>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>مبلغ الضريبة (15%)</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900 }}>{formatCurrency(record.tax_amount ?? 0)}</div>
+                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', fontWeight: 700 }}>{record.skip_zatca ? 'الدالة معطلة (0)' : 'ترحل لـ [215]'}</div>
                     </div>
-                    <div>
-                        <div style={{ fontSize: '11px', opacity: 0.8 }}>محتجز ضمان أعمال</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900 }}>{formatCurrency(record.guarantee_amount ?? 0)}</div>
-                        <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '2px' }}>ترحل آلياً لحساب [124]</div>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>محتجز ضمان أعمال</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900 }}>{formatCurrency(record.guarantee_amount ?? 0)}</div>
+                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', fontWeight: 700 }}>ترحل لـ [124]</div>
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '15px', padding: '5px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 900 }}>الصافي النهائي</div>
-                        <div style={{ fontSize: '22px', fontWeight: 900, color: THEME.accent }}>{formatCurrency(record.total_amount ?? 0)}</div>
+                    <div style={{ background: `linear-gradient(135deg, ${THEME.accent}40, transparent)`, padding: '15px', borderRadius: '16px', border: `1px solid ${THEME.accent}80`, boxShadow: `0 0 20px ${THEME.accent}20` }}>
+                        <div style={{ fontSize: '12px', fontWeight: 900, color: THEME.accentLight }}>الصافي النهائي</div>
+                        <div style={{ fontSize: '26px', fontWeight: 900, color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>{formatCurrency(record.total_amount ?? 0)}</div>
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '15px', marginTop: '30px', position: 'sticky', bottom: '-20px', background: 'white', padding: '10px 0' }}>
-                    <button onClick={() => onSave(record)} disabled={isSaving} style={{ flex: 2, padding: '16px', borderRadius: '15px', background: THEME.success, color: 'white', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '18px' }}>
+                {/* ✅ أزرار الإجراءات */}
+                <div className="responsive-actions" style={{ display: 'flex', gap: '20px', marginTop: '35px' }}>
+                    <button onClick={handleValidateAndSave} disabled={isSaving} className="btn-glass-save" style={{ flex: 2 }}>
                         {isSaving ? '⏳ جاري الحفظ والترحيل...' : '✅ حفظ الفاتورة وترحيل القيود'}
                     </button>
-                    <button onClick={onClose} style={{ flex: 1, padding: '16px', borderRadius: '15px', background: '#e2e8f0', color: THEME.primary, border: 'none', fontWeight: 900, cursor: 'pointer' }}>
-                        إلغاء
+                    <button onClick={onClose} className="btn-glass-cancel" style={{ flex: 1 }}>
+                        إلغاء وإغلاق
                     </button>
                 </div>
             </div>

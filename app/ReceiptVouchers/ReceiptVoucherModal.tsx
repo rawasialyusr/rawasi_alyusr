@@ -1,20 +1,28 @@
 "use client";
-
 import React, { useState, useEffect, useRef } from 'react';
 import { THEME } from '@/lib/theme';
+import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
 
 // =========================================================================
-// 🔍 مكون البحث الذكي المطور (يدعم الاختيار المتعدد Multi-Select)
+// 🔍 مكون البحث الذكي المطور (مع دعم السحب الآلي initialDisplay)
 // =========================================================================
-const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,code', displayCol = 'name', filterStatus, tabIndex, multi = false, selectedValues = [] }: any) => {
-    const [search, setSearch] = useState<string>(''); 
+const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,code', displayCol = 'name', filterStatus, tabIndex, multi = false, selectedValues = [], initialDisplay = '' }: any) => {
+    const [search, setSearch] = useState<string>(initialDisplay || ''); 
     const [results, setResults] = useState<any[]>([]);
     const [show, setShow] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
     
     const listRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (initialDisplay) {
+            setSearch(initialDisplay);
+        } else if (!multi) {
+            setSearch('');
+        }
+    }, [initialDisplay, multi]);
 
     const loadInitialData = async (query = '') => {
         if (!table) return;
@@ -58,7 +66,8 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
     const handleItemAction = (item: any) => {
         onSelect(item);
         if (!multi) {
-            setSearch(''); 
+            const displayName = item[displayCol] || item.Property || item.invoice_number || item.name;
+            setSearch(displayName); 
             setShow(false);
         }
     };
@@ -72,7 +81,7 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
 
     return (
         <div style={{ position: 'relative', flex: 1 }}>
-            <label style={{ fontSize: '13px', fontWeight: 900, color: THEME.primary }}>{label}</label>
+            <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>{label}</label>
             <input 
                 type="text" 
                 tabIndex={tabIndex}
@@ -81,20 +90,18 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
                 onChange={(e) => { setSearch(e.target.value); setShow(true); }}
                 onFocus={() => { setShow(true); loadInitialData(search); }}
                 onKeyDown={handleKeyDown} 
-                style={{ width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}`, background: '#f8fafc', outline: 'none', marginTop: '5px', fontWeight: 'bold' }}
+                className="glass-input"
             />
             {show && results.length > 0 && (
                 <>
                     <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }} />
-                    <div ref={listRef} className="cinematic-scroll" style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0, background: 'white', zIndex: 2000, borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '250px', overflowY: 'auto', padding: '5px', border: `1px solid ${THEME.border}`, direction: 'rtl' }}>
+                    <div ref={listRef} className="cinematic-scroll glass-dropdown">
                         {results.map((item: any, index: number) => {
                             const isSelected = multi ? selectedValues.some((v: any) => v.id === item.id) : false;
+                            const isHighlighted = index === highlightedIndex;
                             return (
                                 <div key={item.id} onClick={() => handleItemAction(item)} 
-                                     style={{ 
-                                        padding: '12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '10px',
-                                        background: index === highlightedIndex ? '#f0f9ff' : (isSelected ? '#ecfdf5' : 'transparent'),
-                                     }}>
+                                     className={`dropdown-item ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}>
                                     {multi && <input type="checkbox" checked={isSelected} readOnly style={{ width: '18px', height: '18px', accentColor: THEME.success }} />}
                                     <span style={{ fontWeight: isSelected ? '900' : 'bold' }}>{item[displayCol] || item.Property || item.invoice_number || item.name}</span>
                                 </div>
@@ -108,19 +115,50 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
 };
 
 // =========================================================================
-// 📝 المودال الرئيسي
+// 📝 المودال الرئيسي (سند القبض)
 // =========================================================================
 export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord, onSave }: any) {
     if (!isOpen) return null;
 
-    // 🧠 سحر السحب الآلي المتعدد
+    // 🚀 [إضافة] المراقبة الذكية لجلب الأسماء عند الضغط من الخارج
+    useEffect(() => {
+        const syncNames = async () => {
+            if (!isOpen || !record) return;
+            
+            let updates: any = {};
+            let needsUpdate = false;
+
+            // 1. ترجمة مصفوفة العقارات (project_ids) لأسماء
+            if (record.project_ids?.length > 0 && (!record.selected_projects || record.selected_projects.length === 0)) {
+                const { data } = await supabase.from('projects').select('id, "Property"').in('id', record.project_ids);
+                if (data) {
+                    updates.selected_projects = data;
+                    needsUpdate = true;
+                }
+            }
+
+            // 2. ترجمة العميل (partner_id) لاسم
+            if (record.partner_id && !record.partner_name) {
+                const { data } = await supabase.from('partners').select('name').eq('id', record.partner_id).single();
+                if (data) {
+                    updates.partner_name = data.name;
+                    needsUpdate = true;
+                }
+            }
+
+            if (needsUpdate) {
+                setRecord((prev: any) => ({ ...prev, ...updates }));
+            }
+        };
+
+        syncNames();
+    }, [isOpen, record?.project_ids, record?.partner_id]);
+
+    // 🧠 1. سحر السحب الآلي عند اختيار الفاتورة يدوياً من الداخل
     const handleInvoiceSelect = async (inv: any) => {
         const remainingAmount = Number(inv.total_amount) - Number(inv.paid_amount || 0);
-        
-        // 1. جلب اسم العميل
         const { data: partnerData } = await supabase.from('partners').select('name').eq('id', inv.partner_id).single();
         
-        // 2. جلب كل العقارات المربوطة بالفاتورة (بناءً على مصفوفة project_ids)
         let projectsData: any[] = [];
         if (inv.project_ids && inv.project_ids.length > 0) {
             const { data } = await supabase.from('projects').select('id, "Property"').in('id', inv.project_ids);
@@ -132,25 +170,21 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
             invoice_id: inv.id,
             invoice_number: inv.invoice_number,
             partner_id: inv.partner_id,
-            partner_name: partnerData?.name || '---',
-            // 💡 تخزين الكائنات المختارة كاملة للعرض، والـ IDs للحفظ
-            selected_projects: projectsData,
+            partner_name: partnerData?.name || '', 
+            selected_projects: projectsData, 
             project_ids: projectsData.map(p => p.id), 
-            amount: remainingAmount > 0 ? remainingAmount : 0
+            amount: remainingAmount > 0 ? remainingAmount : 0 
         });
     };
 
-    // دالة التعامل مع اختيار عقار (إضافة أو حذف من القائمة)
+    // 🧠 2. دالة اختيار العقارات
     const handleProjectToggle = (proj: any) => {
         const current = record.selected_projects || [];
         const isExists = current.find((p: any) => p.id === proj.id);
         
-        let newList;
-        if (isExists) {
-            newList = current.filter((p: any) => p.id !== proj.id);
-        } else {
-            newList = [...current, { id: proj.id, Property: proj.Property }];
-        }
+        let newList = isExists 
+            ? current.filter((p: any) => p.id !== proj.id) 
+            : [...current, { id: proj.id, Property: proj.Property }];
 
         setRecord({
             ...record,
@@ -164,25 +198,74 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
         onSave(record);
     };
 
-    const inputStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: `1px solid ${THEME.border}`, marginTop: '5px', outline: 'none', fontWeight: 'bold' };
-
     return (
-        <div className="cinematic-scroll" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', zIndex: 9999, backdropFilter: 'blur(5px)', overflowY: 'auto' }}>
-            <div style={{ background: 'white', padding: '40px', borderRadius: '24px', width: '950px', margin: '5vh auto', direction: 'rtl', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', position: 'relative', overflow: 'visible' }}>
-                <h2 style={{ color: THEME.primary, borderBottom: `3px solid ${THEME.accent}50`, paddingBottom: '15px', margin: '0 0 30px 0', fontWeight: 900 }}>
+        <div className="cinematic-scroll" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', zIndex: 9999, backdropFilter: 'blur(10px)', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            
+            <style>{`
+                .glass-modal {
+                    background: rgba(255, 255, 255, 0.85);
+                    backdrop-filter: blur(25px);
+                    border: 1px solid rgba(255, 255, 255, 0.8);
+                    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
+                    border-radius: 28px;
+                    width: 950px;
+                    padding: 40px;
+                    direction: rtl;
+                }
+                .glass-input {
+                    width: 100%; padding: 14px; border-radius: 12px;
+                    border: 1px solid rgba(0, 0, 0, 0.1);
+                    background: rgba(255, 255, 255, 0.7);
+                    outline: none; transition: all 0.2s;
+                    font-weight: 700; color: #1e293b; font-size: 14px;
+                }
+                .glass-input:focus {
+                    background: #ffffff; border-color: ${THEME.accent};
+                    box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.15);
+                }
+                .glass-dropdown {
+                    position: absolute; top: calc(100% + 5px); left: 0; right: 0;
+                    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px);
+                    z-index: 2000; border-radius: 12px;
+                    box-shadow: 0 15px 35px rgba(0,0,0,0.15); border: 1px solid rgba(255, 255, 255, 0.8);
+                    max-height: 200px; overflow-y: auto; padding: 6px;
+                }
+                .dropdown-item {
+                    padding: 12px; cursor: pointer; border-radius: 8px;
+                    font-size: 13px; transition: all 0.1s; display: flex; align-items: center; gap: 10px;
+                }
+                .dropdown-item.highlighted { background: #f1f5f9; border-right: 4px solid ${THEME.primary}; }
+                .dropdown-item.selected { background: #f0fdf4; border-right: 4px solid ${THEME.success}; }
+                
+                .btn-save {
+                    background: linear-gradient(135deg, #10b981, #059669); color: white;
+                    border: none; padding: 18px; border-radius: 16px; font-weight: 900; font-size: 16px;
+                    cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+                }
+                .btn-save:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(16, 185, 129, 0.5); }
+                
+                .btn-cancel {
+                    background: rgba(255, 255, 255, 0.6); color: ${THEME.ruby};
+                    border: 1px solid rgba(255, 255, 255, 0.8); padding: 18px; border-radius: 16px;
+                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
+                }
+            `}</style>
+
+            <div className="glass-modal">
+                <h2 style={{ color: THEME.primary, borderBottom: `2px solid ${THEME.accent}40`, paddingBottom: '15px', margin: '0 0 30px 0', fontWeight: 900, fontSize: '26px' }}>
                     💰 {record.id ? 'تعديل سند قبض' : 'إصدار سند قبض جديد'}
                 </h2>
                 
-                <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px' }}>
+                <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
                     
                     <div>
-                        <label style={{ fontSize: '13px', fontWeight: 900 }}>تاريخ السند *</label>
-                        <input type="date" required tabIndex={1} value={record.date || ''} onChange={e => setRecord({...record, date: e.target.value})} style={inputStyle} />
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ السند *</label>
+                        <input type="date" required tabIndex={1} value={record.date || ''} onChange={e => setRecord({...record, date: e.target.value})} className="glass-input" />
                     </div>
                     
                     <div>
-                        <label style={{ fontSize: '13px', fontWeight: 900 }}>طريقة الدفع *</label>
-                        <select required tabIndex={2} value={record.payment_method || ''} onChange={e => setRecord({...record, payment_method: e.target.value})} style={inputStyle}>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>طريقة الدفع *</label>
+                        <select required tabIndex={2} value={record.payment_method || ''} onChange={e => setRecord({...record, payment_method: e.target.value})} className="glass-input" style={{ appearance: 'auto' }}>
                             <option value="نقدي (كاش)">نقدي (كاش)</option>
                             <option value="تحويل بنكي">تحويل بنكي</option>
                             <option value="شيك">شيك</option>
@@ -190,16 +273,23 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     </div>
 
                     <div>
-                        <label style={{ fontSize: '14px', fontWeight: 900, color: THEME.success }}>المبلغ المُحصل (ريال) *</label>
-                        <input type="number" required tabIndex={3} step="0.01" value={record.amount ?? ''} onChange={e => setRecord({...record, amount: e.target.value})} style={{...inputStyle, background: '#f0fdf4', color: THEME.success, fontSize: '18px'}} />
+                        <label style={{ fontSize: '14px', fontWeight: 900, color: THEME.success, display: 'block', marginBottom: '6px' }}>المبلغ المُحصل (ريال) *</label>
+                        <input type="number" required tabIndex={3} step="0.01" value={record.amount ?? ''} onChange={e => setRecord({...record, amount: e.target.value})} className="glass-input" style={{ background: '#f0fdf4', color: THEME.success, fontSize: '18px', border: `2px solid ${THEME.success}50` }} />
                     </div>
 
-                    {/* الفاتورة */}
+                    {/* --- الصف الثاني (السحب الآلي) --- */}
                     <div style={{ gridColumn: 'span 1' }}>
-                        <SmartCombo tabIndex={4} label="رقم الفاتورة" table="invoices" searchCols="invoice_number" displayCol="invoice_number" placeholder={record.invoice_number} onSelect={handleInvoiceSelect} />
+                        <SmartCombo 
+                            tabIndex={4} 
+                            label="رقم الفاتورة (سحب آلي ⚡)" 
+                            table="invoices" 
+                            searchCols="invoice_number" 
+                            displayCol="invoice_number" 
+                            initialDisplay={record.invoice_number}
+                            onSelect={handleInvoiceSelect} 
+                        />
                     </div>
 
-                    {/* العقارات (اختيار متعدد بالتشك بوكس) */}
                     <div style={{ gridColumn: 'span 1' }}>
                         <SmartCombo 
                             tabIndex={5} 
@@ -212,10 +302,9 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                             placeholder={ (record.selected_projects?.length > 0) ? `تم اختيار (${record.selected_projects.length}) عقارات` : '🔍 اختر العقارات...' }
                             onSelect={handleProjectToggle} 
                         />
-                        {/* عرض أسامي العقارات المختارة تحت الخانة بشكل شيك */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
                             {(record.selected_projects || []).map((p: any) => (
-                                <span key={p.id} style={{ background: '#f1f5f9', fontSize: '10px', padding: '3px 8px', borderRadius: '5px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>
+                                <span key={p.id} style={{ background: 'rgba(30, 41, 59, 0.1)', fontSize: '11px', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', fontWeight: 800, color: THEME.primary }}>
                                     {p.Property}
                                 </span>
                             ))}
@@ -223,25 +312,58 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     </div>
 
                     <div style={{ gridColumn: 'span 1' }}>
-                        <SmartCombo tabIndex={6} label="العميل الدافع *" table="partners" searchCols="name" displayCol="name" placeholder={record.partner_name} onSelect={(p: any) => setRecord({...record, partner_id: p.id, partner_name: p.name})} />
+                        <SmartCombo 
+                            tabIndex={6} 
+                            label="العميل الدافع *" 
+                            table="partners" 
+                            searchCols="name" 
+                            displayCol="name" 
+                            initialDisplay={record.partner_name}
+                            onSelect={(p: any) => setRecord({...record, partner_id: p.id, partner_name: p.name})} 
+                        />
                     </div>
 
-                    {/* التوجيه المحاسبي */}
-                    <div style={{ gridColumn: '1 / -1', background: '#f8fafc', padding: '25px', borderRadius: '16px', border: '2px dashed #cbd5e1' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
-                            <SmartCombo tabIndex={7} label="حساب الصندوق (مدين)" table="accounts" placeholder={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
-                            <SmartCombo tabIndex={8} label="حساب العميل (دائن)" table="accounts" placeholder={record.partner_acc_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
+                    {/* --- قسم الخصم (Apple Style) --- */}
+                    <div style={{ gridColumn: '1 / -1', background: 'rgba(245, 158, 11, 0.05)', padding: '20px', borderRadius: '20px', border: `1px dashed rgba(245, 158, 11, 0.3)` }}>
+                        <h4 style={{ color: '#d97706', margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🎁 خصم مسموح به (اختياري)</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '15px' }}>
+                            <div>
+                                <label style={{ fontSize: '12px', fontWeight: 900, color: '#d97706', display: 'block', marginBottom: '6px' }}>مبلغ الخصم</label>
+                                <input type="number" step="0.01" tabIndex={7} placeholder="0.00" value={record.discount_amount ?? ''} onChange={e => setRecord({...record, discount_amount: e.target.value})} className="glass-input" style={{ borderColor: 'rgba(245, 158, 11, 0.3)' }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>بيان الخصم</label>
+                                <input type="text" tabIndex={8} placeholder="مثال: خصم تعجيل دفع..." value={record.discount_notes || ''} onChange={e => setRecord({...record, discount_notes: e.target.value})} className="glass-input" />
+                            </div>
+                            <div>
+                                <SmartCombo 
+                                    tabIndex={9} 
+                                    label="حساب الخصم" 
+                                    table="accounts" 
+                                    initialDisplay={record.discount_acc_name}
+                                    onSelect={(a: any) => setRecord({...record, discount_acc_id: a.id, discount_acc_name: a.name})} 
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* --- التوجيه المحاسبي --- */}
+                    <div style={{ gridColumn: '1 / -1', background: 'rgba(255, 255, 255, 0.5)', padding: '25px', borderRadius: '20px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ color: THEME.primary, margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🏦 التوجيه المحاسبي</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                            <SmartCombo tabIndex={10} label="حساب الصندوق/البنك (مدين)" table="accounts" initialDisplay={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
+                            <SmartCombo tabIndex={11} label="حساب العميل (دائن)" table="accounts" initialDisplay={record.partner_acc_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
                         </div>
                     </div>
 
                     <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 900 }}>البيان / الملاحظات</label>
-                        <input type="text" tabIndex={9} placeholder="بيان توضيحي..." value={record.notes || ''} onChange={e => setRecord({...record, notes: e.target.value})} style={inputStyle} />
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>البيان / الملاحظات العامة</label>
+                        <input type="text" tabIndex={12} placeholder="بيان السند توضيحي..." value={record.notes || ''} onChange={e => setRecord({...record, notes: e.target.value})} className="glass-input" />
                     </div>
 
-                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '15px', marginTop: '20px' }}>
-                        <button type="submit" tabIndex={10} style={{ flex: 2, padding: '18px', borderRadius: '12px', background: THEME.success, color: 'white', border: 'none', fontWeight: 900, fontSize: '18px' }}>💾 حفظ السند</button>
-                        <button type="button" tabIndex={11} onClick={onClose} style={{ flex: 1, padding: '18px', borderRadius: '12px', background: '#f1f5f9', color: THEME.ruby, border: 'none', fontWeight: 900 }}>❌ إغلاق</button>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '15px', marginTop: '10px' }}>
+                        <button type="submit" tabIndex={13} className="btn-save" style={{ flex: 2 }}>💾 حفظ وإصدار السند</button>
+                        <button type="button" tabIndex={14} onClick={onClose} className="btn-cancel" style={{ flex: 1 }}>❌ إغلاق النافذة</button>
                     </div>
                 </form>
             </div>

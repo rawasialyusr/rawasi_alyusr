@@ -5,12 +5,14 @@ import { formatCurrency, formatDate } from '@/lib/helpers';
 import SignaturePad from '@/components/signaturepad';
 import RawasiSmartTable from '@/components/rawasismarttable';
 import { THEME } from '@/lib/theme'; 
-import RawasiSidebarManager from '@/components/RawasiSidebarManager'; // 🚀 استدعاء المكون الجديد
+import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
+import MasterPage from '@/components/MasterPage'; // 🖼️ استدعاء الغلاف الموحد
+import SmartCombo from '@/components/SmartCombo'; // 🧠 استدعاء السمارت كومبو
 
 export default function EmployeeProfilePage() {
     const { 
-        isLoading, isSaving, userProfile, partnerData, financials, 
-        recentLogs, recentAdvances, recentDeductions, filteredLogs,
+        isLoading, isSaving, userProfile, financials, 
+        recentAdvances, recentDeductions, filteredLogs,
         tasks, notifications, monthlyKPIs, userRequests,
         filteredData, rangeKPIs, 
         activeTab, setActiveTab, refreshProfile, searchFilters, setSearchFilters,
@@ -36,22 +38,27 @@ export default function EmployeeProfilePage() {
     const totalWages = rangeKPIs?.totalWages || 0;
     const totalDeductions = rangeKPIs?.totalDeductions || 0;
 
-    // 🚀 بناء محتوى السايد بار بناءً على التاب
+    // 🚀 بناء محتوى السايد بار (مع حل مشكلة الـ Border Style Conflict)
     const sidebarContent = useMemo(() => {
         let summary = null;
         let actions = null;
 
         const actionBtnStyle: React.CSSProperties = {
             width: '100%', padding: '12px', borderRadius: '12px', 
-            borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.1)',
+            borderStyle: 'solid', borderWidth: '1px', borderColor: 'rgba(255,255,255,0.1)',
             background: 'rgba(255,255,255,0.05)', color: 'white', display: 'flex', alignItems: 'center',
             gap: '10px', cursor: 'pointer', fontWeight: 900, fontSize: '13px', transition: '0.3s', marginBottom: '8px'
         };
 
+        // دالة مساعدة لمنع تعارض الـ CSS
+        const getBorderStyles = (color: string): React.CSSProperties => ({
+            borderStyle: 'solid', borderWidth: '1px', borderColor: color
+        });
+
         switch (activeTab) {
             case 'tasks':
                 summary = (
-                    <div style={{ background: 'rgba(220, 38, 38, 0.1)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(220, 38, 38, 0.3)', textAlign: 'center' }}>
+                    <div style={{ background: 'rgba(220, 38, 38, 0.1)', padding: '20px', borderRadius: '20px', textAlign: 'center', ...getBorderStyles('rgba(220, 38, 38, 0.3)') }}>
                         <div style={{ fontSize: '30px', marginBottom: '10px' }}>⏳</div>
                         <p style={{ margin: 0, fontSize: '13px', color: THEME.danger || '#be123c', fontWeight: 900 }}>مهام قيد التنفيذ</p>
                         <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '28px', color: 'white' }}>{pTasks} <small style={{fontSize:'12px'}}>مهمة</small></h3>
@@ -62,7 +69,7 @@ export default function EmployeeProfilePage() {
 
             case 'requests':
                 summary = (
-                    <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(197, 160, 89, 0.3)', textAlign: 'center' }}>
+                    <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '20px', borderRadius: '20px', textAlign: 'center', ...getBorderStyles('rgba(197, 160, 89, 0.3)') }}>
                         <div style={{ fontSize: '30px', marginBottom: '10px' }}>📨</div>
                         <p style={{ margin: 0, fontSize: '13px', color: THEME.goldAccent, fontWeight: 900 }}>الطلبات المعلقة</p>
                         <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '28px', color: 'white' }}>{pReqs} <small style={{fontSize:'12px'}}>طلب</small></h3>
@@ -70,7 +77,7 @@ export default function EmployeeProfilePage() {
                 );
                 actions = (
                     <>
-                        <button style={{...actionBtnStyle, background: `${THEME.success}20`, borderColor: THEME.success}} onClick={() => window.dispatchEvent(new CustomEvent('openRequestsTab'))}>
+                        <button style={{...actionBtnStyle, background: `${THEME.success}20`, ...getBorderStyles(THEME.success)}} onClick={() => window.dispatchEvent(new CustomEvent('openRequestsTab'))}>
                             <span style={{fontSize:'18px'}}>➕</span> إنشاء طلب جديد
                         </button>
                         <button style={actionBtnStyle} onClick={() => window.dispatchEvent(new CustomEvent('closeRequestsForm'))}>
@@ -99,7 +106,7 @@ export default function EmployeeProfilePage() {
                                 <div style={{ margin: '5px 0 0 0', color: 'white', fontSize: '13px', fontWeight: 900 }}>{formatCurrency(totalDeductions)}</div>
                             </div>
                         </div>
-                        <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '15px', borderRadius: '15px', textAlign: 'center', border: `1px solid ${THEME.goldAccent}` }}>
+                        <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '15px', borderRadius: '15px', textAlign: 'center', ...getBorderStyles(THEME.goldAccent) }}>
                             <p style={{ margin: 0, fontSize: '11px', color: THEME.goldAccent, fontWeight: 900 }}>الصافي</p>
                             <h3 style={{ margin: '5px 0 0 0', color: 'white', fontSize: '22px' }}>{formatCurrency(nBal)}</h3>
                         </div>
@@ -111,15 +118,15 @@ export default function EmployeeProfilePage() {
             case 'kpi':
                 summary = (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(16, 185, 129, 0.3)', textAlign: 'center' }}>
+                        <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '15px', borderRadius: '15px', textAlign: 'center', ...getBorderStyles('rgba(16, 185, 129, 0.3)') }}>
                             <p style={{ margin: 0, fontSize: '11px', color: THEME.success, fontWeight: 900 }}>نسبة الالتزام</p>
                             <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '24px', color: 'white' }}>{attendanceRate}%</h3>
                         </div>
-                        <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(197, 160, 89, 0.3)', textAlign: 'center' }}>
+                        <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '15px', borderRadius: '15px', textAlign: 'center', ...getBorderStyles('rgba(197, 160, 89, 0.3)') }}>
                             <p style={{ margin: 0, fontSize: '11px', color: THEME.goldAccent, fontWeight: 900 }}>الإنتاجية المحققة</p>
                             <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '24px', color: 'white' }}>{totalProd}</h3>
                         </div>
-                        <div style={{ background: 'rgba(15, 23, 42, 0.4)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
+                        <div style={{ background: 'rgba(15, 23, 42, 0.4)', padding: '15px', borderRadius: '15px', textAlign: 'center', ...getBorderStyles('rgba(255,255,255,0.1)') }}>
                             <p style={{ margin: 0, fontSize: '11px', color: 'white', fontWeight: 900 }}>إجمالي المستحقات</p>
                             <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '20px', color: THEME.success }}>{formatCurrency(totalEarnings)}</h3>
                         </div>
@@ -130,7 +137,7 @@ export default function EmployeeProfilePage() {
 
             default:
                 summary = (
-                    <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(197, 160, 89, 0.3)', textAlign: 'center' }}>
+                    <div style={{ background: 'rgba(197, 160, 89, 0.1)', padding: '20px', borderRadius: '20px', textAlign: 'center', ...getBorderStyles('rgba(197, 160, 89, 0.3)') }}>
                         <div style={{ fontSize: '30px', marginBottom: '10px' }}>🏗️</div>
                         <p style={{ margin: 0, fontSize: '13px', color: THEME.goldAccent, fontWeight: 900 }}>الإنتاجية المحققة</p>
                         <h3 style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '28px', color: 'white' }}>{totalProd}</h3>
@@ -173,8 +180,10 @@ export default function EmployeeProfilePage() {
     const avatarImg = userProfile?.avatar || userProfile?.avatar_url;
 
     return (
-        <div style={{ minHeight: '100vh', direction: 'rtl', fontFamily: "'Cairo', sans-serif", background: 'transparent', padding: '40px 50px' }}>
-            
+        <MasterPage 
+            title="ملف الموظف الشخصي" 
+            subtitle="المركز الرقمي لإدارة المهام والمستحقات والطلبات"
+        >
             {/* 🚀 إدراج مدير السايد بار المخفي هنا ليتولى نقل البيانات واستقبال الفلاتر */}
             <RawasiSidebarManager 
                 summary={sidebarContent.summary}
@@ -186,16 +195,17 @@ export default function EmployeeProfilePage() {
 
             <style>{`
                 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(12px); display: flex; justify-content: center; align-items: center; z-index: 2000; animation: fadeIn 0.3s ease; }
-                .modal-box { background: rgba(255,255,255,0.9); backdrop-filter: blur(15px); width: 600px; padding: 40px; border-radius: 35px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 25px 50px rgba(0,0,0,0.2); position: relative; max-height: 90vh; overflow-y: auto; }
+                .modal-box { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); width: 600px; padding: 40px; border-radius: 35px; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 25px 50px rgba(0,0,0,0.2); position: relative; max-height: 90vh; overflow-y: auto; }
                 .sidebar-input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; margin-bottom: 20px; outline: none; font-size: 13px; transition: 0.3s; }
                 .sidebar-input:focus { border-color: ${THEME.goldAccent}; background: rgba(197, 160, 89, 0.05); }
-                .tab-btn { padding: 18px 25px; border: none; background: transparent; font-size: 14px; font-weight: 900; color: #94a3b8; cursor: pointer; border-bottom: 4px solid transparent; transition: 0.3s; white-space: nowrap; }
-                .tab-btn.active { color: ${THEME.coffeeDark}; border-bottom-color: ${THEME.goldAccent}; background: rgba(255,255,255,0.6); }
-                .card-base { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.4); border-radius: 35px; box-shadow: 0 10px 40px rgba(140, 106, 93, 0.08); overflow: hidden; margin-bottom: 30px; }
+                .tab-btn { padding: 16px 25px; border: none; background: transparent; font-size: 14px; font-weight: 900; color: #64748b; cursor: pointer; transition: 0.3s; white-space: nowrap; border-radius: 16px; }
+                .tab-btn.active { color: white; background: ${THEME.primary}; box-shadow: 0 5px 15px rgba(15, 23, 42, 0.3); }
+                .tab-btn:hover:not(.active) { background: rgba(0,0,0,0.05); }
+                .card-base { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.8); border-radius: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 30px; }
                 .policy-paper { background: rgba(252, 250, 248, 0.85); backdrop-filter: blur(10px); padding: 45px; border-radius: 25px; border: 1px solid rgba(230, 213, 195, 0.5); line-height: 1.8; position: relative; color: ${THEME.coffeeDark}; }
                 .policy-paper::after { content: 'RYC'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 150px; color: rgba(0,0,0,0.02); pointer-events: none; }
-                .request-card { background: rgba(255,255,255,0.8); padding: 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.5); border-right: 6px solid ${THEME.goldAccent}; transition: 0.3s; margin-bottom: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); }
-                .request-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.05); }
+                .request-card { background: rgba(255,255,255,0.9); padding: 25px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.5); border-right: 6px solid ${THEME.goldAccent}; transition: 0.3s; margin-bottom: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+                .request-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
                 .btn-primary { background: ${THEME.goldAccent}; color: white; border: none; padding: 12px 25px; border-radius: 12px; font-weight: 900; cursor: pointer; transition: 0.3s; }
                 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(197, 160, 89, 0.3); }
                 .status-badge { padding: 6px 15px; border-radius: 20px; font-size: 11px; font-weight: 900; }
@@ -203,50 +213,50 @@ export default function EmployeeProfilePage() {
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             `}</style>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', border: `3px solid ${THEME.goldAccent}`, overflow: 'hidden', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
-                        {avatarImg ? <img src={avatarImg} style={{width:'100%', height:'100%', objectFit:'cover'}} alt="Avatar" /> : <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px'}}>👤</div>}
+            {/* 👤 الهيدر العلوي للموظف */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '35px', background: 'rgba(255,255,255,0.4)', padding: '25px', borderRadius: '30px', border: '1px solid rgba(255,255,255,0.6)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '25px' }}>
+                    <div style={{ width: '90px', height: '90px', borderRadius: '25px', background: 'rgba(255,255,255,0.8)', border: `4px solid white`, overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+                        {avatarImg ? <img src={avatarImg} style={{width:'100%', height:'100%', objectFit:'cover'}} alt="Avatar" /> : <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'35px'}}>👤</div>}
                     </div>
                     <div>
-                        <h1 style={{ margin: 0, color: THEME.coffeeDark, fontWeight: 900, fontSize: '28px' }}>مرحباً، {displayName} 🏗️</h1>
-                        <p style={{ margin: '5px 0 8px 0', color: THEME.goldAccent, fontSize: '16px', fontWeight: 900 }}>{profession}</p>
-                        <div style={{ fontSize: '13px', color: '#64748b' }}>
-                            <span style={{ fontWeight: 900 }}>🆔 اسم المستخدم (الجوال): </span>
-                            <code style={{ background: 'rgba(255,255,255,0.6)', padding: '3px 8px', borderRadius: '5px', fontWeight: 900, border: '1px solid rgba(0,0,0,0.1)' }}>
-                                {usernamePhone}
-                            </code>
+                        <h1 style={{ margin: 0, color: THEME.primary, fontWeight: 900, fontSize: '28px' }}>مرحباً، {displayName} 👷‍♂️</h1>
+                        <p style={{ margin: '5px 0 8px 0', color: THEME.accent, fontSize: '15px', fontWeight: 900 }}>{profession}</p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <span style={{ fontSize: '11px', background: 'white', color: '#64748b', padding: '4px 10px', borderRadius: '8px', fontWeight: 900, border: '1px solid #e2e8f0' }}>
+                                🆔 {usernamePhone}
+                            </span>
                         </div>
                     </div>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '15px' }}>
-                    <button onClick={() => setIsSettingsOpen(true)} style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.5)', padding: '12px 25px', borderRadius: '15px', fontWeight: 900, cursor: 'pointer', color: THEME.coffeeDark, transition: '0.3s' }}>⚙️ الإعدادات</button>
-                    <div onClick={markAllNotificationsAsRead} style={{ position: 'relative', background: 'rgba(67, 52, 46, 0.85)', backdropFilter: 'blur(10px)', color: 'white', padding: '12px 20px', borderRadius: '15px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        🔔 {(notifications || []).length > 0 && <span style={{ position: 'absolute', top: '-5px', left: '-5px', background: THEME.danger || '#be123c', color: 'white', fontSize: '10px', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white', fontWeight: 900 }}>{notifications.length}</span>}
+                    <button onClick={() => setIsSettingsOpen(true)} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '12px 25px', borderRadius: '15px', fontWeight: 900, cursor: 'pointer', color: THEME.primary, transition: '0.3s', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>⚙️ الإعدادات</button>
+                    <div onClick={markAllNotificationsAsRead} style={{ position: 'relative', background: THEME.primary, color: 'white', padding: '12px 20px', borderRadius: '15px', cursor: 'pointer', boxShadow: `0 8px 20px ${THEME.primary}40` }}>
+                        🔔 {(notifications || []).length > 0 && <span style={{ position: 'absolute', top: '-5px', left: '-5px', background: THEME.danger || '#ef4444', color: 'white', fontSize: '10px', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white', fontWeight: 900 }}>{notifications.length}</span>}
                     </div>
                 </div>
             </div>
 
             <div className="card-base">
-                <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.4)', overflowX: 'auto' }}>
+                <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.05)', background: 'rgba(255,255,255,0.4)', padding: '15px', gap: '10px', overflowX: 'auto' }}>
                     <button className={`tab-btn ${activeTab === 'tasks' ? 'active' : ''}`} onClick={() => setActiveTab('tasks')}>📋 المهام</button>
-                    <button className={`tab-btn ${activeTab === 'report' ? 'active' : ''}`} onClick={() => setActiveTab('report')}>📑 تقرير العمل والإنتاجية</button>
-                    <button className={`tab-btn ${activeTab === 'daily_fin' ? 'active' : ''}`} onClick={() => setActiveTab('daily_fin')}>💰 التقرير المالي</button>
-                    <button className={`tab-btn ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>⚖️ الطلبات والاعتراضات</button>
+                    <button className={`tab-btn ${activeTab === 'report' ? 'active' : ''}`} onClick={() => setActiveTab('report')}>📑 الإنتاجية</button>
+                    <button className={`tab-btn ${activeTab === 'daily_fin' ? 'active' : ''}`} onClick={() => setActiveTab('daily_fin')}>💰 ملخص مالي</button>
+                    <button className={`tab-btn ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>⚖️ الطلبات</button>
                     <button className={`tab-btn ${activeTab === 'statement' ? 'active' : ''}`} onClick={() => setActiveTab('statement')}>🧾 كشف الحساب</button>
-                    <button className={`tab-btn ${activeTab === 'kpi' ? 'active' : ''}`} onClick={() => setActiveTab('kpi')}>📊 التقييم الشهري</button>
+                    <button className={`tab-btn ${activeTab === 'kpi' ? 'active' : ''}`} onClick={() => setActiveTab('kpi')}>📊 التقييم</button>
                     <button className={`tab-btn ${activeTab === 'policy' ? 'active' : ''}`} onClick={() => setActiveTab('policy')}>📜 اللائحة</button>
                 </div>
 
-                <div style={{ padding: '45px' }}>
+                <div style={{ padding: '35px' }}>
                     {activeTab === 'tasks' && (
                         <div className="animate-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '35px' }}>
                             <div>
                                 <h3 style={{ color: THEME.danger || '#be123c', borderRight: `6px solid ${THEME.danger || '#be123c'}`, paddingRight: '15px', marginBottom: '25px' }}>⏳ مهام قيد التنفيذ</h3>
                                 {(tasks || []).filter((t:any) => t.status !== 'completed').map((task: any) => (
-                                    <div key={task.id} className="request-card" style={{ borderRightColor: THEME.goldAccent, padding: '25px' }}>
-                                        <h4 style={{ margin: 0, fontSize: '18px', color: THEME.coffeeDark }}>{task.title}</h4>
+                                    <div key={task.id} className="request-card" style={{ borderRightColor: THEME.accent }}>
+                                        <h4 style={{ margin: 0, fontSize: '18px', color: THEME.primary }}>{task.title}</h4>
                                         <p style={{ fontSize: '14px', color: '#64748b', margin: '10px 0' }}>{task.description}</p>
                                         <div style={{ display: 'flex', gap: '10px' }}>
                                             <button onClick={() => submitTaskUpdate(task.id, 'completed')} className="btn-primary" style={{ background: THEME.success, padding: '8px 20px' }}>تم الإنجاز ✅</button>
@@ -266,8 +276,8 @@ export default function EmployeeProfilePage() {
                                 <h3 style={{ color: THEME.success, borderRight: `6px solid ${THEME.success}`, paddingRight: '15px', marginBottom: '25px' }}>✅ المهام المكتملة</h3>
                                 {(tasks || []).filter((t:any) => t.status === 'completed').map((task: any) => (
                                     <div key={task.id} className="request-card" style={{ borderRightColor: THEME.success, opacity: 0.65 }}>
-                                        <h4 style={{ margin: 0, textDecoration: 'line-through', color: THEME.coffeeDark }}>{task.title}</h4>
-                                        <p style={{ fontSize: '12px', marginTop: '8px', fontWeight: 700 }}>تاريخ الإنجاز: {formatDate(task.updated_at)}</p>
+                                        <h4 style={{ margin: 0, textDecoration: 'line-through', color: THEME.primary }}>{task.title}</h4>
+                                        <p style={{ fontSize: '12px', marginTop: '8px', fontWeight: 700, color: '#64748b' }}>تاريخ الإنجاز: {formatDate(task.updated_at)}</p>
                                     </div>
                                 ))}
                             </div>
@@ -282,8 +292,8 @@ export default function EmployeeProfilePage() {
                                 data={filteredData?.logs || []}
                                 columns={[
                                     { header: 'التاريخ', accessor: 'work_date', render: (val, row) => `📅 ${formatDate(val || row.Date)}` },
-                                    { header: 'الموقع والبند', accessor: 'site_ref', render: (val, row) => <div style={{ fontWeight: 900, color: THEME.coffeeDark }}>{val || row.Site} <span style={{fontSize:'12px', color:THEME.goldAccent, display:'block'}}>{row.work_item || row.Item}</span></div> },
-                                    { header: 'الإنتاجية', accessor: 'daily_production', render: (val, row) => <span style={{ fontWeight: 900, color: THEME.coffeeDark }}>📦 {val || row.Prod || 0} وحدة</span> },
+                                    { header: 'الموقع والبند', accessor: 'site_ref', render: (val, row) => <div style={{ fontWeight: 900, color: THEME.primary }}>{val || row.Site} <span style={{fontSize:'12px', color:THEME.accent, display:'block'}}>{row.work_item || row.Item}</span></div> },
+                                    { header: 'الإنتاجية', accessor: 'daily_production', render: (val, row) => <span style={{ fontWeight: 900, color: THEME.primary }}>📦 {val || row.Prod || 0} وحدة</span> },
                                     { header: 'الأجر المسجل', accessor: 'daily_wage', render: (val, row) => <span style={{ fontWeight: 900, color: THEME.success }}>{formatCurrency(val || row.D_W)}</span> }
                                 ]}
                             />
@@ -292,13 +302,13 @@ export default function EmployeeProfilePage() {
 
                     {activeTab === 'daily_fin' && (
                          <div className="animate-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                            <div style={{ background: 'rgba(252, 248, 241, 0.8)', backdropFilter: 'blur(10px)', padding: '30px', borderRadius: '25px', border: `1px solid ${THEME.goldAccent}` }}>
-                                <h4 style={{ color: THEME.goldAccent, margin: '0 0 20px 0', fontSize: '18px' }}>💵 آخر السحوبات (سلف)</h4>
-                                {(recentAdvances || []).slice(0, 5).map((a: any) => <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px dashed rgba(197, 160, 89, 0.3)', color: THEME.coffeeDark }}><span>{formatDate(a.date)}</span><span style={{ fontWeight: 900 }}>{formatCurrency(a.amount)}</span></div>)}
+                            <div style={{ background: 'rgba(252, 248, 241, 0.8)', backdropFilter: 'blur(10px)', padding: '30px', borderRadius: '25px', border: `1px solid ${THEME.accent}` }}>
+                                <h4 style={{ color: THEME.accent, margin: '0 0 20px 0', fontSize: '18px' }}>💵 آخر السحوبات (سلف)</h4>
+                                {(recentAdvances || []).slice(0, 5).map((a: any) => <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px dashed rgba(197, 160, 89, 0.3)', color: THEME.primary }}><span>{formatDate(a.date)}</span><span style={{ fontWeight: 900 }}>{formatCurrency(a.amount)}</span></div>)}
                             </div>
-                            <div style={{ background: 'rgba(255, 241, 242, 0.8)', backdropFilter: 'blur(10px)', padding: '30px', borderRadius: '25px', border: `1px solid ${THEME.danger || '#be123c'}` }}>
-                                <h4 style={{ color: THEME.danger || '#be123c', margin: '0 0 20px 0', fontSize: '18px' }}>✂️ آخر الخصومات</h4>
-                                {(recentDeductions || []).slice(0, 5).map((d: any) => <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px dashed rgba(190, 18, 60, 0.3)', color: THEME.coffeeDark }}><span>{formatDate(d.date)}</span><span style={{ fontWeight: 900 }}>{formatCurrency(d.amount)}</span></div>)}
+                            <div style={{ background: 'rgba(255, 241, 242, 0.8)', backdropFilter: 'blur(10px)', padding: '30px', borderRadius: '25px', border: `1px solid ${THEME.danger || '#ef4444'}` }}>
+                                <h4 style={{ color: THEME.danger || '#ef4444', margin: '0 0 20px 0', fontSize: '18px' }}>✂️ آخر الخصومات</h4>
+                                {(recentDeductions || []).slice(0, 5).map((d: any) => <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px dashed rgba(239, 68, 68, 0.3)', color: THEME.primary }}><span>{formatDate(d.date)}</span><span style={{ fontWeight: 900 }}>{formatCurrency(d.amount)}</span></div>)}
                             </div>
                         </div>
                     )}
@@ -306,58 +316,66 @@ export default function EmployeeProfilePage() {
                     {activeTab === 'requests' && (
                          <div className="animate-fade-in">
                             {showRequestForm ? (
-                                <div className="animate-fade-in" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', padding: '35px', borderRadius: '25px', border: `1px solid rgba(255,255,255,0.5)` }}>
-                                    <h4 style={{marginTop:0, marginBottom:'20px', color: THEME.coffeeDark}}>تعبئة بيانات الطلب</h4>
+                                <div className="animate-fade-in" style={{ background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', padding: '40px', borderRadius: '30px', border: `1px solid rgba(255,255,255,0.8)`, maxWidth: '700px', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.05)' }}>
+                                    <h3 style={{marginTop:0, marginBottom:'25px', color: THEME.primary, fontWeight: 900, textAlign: 'center'}}>📝 تعبئة بيانات الطلب</h3>
+                                    
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                                        <div>
-                                            <label style={{ fontSize: '13px', fontWeight: 900, display: 'block', marginBottom: '8px', color: THEME.coffeeDark }}>نوع الطلب</label>
-                                            <select className="sidebar-input" style={{ color: 'black', background: 'white', border: '1px solid #ddd' }} onChange={(e) => setNewRequest({...newRequest, type: e.target.value})}>
-                                                <option value="objection">🛑 اعتراض على (يومية/خصم/سلفة)</option>
-                                                <option value="request">📨 طلب إداري (إجازة/عهدة/شهادة)</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label style={{ fontSize: '13px', fontWeight: 900, display: 'block', marginBottom: '8px', color: THEME.coffeeDark }}>التصنيف</label>
-                                            <select className="sidebar-input" style={{ color: 'black', background: 'white', border: '1px solid #ddd' }} onChange={(e) => setNewRequest({...newRequest, category: e.target.value})}>
-                                                <option value="wage">الأجور واليوميات</option>
-                                                <option value="deduction">الخصومات والجزاءات</option>
-                                                <option value="advance">السلف المالية</option>
-                                                <option value="leave">الإجازات والغياب</option>
-                                            </select>
-                                        </div>
+                                        {/* 🧠 استخدام السمارت كومبو بدلًا من الـ Select العادي */}
+                                        <SmartCombo 
+                                            label="نوع الطلب"
+                                            options={['🛑 اعتراض مالي', '📨 طلب إداري', '🏖️ إجازة']}
+                                            initialDisplay={newRequest.type === 'objection' ? '🛑 اعتراض مالي' : '📨 طلب إداري'}
+                                            onSelect={(val) => setNewRequest({...newRequest, type: val.includes('اعتراض') ? 'objection' : 'request'})}
+                                            strict={true}
+                                        />
+                                        <SmartCombo 
+                                            label="التصنيف"
+                                            options={['💰 الأجور واليوميات', '📉 الخصومات والجزاءات', '💸 السلف المالية', '📅 الإجازات والغياب']}
+                                            initialDisplay="💰 الأجور واليوميات"
+                                            onSelect={(val) => {
+                                                const cat = val.includes('الأجور') ? 'wage' : val.includes('خصوم') ? 'deduction' : val.includes('سلف') ? 'advance' : 'leave';
+                                                setNewRequest({...newRequest, category: cat});
+                                            }}
+                                            strict={true}
+                                        />
                                     </div>
-                                    <input className="sidebar-input" style={{color:'black', border:'1px solid #ddd', marginBottom:'20px', background:'white'}} placeholder="عنوان الموضوع (مثلاً: اعتراض على خصم يومية)..." onChange={(e) => setNewRequest({...newRequest, subject: e.target.value})} />
-                                    <textarea className="sidebar-input" style={{color:'black', border:'1px solid #ddd', height:'100px', width:'100%', padding:'12px', borderRadius:'10px', marginBottom:'20px', background:'white'}} placeholder="اشرح التفاصيل أو المبررات هنا..." onChange={(e) => setNewRequest({...newRequest, details: e.target.value})} />
+                                    
+                                    <label style={{ fontSize: '13px', fontWeight: 900, display: 'block', marginBottom: '8px', color: THEME.primary }}>عنوان الموضوع</label>
+                                    <input style={{width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', marginBottom: '20px', fontWeight: 800, outline: 'none'}} placeholder="مثلاً: اعتراض على خصم يومية..." onChange={(e) => setNewRequest({...newRequest, subject: e.target.value})} />
+                                    
+                                    <label style={{ fontSize: '13px', fontWeight: 900, display: 'block', marginBottom: '8px', color: THEME.primary }}>التفاصيل والمبررات</label>
+                                    <textarea style={{width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', height: '120px', marginBottom: '25px', resize: 'vertical', outline: 'none'}} placeholder="اشرح التفاصيل بوضوح هنا..." onChange={(e) => setNewRequest({...newRequest, details: e.target.value})} />
+                                    
                                     <div style={{ display: 'flex', gap: '15px' }}>
-                                        <button onClick={() => createRequest(newRequest).then(() => setShowRequestForm(false))} className="btn-primary" style={{ flex: 2 }}>إرسال الطلب للإدارة 🚀</button>
-                                        <button onClick={() => setShowRequestForm(false)} style={{ flex: 1, background:'rgba(0,0,0,0.05)', border:'none', padding:'15px', borderRadius:'15px', fontWeight:900, cursor:'pointer', color: THEME.coffeeDark }}>إلغاء</button>
+                                        <button onClick={() => createRequest(newRequest).then(() => setShowRequestForm(false))} style={{ flex: 2, background: THEME.accent, color: 'white', padding: '16px', borderRadius: '15px', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '15px', boxShadow: `0 10px 20px ${THEME.accent}40` }}>إرسال الطلب للإدارة 🚀</button>
+                                        <button onClick={() => setShowRequestForm(false)} style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '16px', borderRadius: '15px', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '15px' }}>إلغاء</button>
                                     </div>
                                 </div>
                             ) : (
                                 <div style={{ display: 'grid', gap: '20px' }}>
                                     {(userRequests || []).map((req: any) => (
-                                        <div key={req.id} className="request-card" style={{ borderRightColor: req.type === 'objection' ? THEME.danger || '#be123c' : THEME.goldAccent }}>
+                                        <div key={req.id} className="request-card" style={{ borderRightColor: req.type === 'objection' ? THEME.danger || '#ef4444' : THEME.accent }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                                 <div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-                                                        <span style={{ fontSize: '10px', background: 'rgba(0,0,0,0.05)', padding: '3px 8px', borderRadius: '5px', fontWeight: 900, color: THEME.coffeeDark }}>{req.category === 'wage' ? '💰 أجور' : req.category === 'leave' ? '📅 إجازات' : '⚙️ أخرى'}</span>
-                                                        <h4 style={{ margin: 0, fontSize: '17px', color: THEME.coffeeDark }}>{req.subject}</h4>
+                                                        <span style={{ fontSize: '10px', background: 'rgba(0,0,0,0.05)', padding: '4px 10px', borderRadius: '8px', fontWeight: 900, color: THEME.primary }}>{req.category === 'wage' ? '💰 أجور' : req.category === 'leave' ? '📅 إجازات' : '⚙️ أخرى'}</span>
+                                                        <h4 style={{ margin: 0, fontSize: '18px', color: THEME.primary }}>{req.subject}</h4>
                                                     </div>
-                                                    <p style={{ margin: 0, fontSize: '14px', color: '#64748b', marginTop: '10px' }}>{req.details}</p>
-                                                    <div style={{ fontSize: '11px', marginTop: '10px', opacity: 0.5, color: THEME.coffeeDark }}>تاريخ التقديم: {formatDate(req.created_at)}</div>
+                                                    <p style={{ margin: 0, fontSize: '14px', color: '#64748b', marginTop: '10px', lineHeight: 1.6 }}>{req.details}</p>
+                                                    <div style={{ fontSize: '11px', marginTop: '12px', color: '#94a3b8', fontWeight: 700 }}>تاريخ التقديم: {formatDate(req.created_at)}</div>
                                                 </div>
-                                                <span className="status-badge" style={{ background: req.status === 'approved' ? '#dcfce7' : req.status === 'rejected' ? '#ffe4e6' : '#fef3c7', color: req.status === 'approved' ? THEME.success : req.status === 'rejected' ? THEME.danger || '#be123c' : '#b45309', padding: '6px 15px' }}>
+                                                <span className="status-badge" style={{ background: req.status === 'approved' ? '#dcfce7' : req.status === 'rejected' ? '#fee2e2' : '#fef3c7', color: req.status === 'approved' ? '#16a34a' : req.status === 'rejected' ? '#ef4444' : '#d97706', padding: '8px 18px' }}>
                                                     {req.status === 'pending' ? '⏳ قيد المراجعة' : req.status === 'approved' ? '✅ تم القبول' : '❌ مرفوض'}
                                                 </span>
                                             </div>
                                             {req.admin_note && (
-                                                <div style={{ marginTop: '15px', padding: '15px', background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '12px', fontSize: '13px', color: THEME.coffeeDark }}>
+                                                <div style={{ marginTop: '15px', padding: '15px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '13px', color: THEME.primary }}>
                                                     <strong>💬 رد الإدارة:</strong> {req.admin_note}
                                                 </div>
                                             )}
                                         </div>
                                     ))}
-                                    {pReqs === 0 && <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8', background: 'rgba(255,255,255,0.5)', borderRadius: '20px' }}>لا توجد طلبات أو اعتراضات سابقة.</div>}
+                                    {pReqs === 0 && <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8', background: 'rgba(255,255,255,0.6)', borderRadius: '25px', fontWeight: 800 }}>لا توجد طلبات أو اعتراضات سابقة.</div>}
                                 </div>
                             )}
                         </div>
@@ -371,53 +389,46 @@ export default function EmployeeProfilePage() {
                                 data={combinedStatement || []}
                                 columns={[
                                     { header: 'التاريخ', accessor: 'date', render: (val, row) => formatDate(val || row.work_date || row.created_at) },
-                                    { header: 'العملية', accessor: 'dType', render: (val, row) => <span style={{ padding: '5px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 900, background: row.color + '15', color: row.color }}>{val}</span> },
-                                    { header: 'البيان / الموقع', accessor: 'note', render: (val, row) => row.site_ref || row.note || row.reason || '---' },
-                                    { header: 'المبلغ', accessor: 'amount', render: (val, row) => <span style={{ fontWeight: 900, color: row.color }}>{row.sign} {formatCurrency(val)}</span> }
+                                    { header: 'العملية', accessor: 'dType', render: (val, row) => <span style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 900, background: row.color + '20', color: row.color }}>{val}</span> },
+                                    { header: 'البيان / الموقع', accessor: 'note', render: (val, row) => <span style={{ fontWeight: 800, color: '#475569' }}>{row.site_ref || row.note || row.reason || '---'}</span> },
+                                    { header: 'المبلغ', accessor: 'amount', render: (val, row) => <span style={{ fontWeight: 900, color: row.color, fontSize: '15px' }}>{row.sign} {formatCurrency(val)}</span> }
                                 ]}
                             />
                         </div>
                     )}
 
                     {activeTab === 'kpi' && (
-                        <div className="animate-fade-in" style={{ textAlign: 'center', padding: '50px', color: '#64748b' }}>
-                            <div style={{ fontSize: '50px', marginBottom: '15px' }}>📈</div>
-                            <h3 style={{ margin: 0, color: THEME.coffeeDark }}>تم نقل ملخص التقييم لمركز العمليات</h3>
-                            <p style={{ marginTop: '10px' }}>يمكنك مراجعة نسبة التزامك والإنتاجية والمستحقات من القائمة الجانبية.</p>
+                        <div className="animate-fade-in" style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b', background: 'rgba(255,255,255,0.6)', borderRadius: '30px' }}>
+                            <div style={{ fontSize: '60px', marginBottom: '20px' }}>📈</div>
+                            <h3 style={{ margin: 0, color: THEME.primary, fontWeight: 900, fontSize: '24px' }}>تم نقل ملخص التقييم لمركز العمليات</h3>
+                            <p style={{ marginTop: '15px', fontSize: '15px', fontWeight: 600 }}>يمكنك مراجعة نسبة التزامك والإنتاجية والمستحقات من القائمة الجانبية بشكل أسرع.</p>
                         </div>
                     )}
 
                     {activeTab === 'policy' && (
                         <div className="animate-fade-in">
                             <div className="policy-paper">
-                                <div style={{ textAlign: 'center', marginBottom: '40px', borderBottom: `3px double ${THEME.goldAccent}`, paddingBottom: '25px' }}>
-                                    <h2 style={{ margin: '0 0 5px 0', fontWeight: 900, fontSize: '24px' }}>لائحة تنظيم العمل والإنتاجية</h2>
-                                    <h4 style={{ margin: 0, color: THEME.goldAccent }}>شركة رواسي اليسر للمقاولات العامة</h4>
-                                    <p style={{ fontSize: '12px', marginTop: '10px', color: '#64748b' }}>مُصاغة وفقاً لنظام العمل السعودي الجديد</p>
+                                <div style={{ textAlign: 'center', marginBottom: '40px', borderBottom: `3px double ${THEME.accent}`, paddingBottom: '25px' }}>
+                                    <h2 style={{ margin: '0 0 5px 0', fontWeight: 900, fontSize: '28px', color: THEME.primary }}>لائحة تنظيم العمل والإنتاجية</h2>
+                                    <h4 style={{ margin: 0, color: THEME.accent, fontSize: '18px' }}>شركة رواسي اليسر للمقاولات العامة</h4>
+                                    <p style={{ fontSize: '13px', marginTop: '10px', color: '#94a3b8', fontWeight: 700 }}>مُصاغة وفقاً لنظام العمل السعودي</p>
                                 </div>
                                 <div style={{ display: 'grid', gap: '30px', position: 'relative', zIndex: 1 }}>
                                     <section>
-                                        <h4 style={{ color: THEME.goldAccent, borderRight: `4px solid ${THEME.goldAccent}`, paddingRight: '12px', marginBottom: '15px' }}>📌 ساعات العمل والحضور</h4>
-                                        <ul style={{ paddingRight: '20px' }}>
-                                            <li>ساعات العمل الفعلية هي (8) ساعات. يبدأ الدوام من الساعة **5:00 صباحاً**.</li>
+                                        <h4 style={{ color: THEME.accent, borderRight: `5px solid ${THEME.accent}`, paddingRight: '15px', marginBottom: '15px', fontSize: '18px' }}>📌 ساعات العمل والحضور</h4>
+                                        <ul style={{ paddingRight: '20px', fontSize: '15px', fontWeight: 700, color: '#475569', lineHeight: 1.8 }}>
+                                            <li>ساعات العمل الفعلية هي (8) ساعات. يبدأ الدوام من الساعة <strong>5:00 صباحاً</strong>.</li>
                                             <li>يُثبت الحضور حصراً عبر النظام الرقمي في الموقع الجغرافي للمشروع.</li>
                                         </ul>
                                     </section>
-                                    <section style={{ background: 'rgba(197, 160, 89, 0.04)', padding: '20px', borderRadius: '15px' }}>
-                                        <h4 style={{ color: THEME.goldAccent, borderRight: `4px solid ${THEME.goldAccent}`, paddingRight: '12px', marginBottom: '15px' }}>👷 نظام العمالة والإنتاجية</h4>
-                                        <ul style={{ paddingRight: '20px' }}>
+                                    <section style={{ background: 'rgba(197, 160, 89, 0.05)', padding: '25px', borderRadius: '20px' }}>
+                                        <h4 style={{ color: THEME.accent, borderRight: `5px solid ${THEME.accent}`, paddingRight: '15px', marginBottom: '15px', fontSize: '18px' }}>👷 نظام العمالة والإنتاجية</h4>
+                                        <ul style={{ paddingRight: '20px', fontSize: '15px', fontWeight: 700, color: '#475569', lineHeight: 1.8 }}>
                                             <li>لا تُعتمد اليومية كاملة إلا بتحقيق "الحد الأدنى للإنتاج" المتفق عليه.</li>
                                             <li>في حال رفض الجودة من المهندس، يلتزم العامل بالإعادة على نفقته الخاصة.</li>
                                         </ul>
                                     </section>
-                                    <section style={{ border: `1px solid rgba(0,0,0,0.1)`, padding: '20px', borderRadius: '15px' }}>
-                                        <h4 style={{ color: THEME.coffeeDark, borderRight: `4px solid ${THEME.coffeeDark}`, paddingRight: '12px', marginBottom: '15px' }}>🏗️ ضوابط المقاولين</h4>
-                                        <ul style={{ paddingRight: '20px' }}>
-                                            <li>المقاول مسؤول عن تابعيه وتوفير معدات السلامة (PPE) وفق المادة 121.</li>
-                                            <li>أي تأخير عن الجدول الزمني يترتب عليه غرامات تُخصم من المستخلص.</li>
-                                        </ul>
-                                    </section>
-                                    <div style={{ marginTop: '20px', padding: '20px', background: THEME.coffeeDark, color: 'white', borderRadius: '15px', textAlign: 'center', fontSize: '13px' }}>
+                                    <div style={{ marginTop: '30px', padding: '20px', background: THEME.primary, color: 'white', borderRadius: '20px', textAlign: 'center', fontSize: '14px', fontWeight: 800, boxShadow: `0 10px 20px ${THEME.primary}40` }}>
                                         "استخدامك لهذا النظام يُعد إقراراً بالموافقة على بنود اللائحة، وتعتبر توقيعاً ملزماً."
                                     </div>
                                 </div>
@@ -431,30 +442,30 @@ export default function EmployeeProfilePage() {
             {isSettingsOpen && (
                 <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
                     <div className="modal-box" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setIsSettingsOpen(false)} style={{ position: 'absolute', top: '25px', left: '25px', background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
-                        <h2 style={{ marginTop: 0, marginBottom: '35px', color: THEME.coffeeDark, fontWeight: 900, textAlign: 'center', borderBottom: `3px solid ${THEME.goldAccent}`, paddingBottom: '10px', display:'inline-block' }}>⚙️ إعدادات الملف الشخصي</h2>
+                        <button onClick={() => setIsSettingsOpen(false)} style={{ position: 'absolute', top: '25px', left: '25px', background: '#f1f5f9', border: 'none', width: '40px', height: '40px', borderRadius: '50%', fontSize: '18px', cursor: 'pointer', color: '#64748b', fontWeight: 900 }}>✕</button>
+                        <h2 style={{ marginTop: 0, marginBottom: '35px', color: THEME.primary, fontWeight: 900, textAlign: 'center', borderBottom: `3px solid #f1f5f9`, paddingBottom: '20px' }}>⚙️ إعدادات الملف الشخصي</h2>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ width: '130px', height: '130px', borderRadius: '50%', background: THEME.coffeeDark, margin: '0 auto 20px', border: `5px solid ${THEME.goldAccent}`, overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.15)' }}>
+                                <div style={{ width: '130px', height: '130px', borderRadius: '50%', background: THEME.primary, margin: '0 auto 20px', border: `5px solid ${THEME.accent}`, overflow: 'hidden', boxShadow: '0 15px 30px rgba(0,0,0,0.15)' }}>
                                     {avatarImg ? <img src={avatarImg} style={{width:'100%', height:'100%', objectFit:'cover'}} alt="Avatar" /> : <span style={{fontSize:'50px', lineHeight: '120px', color:'white'}}>👤</span>}
                                 </div>
                                 <input type="file" id="modalFile" hidden accept="image/*" onChange={(e) => e.target.files && uploadAvatar(e.target.files[0])} />
-                                <label htmlFor="modalFile" style={{ cursor: 'pointer', color: THEME.goldAccent, fontWeight: 900, fontSize: '14px', background:'rgba(0,0,0,0.03)', padding:'12px 30px', borderRadius:'12px', border:`1px solid rgba(0,0,0,0.1)` }}>{isSaving ? '⏳ جاري الرفع...' : '📸 تغيير الصورة الشخصية'}</label>
+                                <label htmlFor="modalFile" style={{ cursor: 'pointer', color: THEME.primary, fontWeight: 900, fontSize: '14px', background:'#f8fafc', padding:'12px 30px', borderRadius:'12px', border:`2px solid #e2e8f0`, transition: '0.3s' }}>{isSaving ? '⏳ جاري الرفع...' : '📸 تغيير الصورة الشخصية'}</label>
                             </div>
                             
-                            <div style={{ borderTop: '1px solid #eee', marginTop: '20px', paddingTop: '20px' }}>
-                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, marginBottom: '10px', color: THEME.coffeeDark }}>🔐 تغيير كلمة المرور</label>
+                            <div style={{ borderTop: '2px dashed #e2e8f0', marginTop: '10px', paddingTop: '30px' }}>
+                                <label style={{ display: 'block', fontSize: '14px', fontWeight: 900, marginBottom: '12px', color: THEME.primary }}>🔐 تغيير كلمة المرور</label>
                                 <input 
                                     className="sidebar-input" 
                                     type="password"
                                     placeholder="اكتب كلمة المرور الجديدة هنا..."
-                                    style={{ color: 'black', background: '#f8fafc', marginBottom: tempPassword ? '10px' : '0' }}
+                                    style={{ color: '#1e293b', background: '#f8fafc', border: '2px solid #e2e8f0', marginBottom: tempPassword ? '15px' : '0', fontWeight: 800, padding: '16px', borderRadius: '15px' }}
                                     value={tempPassword}
                                     onChange={(e) => setTempPassword(e.target.value)} 
                                 />
                                 {tempPassword && (
-                                    <div className="animate-fade-in" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <div className="animate-fade-in" style={{ display: 'flex', gap: '15px' }}>
                                         <button 
                                             onClick={async () => {
                                                 if(updatePassword) {
@@ -462,43 +473,43 @@ export default function EmployeeProfilePage() {
                                                     setTempPassword(""); 
                                                 }
                                             }}
-                                            style={{ flex: 1, padding: '10px', background: THEME.success, color: 'white', border: 'none', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                                            style={{ flex: 2, padding: '14px', background: THEME.success, color: 'white', border: 'none', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', boxShadow: `0 8px 20px ${THEME.success}40` }}
                                         >
                                             ✅ حفظ كلمة السر
                                         </button>
                                         <button 
                                             onClick={() => setTempPassword("")}
-                                            style={{ flex: 1, padding: '10px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                                            style={{ flex: 1, padding: '14px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '12px', fontWeight: 900, cursor: 'pointer' }}
                                         >
-                                            ❌ إلغاء
+                                            إلغاء
                                         </button>
                                     </div>
                                 )}
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, color: THEME.coffeeDark, marginBottom: '10px' }}>الاسم المسجل (لا يمكن تعديله)</label>
-                                    <input className="sidebar-input" style={{color:'#64748b', border:'1px solid #ddd', background:'#f8fafc', marginBottom:0, cursor:'not-allowed'}} value={displayName} readOnly title="لتعديل الاسم، تواصل مع الموارد البشرية" />
+                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '8px' }}>الاسم المسجل (للقراءة فقط)</label>
+                                    <input className="sidebar-input" style={{color:'#94a3b8', border:'2px solid #f1f5f9', background:'#f8fafc', marginBottom:0, cursor:'not-allowed', fontWeight: 800}} value={displayName} readOnly title="لتعديل الاسم، تواصل مع الإدارة" />
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 900, color: THEME.coffeeDark, marginBottom: '10px' }}>رقم الجوال (اسم المستخدم)</label>
-                                    <input className="sidebar-input" style={{color:'#64748b', border:'1px solid #ddd', background:'#f8fafc', marginBottom:0, cursor:'not-allowed'}} value={usernamePhone} readOnly title="لتعديل الجوال، تواصل مع الموارد البشرية" />
+                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '8px' }}>رقم الجوال / اسم المستخدم</label>
+                                    <input className="sidebar-input" style={{color:'#94a3b8', border:'2px solid #f1f5f9', background:'#f8fafc', marginBottom:0, cursor:'not-allowed', fontWeight: 800}} value={usernamePhone} readOnly title="لتعديل الجوال، تواصل مع الإدارة" />
                                 </div>
                             </div>
                             
-                            <div style={{ borderTop: '2px dashed #eee', paddingTop: '30px' }}>
-                                <h4 style={{ color: THEME.coffeeDark, fontWeight: 900, marginBottom: '20px', textAlign: 'center' }}>✍️ تحديث التوقيع الرقمي المعتمد</h4>
-                                <div style={{ border: `1px solid rgba(0,0,0,0.1)`, borderRadius: '15px', overflow: 'hidden' }}>
+                            <div style={{ borderTop: '2px dashed #e2e8f0', paddingTop: '30px' }}>
+                                <h4 style={{ color: THEME.primary, fontWeight: 900, marginBottom: '20px', textAlign: 'center', fontSize: '16px' }}>✍️ تحديث التوقيع الرقمي المعتمد</h4>
+                                <div style={{ border: `2px solid #e2e8f0`, borderRadius: '20px', overflow: 'hidden', background: '#f8fafc' }}>
                                     <SignaturePad userId={userProfile?.id} currentSignature={userProfile?.signature_url} onSaved={refreshProfile} />
                                 </div>
                             </div>
                             
-                            <button onClick={() => setIsSettingsOpen(false)} className="btn-primary" style={{width:'100%', padding: '18px', fontSize: '16px', borderRadius: '15px'}}>إغلاق النافذة</button>
+                            <button onClick={() => setIsSettingsOpen(false)} style={{ width:'100%', padding: '18px', fontSize: '16px', borderRadius: '15px', background: THEME.primary, color: 'white', border: 'none', fontWeight: 900, cursor: 'pointer', marginTop: '10px' }}>إغلاق النافذة</button>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </MasterPage>
     );
 }
