@@ -18,15 +18,35 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
     const [isSaving, setIsSaving] = useState(false);
     const [mounted, setMounted] = useState(false); 
 
-    // 🧠 هيكل الصلاحيات الافتراضي الشامل
+    // 🧠 1. هيكل الصلاحيات الدقيق (مفصل صفحة بصفحة 1-to-1)
     const defaultPermissions = {
-        invoices: { view: true, create: false, edit: false, delete: false, post: false },
+        // الحسابات
+        financial_center: { view: false },
+        journal: { view: false, create: false, edit: false, delete: false, post: false },
+        ledger: { view: false },
+        journal_errors: { view: false, edit: false },
+        
+        // المالية
+        payments: { view: false, create: false, edit: false, delete: false, post: false },
+        receipts: { view: false, create: false, edit: false, delete: false, post: false },
+        revenue: { view: false, create: false, edit: false, delete: false, post: false },
         expenses: { view: false, create: false, edit: false, delete: false, post: false },
+        invoices: { view: false, create: false, edit: false, delete: false, post: false },
+        
+        // الموارد البشرية
+        employees: { view: false, create: false, edit: false, delete: false },
+        labor_logs: { view: false, create: false, edit: false, delete: false },
+        payroll: { view: false, create: false, edit: false, delete: false, post: false },
         emp_adv: { view: false, create: false, edit: false, delete: false, post: false },
-        projects: { view: true, create: false, edit: false },
-        accounts: { view: false, create: false, edit: false, delete: false },
-        reports: { view: false, financial: false },
-        team: { view: false, create: false, edit: false }
+        emp_ded: { view: false, create: false, edit: false, delete: false, post: false },
+        housing: { view: false, create: false, edit: false, delete: false },
+        
+        // المشاريع والتقارير والنظام
+        projects: { view: false, create: false, edit: false, delete: false },
+        partners: { view: false, create: false, edit: false, delete: false },
+        reports: { view: false, financial: false, operational: false },
+        team: { view: false, create: false, edit: false, delete: false },
+        settings: { view: false, edit: false }
     };
 
     const [form, setForm] = useState({
@@ -55,7 +75,7 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
             setForm({
                 full_name: record.full_name || '',
                 role: record.role || 'client',
-                linked_partner_id: record.linked_partner_id || null, // أصبح مطابق للـ DB
+                linked_partner_id: record.linked_partner_id || null, 
                 permissions: mergedPermissions
             });
         }
@@ -97,12 +117,15 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
 
         setIsSaving(true);
         try {
-            // 📦 تجهيز الـ Payload بدقة لمنع أخطاء 400
+            // 🚀 السوبر أدمن والأدمن هما اللي بياخدوا is_admin = true في الداتابيز
+            const isAdminFlag = form.role === 'super_admin' || form.role === 'admin';
+
+            // 📦 تجهيز الـ Payload بدقة
             const payload = {
                 role: form.role,
                 linked_partner_id: form.linked_partner_id,
                 permissions: form.permissions,
-                is_admin: form.role === 'admin',
+                is_admin: isAdminFlag,
                 full_name: form.full_name
             };
 
@@ -115,12 +138,10 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
 
             if (error) throw error;
             
-            // نجاح العملية
             showToast(`✅ تم تحديث صلاحيات "${form.full_name}" بنجاح!`, "success");
             onSave(); 
             
         } catch (error: any) {
-            // 🔍 تشريح الخطأ وطباعته لمعرفة السبب الحقيقي
             console.error("❌ Detailed Supabase Error:", {
                 message: error?.message,
                 details: error?.details,
@@ -134,14 +155,28 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
         }
     };
 
+    // 🏷️ الأسماء اللي هتظهرلك وإنت بتوزع الصلاحيات
     const moduleNames: any = {
-        invoices: '📦 الفواتير والمبيعات',
-        expenses: '📉 سجل المصروفات',
-        emp_adv: '💸 عهد وسلف العمالة',
-        projects: '🏗️ المشاريع والعقارات',
-        accounts: '📒 شجرة الحسابات',
-        reports: '📑 التقارير المالية',
-        team: '👥 إدارة الفريق'
+        financial_center: '🏦 المركز المالي',
+        journal: '📝 قيود اليومية',
+        ledger: '📒 دفتر الأستاذ',
+        journal_errors: '🛡️ رادار الأخطاء',
+        payments: '🔴 سندات الصرف',
+        receipts: '🟢 سندات القبض',
+        revenue: '📈 الإيرادات',
+        expenses: '📉 المصروفات',
+        invoices: '🧾 الفواتير والمستخلصات',
+        employees: '👔 سجل الموظفين',
+        labor_logs: '👷 يوميات الميدان',
+        payroll: '💵 مسيرات الرواتب',
+        emp_adv: '💸 سلف الموظفين',
+        emp_ded: '✂️ خصومات الموظفين',
+        housing: '🏠 الإعاشة والسكن',
+        projects: '🏗️ المشاريع والمواقع',
+        partners: '🤝 دليل الشركاء',
+        reports: '📑 التقارير الشاملة',
+        team: '👥 إدارة الفريق والصلاحيات',
+        settings: '⚙️ إعدادات النظام'
     };
 
     const modalContent = (
@@ -161,7 +196,7 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
                 .profile-modal-box {
                     background: #ffffff;
                     border-radius: 32px;
-                    width: 900px;
+                    width: 1000px; /* كبرنا العرض شوية عشان الكروت كتير */
                     max-width: 95vw;
                     max-height: 90vh;
                     display: flex;
@@ -236,7 +271,7 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
                 {/* 1️⃣ الهيدر (ثابت) */}
                 <div style={{ padding: '30px 40px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', flexShrink: 0 }}>
                     <div>
-                        <h2 style={{ margin: 0, fontWeight: 900, color: THEME.primary, fontSize: '24px', letterSpacing: '-0.5px' }}>🛡️ مركز التحكم في الصلاحيات</h2>
+                        <h2 style={{ margin: 0, fontWeight: 900, color: THEME.primary, fontSize: '24px', letterSpacing: '-0.5px' }}>🛡️ مركز التحكم في الصلاحيات الدقيقة</h2>
                         <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>إدارة وصول المستخدم: <b style={{color: '#1e293b', fontSize: '14px'}}>{form.full_name || 'مستخدم جديد'}</b></p>
                     </div>
                     <button onClick={onClose} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', width: '38px', height: '38px', borderRadius: '50%', cursor: 'pointer', fontWeight: 900, transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
@@ -264,10 +299,18 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
                                 value={form.role} 
                                 onChange={e => setForm({...form, role: e.target.value})}
                             >
-                                <option value="admin">👑 مدير نظام (Admin)</option>
-                                <option value="staff">💼 فريق العمل (Staff)</option>
-                                <option value="contractor">👷 مقاول (Contractor)</option>
-                                <option value="client">👤 عميل (Client)</option>
+                                <optgroup label="الإدارة العليا">
+                                    <option value="super_admin">👑 سوبر أدمن (صلاحيات مطلقة)</option>
+                                    <option value="admin">🛡️ أدمن (إدارة المستخدمين)</option>
+                                </optgroup>
+                                <optgroup label="التشغيل">
+                                    <option value="manager">💼 مدير نظام (عمليات مالية وإدارية)</option>
+                                    <option value="staff">👨‍💻 موظف (لوحة تحكم خاصة)</option>
+                                </optgroup>
+                                <optgroup label="الخارج">
+                                    <option value="contractor">👷 مقاول (بوابة المقاولين)</option>
+                                    <option value="client">👤 عميل (بوابة العملاء)</option>
+                                </optgroup>
                             </select>
                         </div>
                         <div style={{ position: 'relative', zIndex: 50 }}> 
@@ -288,12 +331,13 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
                         <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', margin: 0 }}>مصفوفة الوصول المتقدمة</h3>
                     </div>
                     
-                    <div style={{ display: 'grid', gap: '15px' }}>
+                    {/* الشبكة بقت أعرض عشان تستوعب الصلاحيات الكثيرة */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '15px' }}>
                         {Object.keys(form.permissions).map((module) => (
                             <div key={module} className="module-card">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
                                     <span style={{ fontWeight: 900, fontSize: '15px', color: '#1e293b' }}>{moduleNames[module] || module}</span>
-                                    <button className="btn-all" onClick={() => toggleAllInModule(module)}>تحديد / إلغاء الكل</button>
+                                    <button className="btn-all" onClick={() => toggleAllInModule(module)}>الكل</button>
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -308,7 +352,8 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
                                              action === 'edit' ? '📝 تعديل' : 
                                              action === 'delete' ? '🗑️ حذف' : 
                                              action === 'post' ? '🚀 ترحيل' : 
-                                             action === 'financial' ? '💰 مالي' : action}
+                                             action === 'financial' ? '💰 مالي' : 
+                                             action === 'operational' ? '⚙️ تشغيلي' : action}
                                         </button>
                                     ))}
                                 </div>

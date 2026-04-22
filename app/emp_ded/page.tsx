@@ -1,7 +1,6 @@
 "use client";
 // تم تصحيح الاستيراد هنا ليكون الملف الخاص بالخصومات
-import { useEmpDedLogic } from './emp_ded_logic'; 
-
+import { useEmpAdvLogic } from './emp_adv.logic';
 const THEME = {
   sandLight: '#F4F1EE',
   sandDark: '#E6D5C3',
@@ -25,7 +24,7 @@ export default function EmpDeductionsPage() {
     handleImportExcel, 
     downloadTemplate,
     currentPage, setCurrentPage, totalPages, pageSize, setPageSize 
-  } = useEmpDedLogic(); // استخدام اللوجيك الصحيح
+  } = useEmpAdvLogic();// استخدام اللوجيك الصحيح
 
   const formatDate = (dateVal: any) => {
     if (!dateVal) return "---";

@@ -1,87 +1,150 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom'; 
 import { THEME } from '@/lib/theme';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
-interface MasterPageProps {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-  headerContent?: React.ReactNode; // لو عايز تحط زراير جنب العنوان
-}
+export default function MasterPage({ title, subtitle, children, headerContent }: any) {
+  const router = useRouter();
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
 
-export default function MasterPage({ title, subtitle, children, headerContent }: MasterPageProps) {
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        setUserProfile(data || { full_name: session.user.email });
+      }
+    };
+    getUser();
+  }, []);
+
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      // وضع القائمة تحت الكارت بالضبط بمسافة 8 بكسل
+      setCoords({ top: rect.bottom + window.scrollY + 8, left: rect.left });
+    }
+    setIsMenuOpen(!isMenuOpen);
+  };
+
+  useEffect(() => {
+    const close = () => setIsMenuOpen(false);
+    if (isMenuOpen) window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [isMenuOpen]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
   return (
     <div className="clean-page">
       <style>{`
-        /* 🚀 سحر المسافات والهوامش السلبية المركزي */
-        .clean-page { 
-            padding: 30px 20px 30px 0px !important; 
-            margin-right: -25px !important; /* تخطي الـ Wrapper للالتصاق بالسايد بار */
-            direction: rtl; 
-            background: transparent; 
-            min-height: 100vh; 
+        .clean-page { padding: 25px 30px 25px 0px !important; margin-right: -25px !important; direction: rtl; min-height: 100vh; }
+
+        /* 🎬 هيدر متوازن وأنيق */
+        .master-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px; padding-right: 15px; position: relative; z-index: 1000;
+            animation: elegantFloat 4s ease-in-out infinite;
         }
+        @keyframes elegantFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+        /* 👑 كارت المستخدم المتناسق */
+        .imperial-trigger {
+            display: flex; align-items: center; gap: 15px;
+            background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px);
+            padding: 8px 20px 8px 8px; border-radius: 40px;
+            border: 1px solid rgba(255,255,255,1); cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+        }
+        .imperial-trigger:hover { 
+            background: white; 
+            transform: translateY(-2px); 
+            border-color: ${THEME.goldAccent}; 
+            box-shadow: 0 12px 35px rgba(197, 160, 89, 0.15); 
+        }
+
+        .u-info-text { display: flex; flex-direction: column; text-align: right; }
+        .u-name { font-size: 16px; font-weight: 900; color: #1e293b; letter-spacing: -0.3px; line-height: 1.2; }
+        .u-role { font-size: 10px; font-weight: 800; color: ${THEME.goldAccent}; margin-top: 2px; }
+
+        /* 📸 صورة البروفايل (المقاس الذهبي 60px) */
+        .avatar-frame { position: relative; width: 52px; height: 52px; }
+        .avatar-frame img { width: 100%; height: 100%; border-radius: 50%; border: 2px solid white; object-fit: cover; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .active-dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+
+        /* 🔽 القائمة الاحترافية (Portal) */
+        .supreme-dropdown {
+            position: fixed; width: 220px; background: white; border-radius: 20px;
+            padding: 8px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+            border: 1px solid rgba(0,0,0,0.05); z-index: 999999;
+            transform-origin: top left;
+            animation: supremeShow 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes supremeShow { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        .drop-item { display: flex; align-items: center; gap: 10px; padding: 10px 15px; border-radius: 12px; font-size: 13px; font-weight: 800; color: #475569; cursor: pointer; transition: 0.2s; direction: rtl; }
+        .drop-item:hover { background: #f8fafc; color: ${THEME.goldAccent}; }
+        .drop-item.logout { color: #ef4444; border-top: 1px solid #f1f5f9; margin-top: 5px; border-radius: 0 0 12px 12px; }
+        .drop-item.logout:hover { background: #fef2f2; }
+
+        /* العناوين */
+        .title-area h1 { font-weight: 900; fontSize: 28px; color: #0f172a; margin: 0; letterSpacing: -0.5px; }
+        .title-area p { color: #64748b; fontSize: 14px; fontWeight: 600; marginTop: 4px; }
 
         .glass-container {
-            background: rgba(255, 255, 255, 0.5);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-radius: 0px 0px 0px 24px !important; /* الالتصاق من اليمين */
-            padding: 15px;
-            border: 1px solid rgba(255,255,255,0.7);
-            border-right: none !important;
-            transition: all 0.3s ease;
-            box-shadow: -5px 0 15px rgba(0,0,0,0.02);
+            background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(15px);
+            border-radius: 0px 0px 0px 32px !important; padding: 20px;
+            border: 1px solid rgba(255,255,255,0.8); border-right: none !important;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.02);
         }
-
-        /* 📱 تظبيط الموبايل */
-        @media (max-width: 768px) {
-            .clean-page { padding: 15px !important; margin-right: -10px !important; }
-            .glass-container { border-radius: 24px !important; border-right: 1px solid rgba(255,255,255,0.7) !important; }
-        }
-
-        /* 🎨 ستايلات الزراير والبادجات العالمية الموحدة للسيستم كله */
-        .btn-glass-pay { background: linear-gradient(135deg, #22c55e, #10b981); color: white; padding: 6px 14px; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 11px; border: none; }
-        .btn-glass-pay:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(34, 197, 94, 0.4); }
-        
-        .btn-glass-print { background: rgba(255, 255, 255, 0.6); padding: 7px; border-radius: 10px; cursor: pointer; transition: 0.2s; border: 1px solid rgba(255,255,255,0.8); }
-        .btn-glass-print:hover { background: #fff; transform: scale(1.1); }
-        
-        .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-main-glass.gold { background: linear-gradient(135deg, rgba(197, 160, 89, 0.9), rgba(151, 115, 50, 1)); color: white; }
-        .btn-main-glass.blue { background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(2, 132, 199, 0.9)); color: white; }
-        .btn-main-glass.yellow { background: linear-gradient(135deg, rgba(245, 158, 11, 0.8), rgba(217, 119, 6, 0.9)); color: white; }
-        .btn-main-glass.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
-        .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); }
-
-        .glass-badge { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.6); }
-        .glass-badge.green { color: #059669; }
-        .glass-badge.red { color: #dc2626; }
-        .glass-badge.orange { color: #d97706; }
-        
-        .deadline-badge { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; display: inline-flex; align-items: center; gap: 5px; backdrop-filter: blur(5px); }
-        .deadline-badge.paid { background: rgba(34, 197, 94, 0.1); color: #16a34a; }
-        .deadline-badge.overdue { background: rgba(239, 68, 68, 0.1); color: #dc2626; animation: shake-alert 0.8s infinite alternate; }
-        @keyframes shake-alert { 0% { transform: translateX(0); } 100% { transform: translateX(3px); } }
-
-        /* ستايل صفوف الجدول لتكون قابلة للضغط */
-        .clickable-rows tbody tr { cursor: pointer !important; transition: 0.2s; }
-        .clickable-rows tbody tr:hover { background: rgba(197, 160, 89, 0.08) !important; }
       `}</style>
 
-      {/* 🏷️ الهيدر الموحد لأي صفحة */}
-      <div style={{ marginBottom: '30px', paddingRight: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div>
-            <h1 style={{ fontWeight: 900, fontSize: '34px', color: '#0f172a', margin: 0, letterSpacing: '-1px' }}>{title}</h1>
-            {subtitle && <p style={{ color: '#64748b', fontSize: '15px', fontWeight: 600, margin: '5px 0 0 0' }}>{subtitle}</p>}
+      <header className="master-header">
+        <div className="title-area">
+          <h1>{title}</h1>
+          {subtitle && <p>{subtitle}</p>}
         </div>
-        {headerContent && <div>{headerContent}</div>}
-      </div>
 
-      {/* 📦 المحتوى المتغير (الجدول أو غيره) */}
-      <div className="glass-container clickable-rows">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {headerContent}
+          
+          <div className="imperial-trigger" ref={triggerRef} onClick={toggleMenu}>
+            <div className="u-info-text">
+              <span className="u-name">{userProfile?.full_name || 'جاري التحميل...'}</span>
+              <span className="u-role">
+                {userProfile?.role === 'super_admin' ? 'مدير عام 👑' : 'مسؤول نظام 🛡️'}
+              </span>
+            </div>
+            <div className="avatar-frame">
+              <img src={userProfile?.avatar_url || `https://ui-avatars.com/api/?name=${userProfile?.full_name || 'U'}&background=C5A059&color=fff&bold=true`} alt="Avatar" />
+              <div className="active-dot"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* 🚀 الـ Portal الموزون */}
+      {isMenuOpen && typeof document !== 'undefined' && createPortal(
+        <div className="supreme-dropdown" style={{ top: coords.top, left: coords.left }} onClick={(e) => e.stopPropagation()}>
+            <div className="drop-item" onClick={() => router.push('/profile')}><span>👤</span> بروفيلي</div>
+            <div className="drop-item" onClick={() => router.push('/settings')}><span>⚙️</span> الإعدادات</div>
+            <div className="drop-item logout" onClick={handleLogout}><span>🚪</span> خروج</div>
+        </div>,
+        document.body
+      )}
+
+      <main className="glass-container">
         {children}
-      </div>
+      </main>
     </div>
   );
 }

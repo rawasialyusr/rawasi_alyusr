@@ -1,10 +1,11 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
 import RawasiFilterSidebar from '@/components/rawasifiltersidebar';
 import { useSidebar } from '@/lib/SidebarContext'; 
+import { usePermissions } from '@/lib/PermissionsContext'; 
 
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -12,32 +13,27 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 40, y: 40 });
   const [isDragging, setIsDragging] = useState(false);
-  const [permissions, setPermissions] = useState<any>(null);
-  const [userRole, setUserRole] = useState('');
   const dragStartPos = useRef({ x: 0, y: 0 });
 
   const { actions, summary } = useSidebar(); 
+  const { role, can, loading } = usePermissions();
 
+  // 👻 [صائدة الأشباح] - التأكد من وجود المستخدم في الداتابيز
   useEffect(() => {
-    const fetchAuth = async () => {
+    const verifyRealUser = async () => {
+      if (pathname === '/login') return;
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        if (pathname !== '/login') router.replace('/login');
+        router.replace('/login');
         return;
       }
-      
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      
-      if (profile) {
-        setUserRole(profile.role || (profile.is_admin ? 'admin' : 'user'));
-        setPermissions(profile.permissions || {});
-        
-        // لوج للتأكد من البيانات
-        console.log("🛡️ User Role:", profile.role);
-        console.log("📊 Permissions Map:", profile.permissions);
+      const { data, error } = await supabase.from('profiles').select('id').eq('id', session.user.id).single();
+      if (error || !data) {
+        await supabase.auth.signOut();
+        window.location.href = '/login'; 
       }
     };
-    fetchAuth();
+    verifyRealUser();
   }, [pathname, router]);
 
   const menuGroups = [
@@ -54,8 +50,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         { id: 'journal', title: 'قيود اليومية', icon: '📝', path: '/journal' },
         { id: 'ledger', title: 'دفتر الأستاذ', icon: '📒', path: '/ledger' },
         { id: 'journal_errors', title: 'رادار الأخطاء', icon: '🛡️', path: '/journal-errors' },
-        { id: 'payment_vouchers', title: 'سندات الصرف', icon: '🔴', path: '/finance/vouchers' },
-        { id: 'receipt_vouchers', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' },
+        { id: 'payments', title: 'سندات الصرف', icon: '🔴', path: '/finance/vouchers' },
+        { id: 'receipts', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' },
         { id: 'revenue', title: 'الإيرادات', icon: '📈', path: '/revenue' },
         { id: 'expenses', title: 'المصروفات', icon: '📉', path: '/expenses' },
         { id: 'invoices', title: 'الفواتير والمستخلصات', icon: '🧾', path: '/invoices' },
@@ -89,36 +85,16 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     }
   ];
 
-  // 🛡️ دالة التحقق "الذكية" المحدثة للربط بين الكود والداتا بيز
-  const canView = (moduleId: string) => {
-    if (moduleId === 'home' || moduleId === 'profile') return true;
-    if (userRole === 'admin' || permissions?.is_admin === true) return true;
+  // 🛡️ دالة الفلترة الصارمة (1-to-1 Mapping)
+  const canView = (menuId: string) => {
+    // 1. الإدارة العليا والأدمن لهم وصول كامل
+    if (role === 'super_admin' || role === 'admin') return true;
+    
+    // 2. صفحة الملف الشخصي متاحة دائماً (لتغيير الصورة/الباسورد/الخروج)
+    if (menuId === 'profile') return true;
 
-    const idMap: Record<string, string> = {
-      'invoices': 'boq',
-      'labor_logs': 'labor',
-      'projects': 'sites',
-      'employees': 'all_emp',
-      'emp_adv': 'emp_adv',
-      'emp_ded': 'emp_ded'
-    };
-
-    const targetIdInDb = idMap[moduleId] || moduleId;
-    const moduleData = permissions?.[targetIdInDb];
-
-    if (!moduleData) return false;
-
-    if (typeof moduleData === 'object' && !Array.isArray(moduleData)) {
-      return moduleData.view === true || moduleData.show === true;
-    }
-
-    if (Array.isArray(moduleData)) {
-      return moduleData.includes('view');
-    }
-
-    if (typeof moduleData === 'boolean') return moduleData;
-
-    return false;
+    // 3. الفحص المباشر من الداتابيز: هل Permissions[menuId].view === true ؟
+    return can(menuId, 'view');
   };
 
   const onMouseDown = (e: React.MouseEvent) => { 
@@ -144,90 +120,53 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [isDragging]);
 
   if (pathname === '/login') return <>{children}</>;
+  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl', fontWeight: 900 }}>⏳ جاري تحميل الصلاحيات...</div>;
 
   const currentPageTitle = menuGroups.flatMap(g => g.items).find(i => i.path === pathname)?.title || "إدارة النظام";
-
-  // 🚀 تعريف العداد هنا قبل البدء في رسم القائمة لحل مشكلة الـ ReferenceError
   let animationDelayCounter = 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row-reverse', minHeight: '100vh' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
-        
         @keyframes floatPulse {
           0%, 100% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.2); transform: scale(1); }
           50% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4), 0 0 25px 5px rgba(197, 160, 89, 0.3); transform: scale(1.05); }
         }
-        
         .fab-main {
           position: fixed; bottom: ${position.y}px; left: ${position.x}px; width: 85px; height: 85px; z-index: 10000;
           background: linear-gradient(145deg, rgba(67, 52, 46, 0.85), rgba(26, 21, 19, 0.95));
-          backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-          border: 1px solid ${isOpen ? '#C5A059' : 'rgba(197, 160, 89, 0.3)'}; 
-          border-radius: 50%;
+          backdrop-filter: blur(15px); border-radius: 50%;
           cursor: ${isDragging ? 'grabbing' : 'grab'};
           display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-          transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
-          animation: floatPulse 4s infinite ease-in-out;
-          overflow: hidden;
-          padding: 5px;
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+          animation: floatPulse 4s infinite ease-in-out; overflow: hidden; padding: 5px;
         }
-
-        .fab-logo {
-          width: 100%; height: 100%; object-fit: contain; transition: all 0.5s ease;
-          filter: ${isOpen ? 'drop-shadow(0 0 10px #C5A059)' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))'};
-          transform: ${isOpen ? 'scale(1.15)' : 'scale(1)'};
-        }
-
+        .fab-logo { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
         .overlay-screen {
           position: fixed; inset: 0; z-index: 9000;
           background: radial-gradient(circle at center, rgba(40, 30, 25, 0.6) 0%, rgba(15, 12, 10, 0.9) 100%);
-          backdrop-filter: blur(30px) saturate(200%); -webkit-backdrop-filter: blur(30px) saturate(200%);
+          backdrop-filter: blur(30px) saturate(200%);
           clip-path: circle(${isOpen ? '150%' : '0%'} at calc(${position.x + 42.5}px) calc(100% - ${position.y + 42.5}px));
           transition: clip-path 0.8s cubic-bezier(0.77, 0, 0.175, 1);
-          display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-          padding: 60px 20px; overflow-y: auto;
+          display: flex; flex-direction: column; align-items: center; padding: 60px 20px; overflow-y: auto;
         }
-
         .command-center { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 40px; margin-top: 20px; }
-        .group-header { color: #C5A059; font-weight: 900; font-size: 16px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; margin-bottom: 20px; text-align: right; display: block; position: relative; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        .group-header::after { content: ''; position: absolute; right: 0; bottom: -1px; width: 50px; height: 3px; background: #C5A059; border-radius: 5px; box-shadow: 0 0 10px #C5A059; }
-        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
-        a { text-decoration: none; outline: none; }
-        
+        .group-header { color: #C5A059; font-weight: 900; font-size: 16px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; text-align: right; display: block; position: relative; }
+        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-top: 20px; }
         .nav-card {
           background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
-          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+          backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);
           padding: 20px; border-radius: 20px; text-align: center; color: #fff; cursor: pointer;
-          position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 15px;
           transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); opacity: 0;
           animation: popIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-
         @keyframes popIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
-
-        .nav-card:hover { 
-            background: linear-gradient(135deg, rgba(197, 160, 89, 0.2) 0%, rgba(197, 160, 89, 0.05) 100%);
-            border-color: rgba(197, 160, 89, 0.5); 
-            transform: translateY(-8px); 
-        }
-
-        .icon-wrapper { 
-            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
-            width: 65px; height: 65px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; transition: 0.4s; 
-        }
-        .nav-card.active { 
-            background: linear-gradient(135deg, rgba(197, 160, 89, 0.3) 0%, rgba(197, 160, 89, 0.1) 100%); 
-            border-color: #C5A059; 
-        }
-        .nav-card.active .icon-wrapper { background: #C5A059; box-shadow: 0 0 15px rgba(197, 160, 89, 0.5); }
+        .nav-card:hover { background: rgba(197, 160, 89, 0.2); border-color: rgba(197, 160, 89, 0.5); transform: translateY(-8px); }
+        .nav-card.active { background: rgba(197, 160, 89, 0.3); border-color: #C5A059; }
+        .icon-wrapper { width: 65px; height: 65px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; background: rgba(255,255,255,0.1); }
+        .nav-card.active .icon-wrapper { background: #C5A059; }
       `}</style>
 
-      {/* السايد بار العالمي الزجاجي */}
       <RawasiFilterSidebar 
         title={currentPageTitle}
         extraActions={actions}
@@ -236,48 +175,46 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         onDateChange={(start, end) => window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }))}
       />
 
-      {/* الزر العائم */}
-      <div className="fab-main no-print" onMouseDown={onMouseDown} onClick={() => !isDragging && setIsOpen(!isOpen)} title={isOpen ? "إغلاق" : "فتح"}>
+      <div className="fab-main no-print" onMouseDown={onMouseDown} onClick={() => !isDragging && setIsOpen(!isOpen)}>
         <img src="/RYC_Logo.png" alt="رواسي" className="fab-logo" />
       </div>
 
       <nav className="overlay-screen no-print" onClick={() => setIsOpen(false)} style={{ pointerEvents: isOpen ? 'auto' : 'none' }}>
         <div className="command-center" onClick={(e) => e.stopPropagation()}>
-          {/* شريط معلومات للمساعدة في التأكد */}
-          <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '5px 15px', borderRadius: '10px', fontSize: '12px', textAlign: 'center', color: '#fff', marginBottom: '15px' }}>
-            بوابة الإدارة المركزية | الدور الحالي: {userRole}
+          <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '10px 20px', borderRadius: '15px', fontSize: '14px', textAlign: 'center', color: '#fff', marginBottom: '20px', fontWeight: 900 }}>
+             بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 موظف بصلاحيات محددة'}
           </div>
 
-          {menuGroups.map((group, gIdx) => (
-            <div key={gIdx} className="group-section">
-              <span className="group-header">{group.group}</span>
-              <div className="items-grid">
-                {group.items.filter(item => canView(item.id)).map((item, iIdx) => {
-                  const delay = (animationDelayCounter++) * 0.05;
-                  const isActive = pathname === item.path;
+          {menuGroups.map((group, gIdx) => {
+            const filteredItems = group.items.filter(item => canView(item.id));
+            if (filteredItems.length === 0) return null;
 
-                  return (
-                    <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
-                        <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
-                          <div className="icon-wrapper">{item.icon}</div>
-                          <span style={{ fontWeight: 800, fontSize: '15px', color: 'white' }}>{item.title}</span>
-                          {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
-                        </div>
-                    </Link>
-                  );
-                })}
+            return (
+              <div key={gIdx} className="group-section">
+                <span className="group-header">{group.group}</span>
+                <div className="items-grid">
+                  {filteredItems.map((item, iIdx) => {
+                    const delay = (animationDelayCounter++) * 0.05;
+                    const isActive = pathname === item.path;
+                    return (
+                      <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
+                          <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
+                            <div className="icon-wrapper">{item.icon}</div>
+                            <span style={{ fontWeight: 800, fontSize: '15px', color: 'white' }}>{item.title}</span>
+                            {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
+                          </div>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </nav>
 
       <main style={{ 
-          flex: 1, 
-          marginRight: '65px', 
-          minHeight: '100vh',
-          position: 'relative',
-          zIndex: 1,
+          flex: 1, marginRight: '65px', minHeight: '100vh', position: 'relative', zIndex: 1,
           filter: isOpen ? 'blur(20px) grayscale(30%)' : 'none', 
           transform: isOpen ? 'scale(0.97)' : 'scale(1)', 
           transition: 'all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1)' 

@@ -1,344 +1,284 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLaborLogsLogic } from './labor_logs_logic';
-
-const THEME = {
-  sandLight: '#F4F1EE',
-  sandDark: '#E6D5C3',
-  coffeeMain: '#8C6A5D',
-  coffeeDark: '#43342E',
-  goldAccent: '#C5A059',
-};
+import { THEME } from '@/lib/theme';
+import { usePermissions } from '@/lib/PermissionsContext'; 
+import SecureAction from '@/components/SecureAction';      
+import SmartCombo from '@/components/SmartCombo'; 
+import MasterPage from '@/components/MasterPage';
+import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 
 export default function LaborLogsDirectory() {
-  const {
-    isLoading, searchTerm, setSearchTerm, filterStatus, setFilterStatus,
-    isAddModalOpen, setIsAddModalOpen, currentLog, setCurrentLog,
-    isSaving, handleSaveLog, filteredLogs, stats, 
-    handleDelete, exportToExcel, handleEdit, selectedIds, setSelectedIds, editingId, setEditingId, defaultLog,
-    handlePostSingle, handlePostSelected, workersList, sitesList,
-    currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, totalResults,
-    formatCurrency // 👈 سحبنا دالة تنسيق الفلوس من اللوجيك
-  } = useLaborLogsLogic();
+  const logic = useLaborLogsLogic();
+  const [mounted, setMounted] = useState(false);
+  const { can, loading: permsLoading } = usePermissions();
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
-  const isOneSelected = selectedIds.length === 1;
-  const isNoneSelected = selectedIds.length === 0;
+  const isOneSelected = logic.selectedIds.length === 1;
+  const isNoneSelected = logic.selectedIds.length === 0;
 
-  const handleMainAction = () => {
-    if (isOneSelected) {
-      const logToEdit = filteredLogs.find(l => l.id === selectedIds[0]);
-      if (logToEdit) handleEdit(logToEdit);
-    } else {
-      setEditingId(null);
-      setCurrentLog(defaultLog);
-      setIsAddModalOpen(true);
-    }
-  };
-
+  // 🟢 دوال تحديد الصفوف (تم إضافتها هنا لمنع أي أخطاء)
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredLogs.length && filteredLogs.length > 0) {
-      setSelectedIds([]);
+    if (logic.selectedIds.length === logic.filteredLogs.length && logic.filteredLogs.length > 0) {
+      logic.setSelectedIds([]);
     } else {
-      setSelectedIds(filteredLogs.map(l => l.id));
+      logic.setSelectedIds(logic.filteredLogs.map((l:any) => l.id));
     }
   };
 
   const toggleSelectRow = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(item => item !== id));
+    if (logic.selectedIds.includes(id)) {
+      logic.setSelectedIds(logic.selectedIds.filter((item:any) => item !== id));
     } else {
-      setSelectedIds([...selectedIds, id]);
+      logic.setSelectedIds([...logic.selectedIds, id]);
+    }
+  };
+  // ==========================================
+
+  const handleMainAction = () => {
+    if (isOneSelected) {
+      const logToEdit = logic.filteredLogs.find((l:any) => l.id === logic.selectedIds[0]);
+      if (logToEdit) logic.handleEdit(logToEdit);
+    } else {
+      logic.setEditingId(null);
+      logic.setCurrentLog(logic.defaultLog);
+      logic.setIsAddModalOpen(true);
     }
   };
 
   const getAttendanceBadge = (val: any) => {
     const num = parseFloat(val);
-    if (num === 1) return { bg: '#DCFCE7', color: '#166534', text: 'يوم كامل' };
-    if (num === 0.5) return { bg: '#FEF3C7', color: '#B45309', text: 'نص يوم' };
-    return { bg: '#FEE2E2', color: '#991B1B', text: 'غياب' };
+    if (num === 1) return { bg: '#ecfdf5', color: '#059669', text: 'يوم كامل' };
+    if (num === 0.5) return { bg: '#fff7ed', color: '#d97706', text: 'نص يوم' };
+    return { bg: '#fef2f2', color: '#dc2626', text: 'غياب' };
   };
-
-  return (
-    <div className="app-container" style={{ direction: 'rtl', backgroundColor: THEME.sandLight, display: 'flex' }}>
+const sidebarActions = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      <SecureAction module="labor_logs" action="create">
+        <button className="btn-main-glass gold" onClick={handleMainAction}>
+            {isOneSelected ? '✏️ تعديل اليومية' : '➕ إضافة يومية جديدة'}
+        </button>
+      </SecureAction>
       
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-        
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
-        ::-webkit-scrollbar-thumb { background-color: ${THEME.sandDark}; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background-color: ${THEME.coffeeMain}; }
+      {logic.selectedIds.length > 0 && (
+        <>
+          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
+          <SecureAction module="labor_logs" action="post">
+            <button className="btn-main-glass blue" onClick={logic.handlePostSelected}>🚀 اعتماد وترحيل</button>
+          </SecureAction>
+          <SecureAction module="labor_logs" action="delete">
+            <button className="btn-main-glass red" onClick={() => logic.selectedIds.forEach((id:any) => logic.handleDelete(id))}>🗑️ حذف نهائي</button>
+          </SecureAction>
+        </>
+      )}
 
-        @media screen {
-          .app-container { height: 100vh; width: 100vw; overflow: hidden; }
-          .main-content { flex: 1; height: 100vh; overflow-y: auto; padding: 40px 50px; margin-right: 70px; transition: margin-right 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-          .main-content.sidebar-open { margin-right: 320px; }
-          .print-only { display: none !important; }
+      <button className="btn-main-glass white" onClick={logic.exportToExcel}>📊 تصدير إكسل</button>
+      <button className="btn-main-glass white" onClick={() => window.print()}>🖨️ طباعة الكشف</button>
+    </div>
+  );
+  
+  return (
+    <MasterPage 
+      title="يوميات العمالة" 
+      subtitle="إدارة الحضور والأجور الميدانية - رواسي اليسر للمقاولات"
+    >
+      {/* 📡 إدارة السايد بار المركزي */}
+      <RawasiSidebarManager 
+        summary={
+            <div className="summary-glass-card">
+                <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي الأجور المحسوبة 💰</span>
+                <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.goldAccent, marginTop:'5px'}}>{logic.formatCurrency(logic.stats.sum || 0)}</div>
+                <div style={{fontSize:'11px', color:'#10b981', fontWeight:800, marginTop:'5px'}}>إجمالي السجلات: {logic.totalResults}</div>
+            </div>
         }
+        actions={sidebarActions}
+        customFilters={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '10px' }}>
+                <div>
+                   <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>بحث سريع:</label>
+                   <input type="text" placeholder="الاسم، الموقع، البند..." className="glass-input" value={logic.searchTerm} onChange={(e) => logic.setSearchTerm(e.target.value)} />
+                </div>
 
+                <div>
+                    <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>تصفية حسب الحالة:</label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                        {['الكل', 'مرحل', 'معلق'].map(type => (
+                            <button key={type} onClick={() => logic.setFilterStatus(type)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: logic.filterStatus === type ? THEME.goldAccent : 'rgba(255,255,255,0.1)', color: logic.filterStatus === type ? '#1e293b' : 'white', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '11px' }}>
+                                {type}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '5px 0' }} />
+                
+                <div>
+                    <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>عرض السجلات:</label>
+                    <select className="glass-input" value={logic.rowsPerPage} onChange={(e) => { logic.setRowsPerPage(Number(e.target.value)); logic.setCurrentPage(1); }}>
+                        <option value={50} style={{color: '#000'}}>50 سجل</option>
+                        <option value={100} style={{color: '#000'}}>100 سجل</option>
+                        <option value={500} style={{color: '#000'}}>500 سجل</option>
+                    </select>
+                </div>
+            </div>
+        }
+        watchDeps={[logic.selectedIds, logic.stats.sum, logic.searchTerm, logic.filterStatus, logic.rowsPerPage]}
+      />
+
+      <style>{`
+        .rawasi-table { width: 100%; border-collapse: collapse; text-align: right; min-width: 1100px; }
+        .rawasi-table th { padding: 15px; border-bottom: 2px solid rgba(0,0,0,0.05); color: #64748b; font-weight: 900; font-size: 13px; }
+        .rawasi-table td { padding: 15px; border-bottom: 1px solid rgba(0,0,0,0.02); font-size: 13px; font-weight: 700; color: #1e293b; }
+        .rawasi-table tbody tr { transition: 0.2s; cursor: pointer; }
+        .rawasi-table tbody tr:hover { background: rgba(197, 160, 89, 0.08) !important; }
+        .custom-checkbox { width: 20px; height: 20px; accent-color: ${THEME.goldAccent}; cursor: pointer; }
+        .glass-badge { padding: 6px 12px; border-radius: 10px; font-size: 11px; font-weight: 900; display: inline-block; }
+        .glass-input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; font-weight: 800; outline: none; }
+        
         @media print {
           @page { size: A4 landscape; margin: 1cm; }
-          aside, .no-print, .sidebar-input, .floating-row, .table-header-grid, .stat-card, button { display: none !important; }
-          .app-container, .main-content { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; background: white !important; }
+          aside, .no-print, button, .master-header { display: none !important; }
+          .clean-page { display: block !important; margin: 0 !important; padding: 0 !important; background: white !important; }
           .print-only { display: block !important; }
           .print-header { display: flex !important; justify-content: space-between; align-items: center; border-bottom: 3px solid ${THEME.coffeeDark}; padding-bottom: 15px; margin-bottom: 25px; }
           .print-table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed; }
-          .print-table th, .print-table td { border: 1px solid #000 !important; padding: 8px 6px !important; text-align: center !important; font-size: 10pt !important; word-wrap: break-word; color: black !important; }
+          .print-table th, .print-table td { border: 1px solid #000 !important; padding: 8px 6px !important; text-align: center !important; font-size: 10pt !important; color: black !important; }
           .print-table th { background: #f2f2f2 !important; font-weight: 900; }
-          .print-table thead { display: table-header-group !important; }
-          .print-footer { position: fixed; bottom: 0; left: 0; width: 100%; text-align: center; font-size: 10pt; border-top: 1px solid #ccc; padding: 10px 0; background: white; }
-          body { counter-reset: page; background: white; }
-          .page-num::after { counter-increment: page; content: "صفحة " counter(page); }
         }
-
-        * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-        
-        .table-wrapper { min-width: 1100px; padding-bottom: 20px; }
-        
-        .floating-row, .table-header-grid {
-          background: white; border-radius: 16px; margin-bottom: 10px; display: grid; 
-          grid-template-columns: 40px 90px 1.2fr 1.5fr 1.2fr 1.2fr 80px 80px 1.5fr 60px;
-          gap: 10px; align-items: center; padding: 12px 15px; border: 1px solid transparent; transition: 0.2s ease;
-        }
-        .table-header-grid { position: sticky; top: 0; z-index: 10; background: ${THEME.coffeeDark}; color: white; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .table-header-grid .label-header { color: white; opacity: 0.9; }
-
-        .floating-row:hover { border-color: ${THEME.goldAccent}; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(140, 106, 93, 0.1); }
-        .data-text { font-weight: 700; font-size: 13px; color: ${THEME.coffeeDark}; text-align: center; }
-        .label-header { font-size: 12px; font-weight: 900; text-align: center; }
-        
-        .control-btn { width: 100%; padding: 12px; border-radius: 10px; border: none; font-weight: 900; cursor: pointer; margin-bottom: 10px; transition: 0.2s; }
-        .control-btn:hover:not(:disabled) { filter: brightness(1.1); transform: scale(1.02); }
-        
-        .sidebar-input { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); padding: 12px; border-radius: 10px; color: white; width: 100%; outline: none; margin-bottom: 15px; font-size: 13px; transition: 0.2s; }
-        .sidebar-input:focus { border-color: ${THEME.goldAccent}; background: rgba(255, 255, 255, 0.12); }
-        
-        .modal-input { width: 100%; padding: 12px 15px; border-radius: 10px; border: 2px solid ${THEME.sandDark}; background: #FFF; color: ${THEME.coffeeDark}; font-weight: 700; outline: none; font-size: 14px; transition: 0.2s; }
-        .modal-input:focus { border-color: ${THEME.goldAccent}; box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.1); }
-        
-        .sidebar-select { width: 100%; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; cursor: pointer; outline: none; margin-bottom: 12px; font-size: 12px; }
-        .sidebar-select option { color: ${THEME.coffeeDark}; }
-        
-        .nav-group { display: flex; gap: 8px; margin-bottom: 15px; }
-        .nav-arrow-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; cursor: pointer; font-weight: 900; transition: 0.2s; }
-        .nav-arrow-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-        .nav-arrow-btn:disabled { opacity: 0.2; cursor: not-allowed; }
-        
-        .filter-btn { width: 100%; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; text-align: right; font-size: 13px; transition: 0.2s; margin-bottom: 6px; }
-        .filter-btn:hover { padding-right: 18px; }
-        .category-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 900; display: inline-block; border: 1px solid rgba(0,0,0,0.05); }
       `}</style>
 
-      {/* 🟢 السلايدر الجانبي (لوحة التحكم الشاملة) */}
-      <aside 
-        onMouseEnter={() => setIsSidebarOpen(true)} 
-        onMouseLeave={() => setIsSidebarOpen(false)} 
-        className="no-print" 
-        style={{ width: isSidebarOpen ? '320px' : '70px', backgroundColor: THEME.coffeeDark, position: 'fixed', right: 0, top: 0, height: '100vh', zIndex: 1000, borderLeft: `4px solid ${THEME.goldAccent}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden', transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '-5px 0 25px rgba(0,0,0,0.1)' }}
-      >
-        <div style={{ padding: '30px 25px', width: '320px', opacity: isSidebarOpen ? 1 : 0, transition: 'opacity 0.3s 0.1s' }}>
-          <h2 style={{ color: THEME.goldAccent, fontWeight: 900, fontSize: '24px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>⚙️</span> لوحة التحكم
-          </h2>
-          
-          <div style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))', padding: '20px', borderRadius: '15px', marginBottom: '20px', textAlign: 'center', border: `1px solid ${THEME.goldAccent}`, boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
-            <div style={{color: THEME.goldAccent, fontSize: '12px', fontWeight: 900, marginBottom: '5px'}}>إجمالي الأجور المحسوبة</div>
-            <div style={{color: 'white', fontSize: '26px', fontWeight: 900}}>{formatCurrency(stats.sum || 0)}</div>
-          </div>
-
-          {/* العمليات الموحدة */}
-          <button onClick={handleMainAction} className="control-btn" style={{ backgroundColor: isOneSelected ? THEME.goldAccent : THEME.sandLight, color: THEME.coffeeDark }}>
-            {isOneSelected ? '✏️ تعديل المختار' : '➕ إضافة يومية جديدة'}
-          </button>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-            <button onClick={() => selectedIds.forEach(id => handleDelete(id))} className="control-btn" style={{ backgroundColor: isNoneSelected ? 'rgba(255,255,255,0.05)' : '#ef4444', color: isNoneSelected ? 'rgba(255,255,255,0.3)' : '#FFF', marginBottom: 0 }} disabled={isNoneSelected}>🗑️ حذف</button>
-            <button onClick={handlePostSelected} className="control-btn" style={{ backgroundColor: isNoneSelected ? 'rgba(255,255,255,0.05)' : '#166534', color: isNoneSelected ? 'rgba(255,255,255,0.3)' : '#FFF', marginBottom: 0 }} disabled={isNoneSelected}>🚀 ترحيل</button>
-          </div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
-            <button onClick={exportToExcel} className="control-btn" style={{ backgroundColor: THEME.sandDark, color: THEME.coffeeDark, marginBottom: 0, fontSize: '13px' }}>📊 إكسل</button>
-            <button onClick={() => window.print()} className="control-btn" style={{ backgroundColor: THEME.coffeeMain, color: '#FFF', marginBottom: 0, fontSize: '13px' }}>🖨️ طباعة</button>
-          </div>
-
-          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '15px 0' }} />
-
-          {/* نظام الفلترة المدمج */}
-          <label style={{ color: THEME.goldAccent, fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '10px', opacity: 0.8 }}>تصفية حسب الحالة</label>
-          <div style={{ marginBottom: '25px' }}>
-            {['الكل', 'مرحل', 'معلق'].map(type => (
-              <button key={type} onClick={() => setFilterStatus(type)} className="filter-btn" style={{ backgroundColor: filterStatus === type ? 'rgba(255,255,255,0.15)' : 'transparent', color: filterStatus === type ? THEME.goldAccent : THEME.sandLight, borderLeft: filterStatus === type ? `3px solid ${THEME.goldAccent}` : '3px solid transparent' }}>{type}</button>
-            ))}
-          </div>
-
-          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '15px 0' }} />
-
-          {/* نظام الصفحات 🔢 */}
-          <label style={{ color: THEME.goldAccent, fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '10px', opacity: 0.8 }}>إعدادات العرض</label>
-          <select className="sidebar-select" value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
-            <option value={50}>إظهار 50 صف</option><option value={100}>إظهار 100 صف</option><option value={500}>إظهار 500 صف</option>
-          </select>
-
-          <div className="nav-group">
-            <button className="nav-arrow-btn" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0}>التالي ◀</button>
-            <button className="nav-arrow-btn" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>▶ السابق</button>
-          </div>
-          
-          <div style={{ textAlign: 'center', color: 'white', marginBottom: '25px' }}>
-            <div style={{ fontSize: '15px', fontWeight: 900 }}>صفحة {currentPage} من {totalPages || 1}</div>
-            <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '2px' }}>إجمالي النتائج: {totalResults}</div>
-          </div>
-
-          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '15px 0 20px 0' }} />
-          <input type="text" placeholder="بحث موحد (اسم، موقع، بند)..." className="sidebar-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        {!isSidebarOpen && <div style={{ fontSize: '26px', textAlign: 'center', marginTop: '30px', color: THEME.goldAccent }}>⚙️</div>}
-      </aside>
-
-      {/* 🟢 المحتوى الرئيسي */}
-      <main className={`main-content ${isSidebarOpen ? 'sidebar-open' : ''}`}>
-        
-        {/* هيدر الشاشة */}
-        <header className="no-print" style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="print-hide-text">
-            <h1 style={{ fontSize: '48px', fontWeight: 900, color: THEME.coffeeDark, margin: 0, letterSpacing: '-1px' }}>يوميات العمالة</h1>
-            <p style={{ color: THEME.coffeeMain, fontWeight: 700, opacity: 0.8, fontSize: '18px', marginTop: '5px' }}>رواسي اليسر للمقاولات</p>
-          </div>
-          <div className="logo-container" style={{ width: '280px', height: '120px', background: 'white', borderRadius: '20px', border: `1px solid ${THEME.sandDark}`, padding: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 10px 25px rgba(140, 106, 93, 0.08)' }}>
-            <img src="/RYC_Logo.png" alt="RYC" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
-        </header>
-
-        <div className="table-wrapper">
-            {/* هيدر الجدول (شاشة) */}
-            <div className="table-header-grid no-print">
-               <input type="checkbox" style={{ transform: 'scale(1.2)', cursor: 'pointer' }} onChange={toggleSelectAll} checked={selectedIds.length === filteredLogs.length && filteredLogs.length > 0} />
-               {['التاريخ', 'المقاول', 'اسم العامل', 'الموقع', 'البند', 'اليومية', 'الحضور', 'الملاحظات', 'إجراء'].map(h => <div key={h} className="label-header">{h}</div>)}
-            </div>
-
-            {/* بيانات الجدول (شاشة) */}
-            {isLoading ? <div style={{textAlign:'center', padding:'80px', fontWeight:900, color:THEME.coffeeMain, fontSize: '20px'}}>⏳ جاري تحميل البيانات...</div> : filteredLogs.map((l) => {
-              const badge = getAttendanceBadge(l.attendance_value);
-              return (
-                <div key={l.id} className="floating-row no-print" style={{ backgroundColor: selectedIds.includes(l.id) ? '#fffcf5' : 'white', border: selectedIds.includes(l.id) ? `1px solid ${THEME.goldAccent}` : '1px solid transparent' }}>
-                  <input type="checkbox" style={{ transform: 'scale(1.2)', cursor: 'pointer' }} checked={selectedIds.includes(l.id)} onChange={() => toggleSelectRow(l.id)} />
-                  <div className="data-text" style={{ color: THEME.goldAccent, fontWeight: 900 }}>{l.work_date}</div>
-                  <div className="data-text" style={{ fontSize: '12px' }}>{l.sub_contractor || 'المركز'}</div>
-                  
-                  <div className="data-text" style={{ textAlign: 'right' }}>
-                     <a href={`/profile/${encodeURIComponent(l.worker_name)}`} style={{ color: THEME.coffeeDark, textDecoration: 'none' }}>
-                        👤 {l.worker_name}
-                     </a>
-                  </div>
-                  
-                  <div className="data-text">{l.site_ref}</div>
-                  <div className="data-text">{l.work_item}</div>
-                  
-                  {/* 🚀 استخدام formatCurrency لليومية في الجدول */}
-                  <div className="data-text" style={{ fontWeight: 900, color: THEME.success }}>{formatCurrency(l.daily_wage || 0)}</div>
-                  
-                  <div className="data-text"><span className="category-badge" style={{ backgroundColor: badge.bg, color: badge.color }}>{badge.text}</span></div>
-                  <div className="data-text" style={{ fontSize: '12px', opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={l.notes}>{l.notes || '---'}</div>
-                  <div className="data-text">
-                     {!l.is_posted ? (
-                         <button onClick={() => handlePostSingle(l.id)} title="ترحيل القيد" style={{ background: '#166534', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontWeight: 900, transition: '0.2s' }}>🚀</button>
-                     ) : (
-                         <span title="مُرحل ومُعتمد" style={{ color: '#166534', fontWeight: 900, fontSize: '18px' }}>✅</span>
-                     )}
-                  </div>
-                </div>
-              );
-            })}
-        </div>
-
-        {/* 🖨️ نظام الطباعة (يظهر فقط في الورق) */}
-        <div className="print-only">
-           <div className="print-header">
-             <div style={{ textAlign: 'right' }}>
-               <h1 style={{ margin: 0, fontSize: '26pt', color: THEME.coffeeDark, fontWeight: 900 }}>سجل يوميات العمالة</h1>
-               <p style={{ margin: 0, fontSize: '14pt', color: THEME.coffeeMain, fontWeight: 700 }}>شركة رواسي اليسر للمقاولات العامة</p>
-             </div>
-             <img src="/RYC_Logo.png" style={{ width: '180px' }} alt="Logo" />
-           </div>
-          <table className="print-table">
-            <thead>
-              <tr>
-                <th style={{width:'90px'}}>التاريخ</th><th>المقاول</th><th style={{width:'160px'}}>اسم العامل</th>
-                <th>الموقع</th><th>البند</th><th style={{width:'90px'}}>اليومية</th><th style={{width:'80px'}}>الحضور</th><th>الملاحظات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLogs.map((l) => (
-                <tr key={l.id}>
-                  <td>{l.work_date}</td><td>{l.sub_contractor || 'المركز'}</td><td style={{fontWeight:'bold'}}>{l.worker_name}</td>
-                  <td>{l.site_ref}</td><td>{l.work_item}</td><td style={{fontWeight: 'bold'}}>{formatCurrency(l.daily_wage || 0)}</td><td>{l.attendance_value == 1 ? 'كامل':'نصف'}</td><td style={{fontSize:'9pt'}}>{l.notes}</td>
+      {/* 📊 عرض الجدول على الشاشة */}
+      <div className="no-print">
+        {(logic.isLoading || permsLoading) ? (
+          <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
+        ) : (
+          <div className="cinematic-scroll" style={{ overflowX: 'auto' }}>
+            <table className="rawasi-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                     <input type="checkbox" className="custom-checkbox" onChange={toggleSelectAll} checked={logic.selectedIds.length === logic.filteredLogs.length && logic.filteredLogs.length > 0} />
+                  </th>
+                  <th>التاريخ</th>
+                  <th>المقاول</th>
+                  <th>اسم العامل</th>
+                  <th>الموقع</th>
+                  <th>البند</th>
+                  <th>اليومية 💰</th>
+                  <th>الحضور</th>
+                  <th>الملاحظات</th>
+                  <th style={{ textAlign: 'center' }}>إجراء</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="print-footer"><span className="page-num"></span><span style={{ marginRight: '40px' }}>تقرير رسمي - رواسي اليسر للمقاولات - {new Date().toLocaleDateString('ar-SA')}</span></div>
-        </div>
-      </main>
+              </thead>
+              <tbody>
+                {logic.filteredLogs.length === 0 ? (
+                  <tr><td colSpan={10} style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontWeight: 900 }}>🔍 لا توجد سجلات</td></tr>
+                ) : logic.filteredLogs.map((l:any) => {
+                    const isSelected = logic.selectedIds.includes(l.id);
+                    const badge = getAttendanceBadge(l.attendance_value);
+                    return (
+                      <tr key={l.id} style={{ background: isSelected ? 'rgba(197, 160, 89, 0.08)' : (l.is_posted ? 'rgba(16, 185, 129, 0.02)' : 'transparent') }} onClick={() => toggleSelectRow(l.id)}>
+                        <td style={{ textAlign: 'center' }}><input type="checkbox" className="custom-checkbox" checked={isSelected} readOnly /></td>
+                        <td style={{ color: THEME.goldAccent, fontWeight: 900 }}>{l.work_date}</td>
+                        <td style={{ fontSize: '12px', color: '#64748b' }}>{l.sub_contractor || 'المركز'}</td>
+                        <td style={{ fontWeight: 900 }}>{l.worker_name}</td>
+                        <td style={{ color: '#475569' }}>{l.site_ref}</td>
+                        <td style={{ color: '#475569' }}>{l.work_item}</td>
+                        <td style={{ fontWeight: 900, color: '#059669' }}>{logic.formatCurrency(l.daily_wage || 0)}</td>
+                        <td><span className="glass-badge" style={{ backgroundColor: badge.bg, color: badge.color }}>{badge.text}</span></td>
+                        <td style={{ fontSize: '12px', color: '#94a3b8' }}>{l.notes || '---'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          {can('labor_logs', 'post') && (
+                              !l.is_posted ? (
+                                  <button onClick={(e) => { e.stopPropagation(); logic.handlePostSingle(l.id); }} style={{ background: '#166534', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontWeight: 900 }}>🚀</button>
+                              ) : (
+                                  <span style={{ color: '#166534', fontWeight: 900, fontSize: '18px' }}>✅</span>
+                              )
+                          )}
+                        </td>
+                      </tr>
+                    );
+                })}
+              </tbody>
+            </table>
+            
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', paddingBottom: '10px' }}>
+                <button disabled={logic.currentPage === 1} onClick={() => logic.setCurrentPage((p:number) => p - 1)} style={{ padding: '10px 20px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 900, cursor: 'pointer' }}>السابق</button>
+                <div style={{background: THEME.coffeeDark, color:'white', padding:'10px 25px', borderRadius:'12px', fontWeight:900}}>صفحة {logic.currentPage} من {logic.totalPages || 1}</div>
+                <button disabled={logic.currentPage >= logic.totalPages} onClick={() => logic.setCurrentPage((p:number) => p + 1)} style={{ padding: '10px 20px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 900, cursor: 'pointer' }}>التالي</button>
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* 🟢 النافذة المنبثقة الشاملة مع حماية القيم الفارغة || '' */}
-      {isAddModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(67, 52, 46, 0.6)', backdropFilter: 'blur(6px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10001, opacity: 1, transition: '0.3s' }} onClick={() => setIsAddModalOpen(false)}>
-          <div className="glass-card" style={{ width: '750px', padding: '40px', background: 'white', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }} onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontWeight: 900, color: THEME.coffeeDark, marginBottom: '30px', fontSize: '26px', borderBottom: `3px solid ${THEME.goldAccent}`, paddingBottom: '15px', display: 'inline-block' }}>
-              {editingId ? '✏️ تعديل بيانات اليومية' : '➕ إضافة يومية جديدة'}
+      {/* 🖨️ نسخة الطباعة */}
+      <div className="print-only" style={{ display: 'none' }}>
+        <div className="print-header">
+          <div style={{ textAlign: 'right' }}>
+            <h1 style={{ margin: 0, fontSize: '26pt', color: THEME.coffeeDark, fontWeight: 900 }}>سجل يوميات العمالة</h1>
+            <p style={{ margin: 0, fontSize: '14pt', color: THEME.goldAccent, fontWeight: 700 }}>رواسي اليسر للمقاولات</p>
+          </div>
+          <img src="/RYC_Logo.png" style={{ width: '180px' }} alt="Logo" />
+        </div>
+        <table className="print-table">
+          <thead>
+            <tr><th>التاريخ</th><th>المقاول</th><th>اسم العامل</th><th>الموقع</th><th>البند</th><th>اليومية</th><th>الحضور</th></tr>
+          </thead>
+          <tbody>
+            {logic.filteredLogs.map((l:any) => (
+              <tr key={l.id}>
+                <td>{l.work_date}</td><td>{l.sub_contractor}</td><td>{l.worker_name}</td><td>{l.site_ref}</td><td>{l.work_item}</td><td>{logic.formatCurrency(l.daily_wage)}</td><td>{l.attendance_value == 1 ? 'كامل':'نصف'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ✏️ مودال الإضافة والتعديل */}
+      {mounted && logic.isAddModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
+          <div className="cinematic-scroll" style={{ background: 'white', padding: '35px', borderRadius: '30px', width: '100%', maxWidth: '750px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontWeight: 900, color: THEME.coffeeDark, marginBottom: '25px', fontSize: '24px', borderBottom: `2px dashed ${THEME.goldAccent}`, paddingBottom: '15px' }}>
+              {logic.editingId ? '✏️ تعديل بيانات اليومية' : '➕ إضافة يومية جديدة'}
             </h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>📅 التاريخ</label>
-                 <input type="date" className="modal-input" value={currentLog.work_date || ''} onChange={e => setCurrentLog({...currentLog, work_date: e.target.value})} /></div>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>🏗️ المقاول</label>
-                 <input className="modal-input" placeholder="اسم المقاول (اختياري)" value={currentLog.sub_contractor || ''} onChange={e => setCurrentLog({...currentLog, sub_contractor: e.target.value})} /></div>
+                 <div>
+                    <label style={{color:THEME.coffeeMain, fontSize:'12px', fontWeight:900, display:'block', marginBottom:'8px'}}>📅 التاريخ</label>
+                    <input type="date" value={logic.currentLog.work_date || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, work_date: e.target.value})} style={{padding:'14px', borderRadius:'12px', border:'2px solid #e2e8f0', width:'100%', fontWeight:800, outline:'none'}} />
+                 </div>
+                 <div>
+                    <label style={{color:THEME.coffeeMain, fontSize:'12px', fontWeight:900, display:'block', marginBottom:'8px'}}>🏗️ المقاول (اختياري)</label>
+                    <input type="text" placeholder="اسم المقاول" value={logic.currentLog.sub_contractor || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, sub_contractor: e.target.value})} style={{padding:'14px', borderRadius:'12px', border:'2px solid #e2e8f0', width:'100%', fontWeight:800, outline:'none'}} />
+                 </div>
+               </div>
+
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', zIndex: 100 }}>
+                 <SmartCombo label="👷 اسم العامل" table="partners" displayCol="name" freeText={true} initialDisplay={logic.currentLog.worker_name} onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, worker_name: v.name || v})} />
+                 <SmartCombo label="📍 الموقع / العمارة" table="projects" displayCol="Property" freeText={true} initialDisplay={logic.currentLog.site_ref} onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, site_ref: v.Property || v})} />
                </div>
 
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>👷 اسم العامل (دليل الشركاء)</label>
-                 <select className="modal-input" value={currentLog.worker_name || ''} onChange={e => setCurrentLog({...currentLog, worker_name: e.target.value})}>
-                    <option value="">-- اختر العامل --</option>
-                    {workersList.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
-                 </select></div>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>📍 الموقع / العمارة</label>
-                 <select className="modal-input" value={currentLog.site_ref || ''} onChange={e => setCurrentLog({...currentLog, site_ref: e.target.value})}>
-                    <option value="">-- اختر الموقع --</option>
-                    {sitesList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                 </select></div>
-               </div>
-
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>🔨 البند</label>
-                 <input className="modal-input" placeholder="مثال: حدادة، نجارة..." value={currentLog.work_item || ''} onChange={e => setCurrentLog({...currentLog, work_item: e.target.value})} /></div>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>💰 اليومية</label>
-                 <input type="number" className="modal-input" placeholder="القيمة بالريال" value={currentLog.daily_wage || ''} onChange={e => setCurrentLog({...currentLog, daily_wage: e.target.value})} /></div>
-               </div>
-
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>✅ الحضور</label>
-                 <select className="modal-input" value={currentLog.attendance_value || '1'} onChange={e => setCurrentLog({...currentLog, attendance_value: e.target.value})}>
-                    <option value="1">يوم كامل (1)</option><option value="0.5">نصف يوم (0.5)</option><option value="0">غياب (0)</option>
-                 </select></div>
-                 <div><label className="label-header" style={{color:THEME.coffeeMain, display:'block', textAlign:'right', marginBottom:'8px'}}>📝 الملاحظات</label>
-                 <input className="modal-input" placeholder="أي ملاحظات إضافية..." value={currentLog.notes || ''} onChange={e => setCurrentLog({...currentLog, notes: e.target.value})} /></div>
+                 <div><label style={{color:THEME.coffeeMain, fontSize:'12px', fontWeight:900, display:'block', marginBottom:'8px'}}>🔨 البند</label>
+                    <input type="text" placeholder="مثال: حدادة" value={logic.currentLog.work_item || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, work_item: e.target.value})} style={{padding:'14px', borderRadius:'12px', border:'2px solid #e2e8f0', width:'100%', fontWeight:800, outline:'none'}} />
+                 </div>
+                 <div><label style={{color:THEME.coffeeMain, fontSize:'12px', fontWeight:900, display:'block', marginBottom:'8px'}}>💰 اليومية</label>
+                    <input type="number" placeholder="القيمة" value={logic.currentLog.daily_wage || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, daily_wage: e.target.value})} style={{padding:'14px', borderRadius:'12px', border:'2px solid #e2e8f0', width:'100%', fontWeight:900, color: THEME.success, outline:'none'}} />
+                 </div>
                </div>
 
                <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-                 <button onClick={handleSaveLog} disabled={isSaving} style={{ flex: 2, backgroundColor: THEME.coffeeDark, color: 'white', padding: '16px', borderRadius: '12px', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px', transition: '0.2s' }}>
-                   {isSaving ? '⏳ جاري الحفظ...' : '✅ اعتماد البيانات'}
+                 <button onClick={logic.handleSaveLog} disabled={logic.isSaving} style={{ flex: 2, background: THEME.coffeeDark, color: 'white', padding: '16px', borderRadius: '15px', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>
+                   {logic.isSaving ? '⏳ جاري الحفظ...' : '💾 اعتماد اليومية'}
                  </button>
-                 <button onClick={() => setIsAddModalOpen(false)} style={{ flex: 1, backgroundColor: THEME.sandDark, color: THEME.coffeeDark, padding: '16px', borderRadius: '12px', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px', transition: '0.2s' }}>
-                   ❌ إلغاء
-                 </button>
+                 <button onClick={() => logic.setIsAddModalOpen(false)} style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '16px', borderRadius: '15px', border: 'none', fontWeight: 900, cursor: 'pointer' }}>إلغاء</button>
                </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+   </MasterPage>
   );
 }

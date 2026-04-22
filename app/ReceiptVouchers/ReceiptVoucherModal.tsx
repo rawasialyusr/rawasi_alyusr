@@ -95,7 +95,7 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
             {show && results.length > 0 && (
                 <>
                     <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }} />
-                    <div ref={listRef} className="cinematic-scroll glass-dropdown">
+                    <div ref={listRef} className="cinematic-scroll glass-dropdown" style={{ zIndex: 2000 }}>
                         {results.map((item: any, index: number) => {
                             const isSelected = multi ? selectedValues.some((v: any) => v.id === item.id) : false;
                             const isHighlighted = index === highlightedIndex;
@@ -172,7 +172,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
             partner_id: inv.partner_id,
             partner_name: partnerData?.name || '', 
             selected_projects: projectsData, 
-            project_ids: projectsData.map(p => p.id), 
+            project_ids: projectsData.map((p: any) => p.id), 
             amount: remainingAmount > 0 ? remainingAmount : 0 
         });
     };
@@ -199,18 +199,22 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
     };
 
     return (
-        <div className="cinematic-scroll" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', zIndex: 9999, backdropFilter: 'blur(10px)', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        // 💡 التعديل هنا: شيلت position: fixed وشيلت alignItems: center عشان نعالج القص
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
             
             <style>{`
+                /* 💡 التعديل هنا: margin: auto بتسنتر المودال وتمنع القص، وشيلنا الـ height الثابت */
                 .glass-modal {
-                    background: rgba(255, 255, 255, 0.85);
+                    background: rgba(255, 255, 255, 0.95);
                     backdrop-filter: blur(25px);
                     border: 1px solid rgba(255, 255, 255, 0.8);
                     box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
                     border-radius: 28px;
-                    width: 950px;
+                    width: 100%;
+                    max-width: 980px; 
                     padding: 40px;
                     direction: rtl;
+                    margin: auto; 
                 }
                 .glass-input {
                     width: 100%; padding: 14px; border-radius: 12px;
@@ -278,7 +282,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     </div>
 
                     {/* --- الصف الثاني (السحب الآلي) --- */}
-                    <div style={{ gridColumn: 'span 1' }}>
+                    <div style={{ gridColumn: 'span 1', zIndex: 90 }}>
                         <SmartCombo 
                             tabIndex={4} 
                             label="رقم الفاتورة (سحب آلي ⚡)" 
@@ -290,7 +294,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                         />
                     </div>
 
-                    <div style={{ gridColumn: 'span 1' }}>
+                    <div style={{ gridColumn: 'span 1', zIndex: 80 }}>
                         <SmartCombo 
                             tabIndex={5} 
                             multi={true} 
@@ -311,7 +315,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                         </div>
                     </div>
 
-                    <div style={{ gridColumn: 'span 1' }}>
+                    <div style={{ gridColumn: 'span 1', zIndex: 70 }}>
                         <SmartCombo 
                             tabIndex={6} 
                             label="العميل الدافع *" 
@@ -324,7 +328,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     </div>
 
                     {/* --- قسم الخصم (Apple Style) --- */}
-                    <div style={{ gridColumn: '1 / -1', background: 'rgba(245, 158, 11, 0.05)', padding: '20px', borderRadius: '20px', border: `1px dashed rgba(245, 158, 11, 0.3)` }}>
+                    <div style={{ gridColumn: '1 / -1', background: 'rgba(245, 158, 11, 0.05)', padding: '20px', borderRadius: '20px', border: `1px dashed rgba(245, 158, 11, 0.3)`, zIndex: 60 }}>
                         <h4 style={{ color: '#d97706', margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🎁 خصم مسموح به (اختياري)</h4>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '15px' }}>
                             <div>
@@ -335,7 +339,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                                 <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>بيان الخصم</label>
                                 <input type="text" tabIndex={8} placeholder="مثال: خصم تعجيل دفع..." value={record.discount_notes || ''} onChange={e => setRecord({...record, discount_notes: e.target.value})} className="glass-input" />
                             </div>
-                            <div>
+                            <div style={{ zIndex: 50 }}>
                                 <SmartCombo 
                                     tabIndex={9} 
                                     label="حساب الخصم" 
@@ -348,11 +352,15 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     </div>
 
                     {/* --- التوجيه المحاسبي --- */}
-                    <div style={{ gridColumn: '1 / -1', background: 'rgba(255, 255, 255, 0.5)', padding: '25px', borderRadius: '20px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                    <div style={{ gridColumn: '1 / -1', background: 'rgba(255, 255, 255, 0.5)', padding: '25px', borderRadius: '20px', border: '1px solid rgba(0,0,0,0.05)', zIndex: 40 }}>
                         <h4 style={{ color: THEME.primary, margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🏦 التوجيه المحاسبي</h4>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                            <SmartCombo tabIndex={10} label="حساب الصندوق/البنك (مدين)" table="accounts" initialDisplay={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
-                            <SmartCombo tabIndex={11} label="حساب العميل (دائن)" table="accounts" initialDisplay={record.partner_acc_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
+                            <div style={{ zIndex: 30 }}>
+                                <SmartCombo tabIndex={10} label="حساب الصندوق/البنك (مدين)" table="accounts" initialDisplay={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
+                            </div>
+                            <div style={{ zIndex: 20 }}>
+                                <SmartCombo tabIndex={11} label="حساب العميل (دائن)" table="accounts" initialDisplay={record.partner_acc_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
+                            </div>
                         </div>
                     </div>
 

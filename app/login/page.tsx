@@ -9,17 +9,31 @@ const THEME = {
   accentLight: '#eab308',
   white: '#ffffff',
   slate: '#94a3b8',
-  error: '#ef4444'
+  error: '#ef4444',
+  success: '#10b981'
 };
 
 export default function LoginPage() {
   const router = useRouter();
+  
+  // 🎛️ حالات الفورم
+  const [isSignUp, setIsSignUp] = useState(false); // 👈 للتبديل بين الدخول والتسجيل
+  const [fullName, setFullName] = useState('');    // 👈 لاسم المستخدم الجديد
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  // 1. مزامنة قيم المتصفح (Autofill) لضمان طيران العنوان فوراً
+  // 🧹 1. تنظيف الجلسات الشبح (Ghost Sessions)
+  useEffect(() => {
+    const clearGhostSession = async () => {
+      await supabase.auth.signOut();
+    };
+    clearGhostSession();
+  }, []);
+
+  // 2. مزامنة قيم المتصفح (Autofill)
   useEffect(() => {
     const syncFields = () => {
       const emailField = document.querySelector('input[type="email"]') as HTMLInputElement;
@@ -28,12 +42,10 @@ export default function LoginPage() {
       if (passField?.value && !password) setPassword(passField.value);
     };
     
-    // فحص دوري في الثواني الأولى للتأكد من التقاط بيانات المتصفح
     const intervals = [100, 500, 1000, 2000].map(t => setTimeout(syncFields, t));
     return () => intervals.forEach(t => clearTimeout(t));
   }, [email, password]);
 
-  // 2. اكتشاف الـ Autofill عبر الأنيميشن (حل تقني متقدم)
   const handleAutoFill = (e: React.AnimationEvent<HTMLInputElement>) => {
     if (e.animationName === 'onAutoFillStart') {
       const target = e.target as HTMLInputElement;
@@ -42,22 +54,50 @@ export default function LoginPage() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // 🚀 3. دالة التنفيذ (تسجيل دخول أو حساب جديد)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg('');
+    setSuccessMsg('');
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      if (isSignUp) {
+        // 🆕 إنشاء حساب جديد
+        if (!fullName.trim()) throw new Error('يرجى إدخال الاسم الكامل');
+        if (password.length < 6) throw new Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
 
-      if (error) throw error;
-      
-      router.push('/invoices'); 
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName, // حفظ الاسم في الميتا داتا
+              role: 'client'       // الرتبة الافتراضية لحد ما الإدارة تغيرها
+            }
+          }
+        });
+
+        if (error) throw error;
+        
+        // لو التسجيل نجح، نرجع وضع تسجيل الدخول ونظهر رسالة
+        setSuccessMsg('✅ تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.');
+        setIsSignUp(false);
+        setPassword(''); // تصفير الباسورد كإجراء أمني
+        
+      } else {
+        // 🔑 تسجيل الدخول
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw new Error('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
+        
+        router.push('/invoices'); // توجيه للداشبورد
+      }
     } catch (error: any) {
-      setErrorMsg('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
+      setErrorMsg(error.message);
     } finally {
       setIsLoading(false);
     }
@@ -105,9 +145,9 @@ export default function LoginPage() {
         }
 
         .logo-container {
-  text-align: right; /* 👈 يخلي اللوجو يروح أقصى اليمين */
-  margin-bottom: 25px;
-}
+          text-align: right;
+          margin-bottom: 25px;
+        }
 
         .logo-container img {
           height: 110px;
@@ -152,7 +192,8 @@ export default function LoginPage() {
           text-align: right;
         }
 
-        /* تنسيق الـ Autofill لمنع تغير الخلفية وتداخل النصوص */
+        .cinematic-input:focus { border-color: ${THEME.accent}; background: rgba(255, 255, 255, 0.1) !important; }
+
         .cinematic-input:-webkit-autofill {
           animation-name: onAutoFillStart;
           -webkit-text-fill-color: #ffffff !important;
@@ -173,7 +214,6 @@ export default function LoginPage() {
           z-index: 10;
         }
 
-        /* 🚀 الحل المعياري: رفع العنوان "بره الصندوق" تماماً بخلفية صلبة */
         .cinematic-input:focus ~ .floating-label, 
         .cinematic-input:not(:placeholder-shown) ~ .floating-label,
         .cinematic-input:-webkit-autofill ~ .floating-label,
@@ -182,7 +222,7 @@ export default function LoginPage() {
           right: 15px !important;
           font-size: 13px !important;
           color: ${THEME.accent} !important;
-          background: #151c2c !important; /* لون خلفية الكارت لقطع خط الحدود */
+          background: #151c2c !important;
           padding: 0 10px !important;
           border-radius: 4px !important;
           transform: translateY(0) !important;
@@ -213,16 +253,23 @@ export default function LoginPage() {
           box-shadow: 0 15px 25px rgba(202, 138, 4, 0.4);
         }
 
-        .error-message {
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid ${THEME.error};
-          color: #fca5a5;
-          padding: 12px;
-          border-radius: 10px;
-          text-align: center;
+        .toggle-btn {
+          width: 100%;
+          background: none;
+          border: none;
+          color: ${THEME.slate};
+          font-family: inherit;
+          font-size: 14px;
           font-weight: 700;
-          margin-bottom: 20px;
+          margin-top: 20px;
+          cursor: pointer;
+          transition: 0.3s;
         }
+        .toggle-btn span { color: ${THEME.accent}; text-decoration: underline; }
+        .toggle-btn:hover { color: ${THEME.white}; }
+
+        .error-message { background: rgba(239, 68, 68, 0.1); border: 1px solid ${THEME.error}; color: #fca5a5; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; margin-bottom: 20px; }
+        .success-message { background: rgba(16, 185, 129, 0.1); border: 1px solid ${THEME.success}; color: #6ee7b7; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; margin-bottom: 20px; }
       `}</style>
 
       <div className="glass-card">
@@ -231,11 +278,28 @@ export default function LoginPage() {
         </div>
         
         <h1 className="cinematic-title">رواسي اليسر</h1>
-        <p className="cinematic-subtitle">النظام المالي المتكامل</p>
+        <p className="cinematic-subtitle">{isSignUp ? 'إنشاء حساب جديد' : 'النظام المالي المتكامل'}</p>
 
         {errorMsg && <div className="error-message">⚠️ {errorMsg}</div>}
+        {successMsg && <div className="success-message">{successMsg}</div>}
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleSubmit}>
+          
+          {/* حقل الاسم (يظهر في حالة التسجيل فقط) */}
+          {isSignUp && (
+            <div className="input-group" style={{ animation: 'fadeInUp 0.4s forwards' }}>
+              <input 
+                type="text" 
+                className="cinematic-input" 
+                placeholder=" " 
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required={isSignUp} 
+              />
+              <label className={`floating-label ${fullName ? 'forced-float' : ''}`}>👤 الاسم الكامل</label>
+            </div>
+          )}
+
           <div className="input-group">
             <input 
               type="email" 
@@ -259,15 +323,32 @@ export default function LoginPage() {
               onAnimationStart={handleAutoFill}
               onChange={(e) => setPassword(e.target.value)}
               required 
-              autoComplete="current-password"
+              autoComplete={isSignUp ? "new-password" : "current-password"}
             />
             <label className={`floating-label ${password ? 'forced-float' : ''}`}>🔒 كلمة المرور</label>
           </div>
 
           <button type="submit" className="submit-btn" disabled={isLoading}>
-            {isLoading ? '⏳ جاري التحقق...' : 'تسجيل الدخول 🚀'}
+            {isLoading ? '⏳ جاري المعالجة...' : (isSignUp ? 'إنشاء الحساب 🚀' : 'تسجيل الدخول 🚀')}
           </button>
         </form>
+
+        {/* 🔄 زر التبديل بين الدخول والتسجيل */}
+        <button 
+          type="button" 
+          className="toggle-btn" 
+          onClick={() => {
+            setIsSignUp(!isSignUp);
+            setErrorMsg('');
+            setSuccessMsg('');
+          }}
+        >
+          {isSignUp ? (
+            <>لديك حساب بالفعل؟ <span>سجل دخولك من هنا</span></>
+          ) : (
+            <>مستخدم جديد للمنصة؟ <span>إنشاء حساب جديد</span></>
+          )}
+        </button>
 
         <div style={{ textAlign: 'center', marginTop: '25px' }}>
           <p style={{ color: THEME.slate, fontSize: '13px', fontWeight: 600 }}>

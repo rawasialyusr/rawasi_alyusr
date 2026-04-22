@@ -7,8 +7,9 @@ import NextTopLoader from 'nextjs-toploader';
 import GlobalErrorBoundary from '../components/globalerrorboundary';
 import { THEME } from '@/lib/theme'; 
 import { SidebarProvider } from '@/lib/SidebarContext'; 
-import AuthGuard from "../components/authGuard"; // 🛡️ 1. استدعاء الحارس هنا
-import { ToastProvider } from '@/lib/toast-context'; // 🔔 1. استدعاء مزود الإشعارات المركزي
+import AuthGuard from "../components/authGuard"; 
+import { ToastProvider } from '@/lib/toast-context'; 
+import { PermissionsProvider } from '@/lib/PermissionsContext'; // 🛡️ 1. استدعاء مركز الصلاحيات المركزي
 
 const cairo = Cairo({ 
   subsets: ["arabic"],
@@ -85,18 +86,19 @@ export default function RootLayout({
 
         <GlobalErrorBoundary>
             <Providers>
-                {/* 🔔 2. تغليف السيستم بمزود الإشعارات */}
                 <ToastProvider>
                     <AutoLogoutWrapper>
-                        {/* 🛡️ 3. تغليف السيستم بالحارس (AuthGuard) */}
                         <AuthGuard> 
-                            <SidebarProvider> 
-                                <LayoutClient>
-                                    <div style={{ position: 'relative', zIndex: 10 }}>
-                                        {children}
-                                    </div>
-                                </LayoutClient>
-                            </SidebarProvider>
+                            {/* 🛡️ 2. تغليف السيستم بنظام الصلاحيات (هنا بيفعل السمارت كومبو والسيكيور أكشن أوتوماتيك) */}
+                            <PermissionsProvider>
+                                <SidebarProvider> 
+                                    <LayoutClient>
+                                        <div style={{ position: 'relative', zIndex: 10 }}>
+                                            {children}
+                                        </div>
+                                    </LayoutClient>
+                                </SidebarProvider>
+                            </PermissionsProvider>
                         </AuthGuard>
                     </AutoLogoutWrapper>
                 </ToastProvider>
