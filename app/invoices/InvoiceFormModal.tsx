@@ -1,20 +1,25 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom'; // 🚀 استدعاء البورتال
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/lib/toast-context'; // 🚀 استدعاء الهوك المركزي للإشعارات
-import SmartCombo from '@/components/SmartCombo'; // 🚀 1. حقن السوبر كومبوننت هنا
-
+import { useToast } from '@/lib/toast-context'; 
+import SmartCombo from '@/components/SmartCombo'; 
 
 // --- [المودال الرئيسي للفاتورة] ---
 export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, onSave, isSaving, projects }: any) {
     const { showToast } = useToast(); 
+    const [mounted, setMounted] = useState(false); // 🚀 للتأكد من الرندر في المتصفح
 
-    if (!isOpen || !record) return null;
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // 🚀 1. سحب البيانات بشكل ذكي ومؤكد (العقارات والعميل)
     useEffect(() => {
+        if (!isOpen || !record) return;
+
         let updates: any = {};
         let needsUpdate = false;
 
@@ -47,7 +52,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         if (needsUpdate) {
             setRecord((prev: any) => ({ ...prev, ...updates }));
         }
-    }, [record?.id, projects?.length]); // 👈 ربطناها بطول المصفوفة عشان نتجنب الـ Infinite Loops
+    }, [record?.id, projects?.length, isOpen]); 
 
     // 🚀 2. الحسابات الفورية
     useEffect(() => {
@@ -89,7 +94,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         }
     }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca]); 
 
-    // 🚀 3. دالة التحقق قبل الحفظ المرتبطة بالـ Toast
+    // 🚀 3. دالة التحقق قبل الحفظ
     const handleValidateAndSave = () => {
         if (!record.date) {
             showToast("يرجى التأكد من إدخال تاريخ الفاتورة ⚠️", "warning");
@@ -101,16 +106,30 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         }
         if (Number(record.total_amount) <= 0 && Number(record.line_total) <= 0) {
             showToast("تنبيه: إجمالي الفاتورة 0، يرجى التأكد من السعر والكمية ⚠️", "warning");
-            // لن نمنع الحفظ هنا تحسباً لوجود فواتير مجانية، مجرد تنبيه
         }
         
         onSave(record);
     };
 
-    return (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(12px)' }}>
+    if (!isOpen || !mounted) return null;
+
+    // 📦 محتوى المودال
+    const modalContent = (
+        <div className="warm-portal-overlay-fullscreen" onClick={onClose}>
             
             <style>{`
+                /* 🚀 البلور الدافئ اللي بيغطي الشاشة كلها */
+                .warm-portal-overlay-fullscreen {
+                    position: fixed !important;
+                    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                    width: 100vw !important; height: 100vh !important;
+                    background: radial-gradient(circle at center, rgba(139, 69, 19, 0.4) 0%, rgba(15, 7, 0, 0.9) 100%) !important;
+                    backdrop-filter: blur(20px) !important;
+                    -webkit-backdrop-filter: blur(20px) !important;
+                    display: flex !important; align-items: center !important; justify-content: center !important;
+                    z-index: 999999999 !important; /* 👈 رقم ضخم يغطي السايد بار والهيدر */
+                }
+
                 .cinematic-scroll::-webkit-scrollbar { width: 6px; }
                 .cinematic-scroll::-webkit-scrollbar-track { background: transparent; }
                 .cinematic-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
@@ -146,52 +165,30 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                 }
                 .btn-glass-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
 
-                /* 📱 التجاوب مع شاشات الجوال (Mobile Responsiveness) */
                 @media (max-width: 768px) {
                     .glass-modal-container {
                         width: 95% !important;
                         padding: 20px !important;
                         max-height: 95vh !important;
                     }
-                    .modal-header-title {
-                        flex-direction: column;
-                        align-items: flex-start !important;
-                        gap: 15px;
-                    }
+                    .modal-header-title { flex-direction: column; align-items: flex-start !important; gap: 15px; }
                     .modal-header-title h2 { font-size: 20px !important; }
-                    .responsive-form-grid {
-                        grid-template-columns: 1fr !important;
-                        gap: 15px !important;
-                    }
-                    .responsive-form-grid > div {
-                        grid-column: span 1 !important;
-                    }
-                    .responsive-summary-grid {
-                        grid-template-columns: 1fr 1fr !important;
-                        gap: 12px !important;
-                        padding: 15px !important;
-                    }
-                    .responsive-summary-grid > div {
-                        padding: 10px !important;
-                    }
+                    .responsive-form-grid { grid-template-columns: 1fr !important; gap: 15px !important; }
+                    .responsive-form-grid > div { grid-column: span 1 !important; }
+                    .responsive-summary-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; padding: 15px !important; }
+                    .responsive-summary-grid > div { padding: 10px !important; }
                     .responsive-summary-grid div:nth-child(2) { font-size: 16px !important; }
-                    .responsive-actions {
-                        flex-direction: column !important;
-                        gap: 10px !important;
-                        margin-top: 20px !important;
-                    }
-                    .responsive-actions button {
-                        width: 100% !important;
-                        padding: 14px !important;
-                    }
+                    .responsive-actions { flex-direction: column !important; gap: 10px !important; margin-top: 20px !important; }
+                    .responsive-actions button { width: 100% !important; padding: 14px !important; }
                 }
             `}</style>
 
-            <div className="cinematic-scroll glass-modal-container" style={{ 
+            <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ 
                 width: '950px', maxHeight: '92vh', background: 'rgba(248, 250, 252, 0.85)', 
                 backdropFilter: 'blur(25px)', borderRadius: '30px', padding: '40px', 
                 boxShadow: '0 30px 60px rgba(0,0,0,0.25)', overflowY: 'auto', direction: 'rtl',
-                border: '1px solid rgba(255,255,255,0.7)'
+                border: '1px solid rgba(255,255,255,0.7)',
+                animation: 'modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
             }}>
                 
                 <div className="modal-header-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: `2px solid ${THEME.accent}50`, paddingBottom: '15px' }}>
@@ -240,7 +237,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         )}
                     </div>
 
-                    {/* 🚀 الحقن هنا: العميل */}
                     <SmartCombo 
                         label="العميل (البارتنر)" 
                         icon="👤"
@@ -248,12 +244,11 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         searchCols="name,code" displayCol="name"
                         initialDisplay={record.client_name || record.partners?.name || ''} 
                         onSelect={(p: any) => setRecord({...record, partner_id: p.id, client_name: p.name})} 
-                        allowAddNew={true} // 💡 إضافة سريعة لو العميل مش موجود
+                        allowAddNew={true} 
                         enableClear={true}
                     />
                     
                     <div style={{ gridColumn: 'span 1' }}>
-                        {/* 🚀 الحقن هنا: المشاريع المتعددة */}
                         <SmartCombo 
                             label="العقار / العماير (إختيار متعدد)" 
                             icon="🏢"
@@ -296,7 +291,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         </div>
                     </div>
                     
-                    {/* 🚀 الحقن هنا: البند */}
                     <SmartCombo 
                         label="البند (BOQ)" 
                         icon="🛠️"
@@ -341,20 +335,23 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         <input type="number" value={record.unit_price ?? ''} onChange={(e) => setRecord({...record, unit_price: e.target.value})} className="glass-input-field" />
                     </div>
 
-                    {/* 🚀 الحقن هنا: الحسابات */}
                     <SmartCombo 
+                        key={`debit-${record.debit_account_id || 'empty'}`}
                         label="حساب المدين (من حـ/)" 
                         icon="💳"
                         table="accounts" 
                         searchCols="name,code" displayCol="name"
-                        onSelect={(a: any) => setRecord({...record, debit_account_id: a.id})} 
+                        initialDisplay={record.debit_account_name || record.debit_account?.name || ''}
+                        onSelect={(a: any) => setRecord({...record, debit_account_id: a.id, debit_account_name: a.name})} 
                     />
                     <SmartCombo 
+                        key={`credit-${record.credit_account_id || 'empty'}`}
                         label="حساب الدائن (إلى حـ/)" 
                         icon="🏦"
                         table="accounts" 
                         searchCols="name,code" displayCol="name"
-                        onSelect={(a: any) => setRecord({...record, credit_account_id: a.id})} 
+                        initialDisplay={record.credit_account_name || record.credit_account?.name || ''}
+                        onSelect={(a: any) => setRecord({...record, credit_account_id: a.id, credit_account_name: a.name})} 
                     />
                     
                     <div style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)', padding: '15px', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
@@ -370,12 +367,14 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     <div style={{ gridColumn: 'span 2' }}>
                         {Number(record.materials_discount) > 0 && (
                             <SmartCombo 
+                                key={`mat-${record.materials_acc_id || 'empty'}`}
                                 label="ترحل الخامات إلى حساب:" 
                                 icon="📦"
                                 table="accounts" 
                                 searchCols="name,code" displayCol="name"
                                 placeholder={record.materials_acc_id === '85e61a6a-8c85-4219-a733-3b2180dfe043' ? '[217] مخزون خامات العميل (افتراضي)' : '🔍 اختر حساب...'}
-                                onSelect={(a: any) => setRecord({...record, materials_acc_id: a.id})} 
+                                initialDisplay={record.materials_acc_name || record.materials_account?.name || ''}
+                                onSelect={(a: any) => setRecord({...record, materials_acc_id: a.id, materials_acc_name: a.name})} 
                             />
                         )}
                     </div>
@@ -388,19 +387,20 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     <div style={{ gridColumn: 'span 2' }}>
                         {Number(record.guarantee_percent) > 0 && (
                             <SmartCombo 
+                                key={`guar-${record.guarantee_acc_id || 'empty'}`}
                                 label="ترحل استقطاعات الضمان إلى حساب:" 
                                 icon="🛡️"
                                 table="accounts" 
                                 searchCols="name,code" displayCol="name"
                                 placeholder={record.guarantee_acc_id === '8bf39cb1-4028-4c9e-817d-27c239873030' ? '[124] تأمينات محتجزة لدى الغير (افتراضي)' : '🔍 اختر حساب...'}
-                                onSelect={(a: any) => setRecord({...record, guarantee_acc_id: a.id})} 
+                                initialDisplay={record.guarantee_acc_name || record.guarantee_account?.name || ''}
+                                onSelect={(a: any) => setRecord({...record, guarantee_acc_id: a.id, guarantee_acc_name: a.name})} 
                             />
                         )}
                     </div>
 
                 </div>
 
-                {/* 💳 ملخص الفاتورة (Glass Neon Panels) */}
                 <div className="responsive-summary-grid" style={{ marginTop: '35px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>خاضع للضريبة</div>
@@ -422,7 +422,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     </div>
                 </div>
 
-                {/* ✅ أزرار الإجراءات */}
                 <div className="responsive-actions" style={{ display: 'flex', gap: '20px', marginTop: '35px' }}>
                     <button onClick={handleValidateAndSave} disabled={isSaving} className="btn-glass-save" style={{ flex: 2 }}>
                         {isSaving ? '⏳ جاري الحفظ والترحيل...' : '✅ حفظ الفاتورة وترحيل القيود'}
@@ -434,4 +433,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
             </div>
         </div>
     );
+
+    // 🚀 السحر هنا: حقن المودال في البورتال
+    return createPortal(modalContent, document.body);
 }
