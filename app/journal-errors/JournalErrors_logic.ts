@@ -3,8 +3,10 @@ import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchAllSupabaseData } from '@/lib/helpers';
 import * as XLSX from 'xlsx';
+import { useToast } from '@/lib/toast-context'; // 🚀 استدعاء الألرت العالمي
 
 export function useJournalErrorsLogic() {
+    const { showToast } = useToast(); // 🚀 تفعيل الألرت
     const [isLoading, setIsLoading] = useState(false);
     const [hasScanned, setHasScanned] = useState(false);
     
@@ -13,42 +15,28 @@ export function useJournalErrorsLogic() {
     const [unbalancedLogs, setUnbalancedLogs] = useState<any[]>([]); 
     const [duplicateLogs, setDuplicateLogs] = useState<any[]>([]); 
     const [ghostLogs, setGhostLogs] = useState<any[]>([]);        
+    const [emptyLogs, setEmptyLogs] = useState<any[]>([]); // 🆕 القيود الصفرية الفارغة
     
-    // مصفوفة للاحتفاظ بكل السطور لعرض تفاصيل القيد في الواجهة
     const [allJournalLines, setAllJournalLines] = useState<any[]>([]);
-
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     // 🔍 دالة الفحص (الرادار)
     const scanForErrors = useCallback(async () => {
         setIsLoading(true);
-        console.log("🔍 بدأ فحص الرادار... جاري البحث عن الشبح المفقود");
         try {
             const headers = await fetchAllSupabaseData(supabase, 'journal_headers', '*', 'created_at', false) || [];
             const lines = await fetchAllSupabaseData(supabase, 'journal_lines', '*', 'id', false) || [];
             
-            console.log(`📊 البيانات المسحوبة: ${headers.length} هيدر، ${lines.length} سطر.`);
+            const headerIdsSet = new Set(headers.map(h => String(h.id).trim().toLowerCase()));
 
-            // 1. بناء Set من الـ IDs وتحويلها لنصوص نظيفة تماماً
-            const headerIdsSet = new Set(
-                headers.map(h => String(h.id).trim().toLowerCase())
-            );
-
-            // 2. فحص الأشباح (Journal Lines without valid Header)
+            // 1. 👻 فحص الأشباح (سطور بدون رأس)
             const ghostLinesData = lines.filter(l => {
-                if (!l.header_id) return true; // لو الـ ID نفسه فاضي يبقى شبح
+                if (!l.header_id) return true; 
                 const parentId = String(l.header_id).trim().toLowerCase();
                 return !headerIdsSet.has(parentId);
             });
 
-            console.log(`👻 الرادار عثر على: ${ghostLinesData.length} سطر شبح.`);
-
-            if (ghostLinesData.length > 0) {
-                console.log("📋 تفاصيل السطر الشبح:", ghostLinesData[0]);
-            }
-
-            // تجميع الأشباح للعرض في الواجهة
             const ghostGroups: Record<string, any> = {};
             ghostLinesData.forEach(line => {
                 const hId = line.header_id ? String(line.header_id) : "N/A";
@@ -57,7 +45,7 @@ export function useJournalErrorsLogic() {
                         id: hId,
                         entry_date: line.created_at?.split('T')[0] || 'تاريخ مفقود',
                         description: `سطور يومية يتيمة (ID: ${hId})`,
-                        diagnosis: `يوجد ${ghostLinesData.filter(x => String(x.header_id) === hId).length} سطر في جدول journal_lines بدون مستند أصلي.`,
+                        diagnosis: `يوجد ${ghostLinesData.filter(x => String(x.header_id) === hId).length} سطر بدون مستند أصلي.`,
                         solution: `تطهير الداتابيز بمسح هذه السطور لإصلاح ميزان المراجعة.`,
                         totalAmount: 0,
                         isGhost: true 
@@ -65,12 +53,34 @@ export function useJournalErrorsLogic() {
                 }
                 ghostGroups[hId].totalAmount += Number(line.debit || 0) + Number(line.credit || 0);
             });
-
             setGhostLogs(Object.values(ghostGroups));
 
-            // باقي الفحوصات (اليتيمة وغير المتزنة) كما هي...
-            // 
-            
+            // 2. 👯 فحص التكرار (القيود المكررة لنفس المستند) 🆕
+            const refCount: Record<string, any[]> = {};
+            headers.forEach(h => {
+                if (h.reference_id) {
+                    const refStr = String(h.reference_id).toLowerCase();
+                    if (!refCount[refStr]) refCount[refStr] = [];
+                    refCount[refStr].push(h);
+                }
+            });
+
+            const duplicates: any[] = [];
+            Object.values(refCount).forEach(group => {
+                if (group.length > 1) { // لو المستند اترحل أكتر من مرة
+                    group.forEach(h => {
+                        duplicates.push({
+                            ...h,
+                            diagnosis: `⚠️ المستند الأصلي اترحل (${group.length}) مرات!`,
+                            solution: "احتفظ بقيد واحد فقط وامسح الباقي لمنع تضخم الحسابات.",
+                            isDuplicate: true
+                        });
+                    });
+                }
+            });
+            setDuplicateLogs(duplicates);
+
+            // 3. 🗑️ فحص القيود اليتيمة (المستند الأصلي محذوف)
             const receipts = await fetchAllSupabaseData(supabase, 'receipt_vouchers', 'id', 'id', false) || [];
             const invoices = await fetchAllSupabaseData(supabase, 'invoices', 'id', 'id', false) || [];
             const expenses = await fetchAllSupabaseData(supabase, 'expenses', 'id', 'id', false) || [];
@@ -96,10 +106,13 @@ export function useJournalErrorsLogic() {
             }));
             setErrorLogs(orphans);
 
+            // 4. ⚖️ فحص الاتزان المحاسبي
             const unbal = headers.filter(h => {
                 const hLines = lines.filter(l => String(l.header_id) === String(h.id));
                 const dSum = hLines.reduce((s, l) => s + Number(l.debit), 0);
                 const cSum = hLines.reduce((s, l) => s + Number(l.credit), 0);
+                // بنستثني القيود الصفرية من هنا عشان هنمسكها لوحدها
+                if (dSum === 0 && cSum === 0 && hLines.length === 0) return false; 
                 return Math.abs(dSum - cSum) > 0.01;
             }).map(h => ({
                 ...h,
@@ -108,14 +121,31 @@ export function useJournalErrorsLogic() {
             }));
             setUnbalancedLogs(unbal);
 
-            setHasScanned(true);
+            // 5. 🕳️ القيود الصفرية (الفارغة) 🆕
+            const emptyJournals = headers.filter(h => {
+                const hLines = lines.filter(l => String(l.header_id) === String(h.id));
+                if (hLines.length === 0) return true;
+                const dSum = hLines.reduce((s, l) => s + Number(l.debit), 0);
+                const cSum = hLines.reduce((s, l) => s + Number(l.credit), 0);
+                return dSum === 0 && cSum === 0;
+            }).map(h => ({
+                ...h,
+                diagnosis: 'قيد صفري (بدون مبالغ أو سطور)',
+                solution: 'امسح القيد لأنه يشغل مساحة بلا تأثير محاسبي.',
+                isEmpty: true
+            }));
+            setEmptyLogs(emptyJournals);
 
-        } catch (err) {
+            setHasScanned(true);
+            showToast('تم اكتمال الفحص الشامل للرادار 🕵️‍♂️', 'success');
+
+        } catch (err: any) {
             console.error("❌ خطأ في فحص الرادار:", err);
+            showToast(`خطأ أثناء الفحص: ${err.message}`, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [showToast]);
 
     // 🗑️ مسح قيد واحد أو تطهير أشباح
     const deleteHeader = async (id: string, isGhost: boolean = false) => {
@@ -123,21 +153,26 @@ export function useJournalErrorsLogic() {
         if (!confirmDelete) return;
         setIsLoading(true);
         try {
-            // مسح السطور دايماً
             await supabase.from('journal_lines').delete().eq('header_id', id);
             
-            // لو مش شبح بنمسح الرأس كمان
             if (!isGhost) {
                 const { error } = await supabase.from('journal_headers').delete().eq('id', id);
                 if (error) throw error;
             }
 
+            // إزالة السجل من كل المصفوفات محلياً
             setErrorLogs(prev => prev.filter(log => log.id !== id));
             setUnbalancedLogs(prev => prev.filter(log => log.id !== id));
             setGhostLogs(prev => prev.filter(log => log.id !== id));
-            alert("✅ تم تطهير البيانات بنجاح!");
-        } catch (error: any) { alert(`❌ فشل المسح: ${error.message}`); } 
-        finally { setIsLoading(false); }
+            setDuplicateLogs(prev => prev.filter(log => log.id !== id));
+            setEmptyLogs(prev => prev.filter(log => log.id !== id));
+            
+            showToast("تم التطهير بنجاح 🗑️", 'success');
+        } catch (error: any) { 
+            showToast(`فشل المسح: ${error.message}`, 'error'); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     // 🗑️ المسح الجماعي
@@ -153,10 +188,16 @@ export function useJournalErrorsLogic() {
             setErrorLogs(prev => prev.filter(log => !selectedIds.includes(log.id)));
             setUnbalancedLogs(prev => prev.filter(log => !selectedIds.includes(log.id)));
             setGhostLogs(prev => prev.filter(log => !selectedIds.includes(log.id)));
+            setDuplicateLogs(prev => prev.filter(log => !selectedIds.includes(log.id)));
+            setEmptyLogs(prev => prev.filter(log => !selectedIds.includes(log.id)));
+            
             setSelectedIds([]);
-            alert("✅ تم المسح الجماعي بنجاح!");
-        } catch (error: any) { alert(`❌ فشل المسح الجماعي: ${error.message}`); } 
-        finally { setIsLoading(false); }
+            showToast("تم المسح الجماعي بنجاح 🗑️", 'success');
+        } catch (error: any) { 
+            showToast(`فشل المسح الجماعي: ${error.message}`, 'error'); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     // ⚖️ أداة الموازنة التلقائية
@@ -168,7 +209,7 @@ export function useJournalErrorsLogic() {
             const isDebitMissing = diffAmount < 0; 
             const fixLine = {
                 header_id: headerId,
-                account_id: 'حساب فروق التسويات', 
+                account_id: '23623b40-72f8-460b-92f6-984457003a34', // تأكد إن الـ ID ده هو حساب التسويات عندك
                 description: 'تسوية آلية لوزن القيد بواسطة رادار النظام',
                 debit: isDebitMissing ? Math.abs(diffAmount) : 0,
                 credit: isDebitMissing ? 0 : Math.abs(diffAmount),
@@ -178,10 +219,10 @@ export function useJournalErrorsLogic() {
             const { error } = await supabase.from('journal_lines').insert([fixLine]);
             if (error) throw error;
 
-            alert("✅ تم وزن القيد وتصحيحه بنجاح!");
+            showToast("تم وزن القيد وتصحيحه بنجاح ⚖️", 'success');
             scanForErrors(); 
         } catch (error: any) {
-            alert(`❌ فشل التصحيح: ${error.message}`);
+            showToast(`فشل التصحيح: ${error.message}`, 'error');
         } finally {
             setIsLoading(false);
         }
@@ -192,25 +233,32 @@ export function useJournalErrorsLogic() {
         const allErrors = [
             ...errorLogs.map(e => ({ 'النوع': 'قيد يتيم', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
             ...unbalancedLogs.map(e => ({ 'النوع': 'غير متزن', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
-            ...ghostLogs.map(e => ({ 'النوع': 'قيد شبح', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis }))
+            ...ghostLogs.map(e => ({ 'النوع': 'قيد شبح', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
+            ...duplicateLogs.map(e => ({ 'النوع': 'قيد مكرر', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
+            ...emptyLogs.map(e => ({ 'النوع': 'قيد صفري', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis }))
         ];
 
-        if (allErrors.length === 0) return alert("لا يوجد أخطاء لتصديرها.");
+        if (allErrors.length === 0) {
+            showToast("النظام نظيف تماماً، لا يوجد أخطاء لتصديرها ✨", 'info');
+            return;
+        }
 
         const ws = XLSX.utils.json_to_sheet(allErrors);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "تقرير رادار القيود");
         XLSX.writeFile(wb, `Audit_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+        showToast('تم تصدير التقرير بنجاح 📊', 'success');
     };
 
     const filteredOrphans = useMemo(() => errorLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [errorLogs, searchQuery]);
     const filteredUnbalanced = useMemo(() => unbalancedLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [unbalancedLogs, searchQuery]);
-    const filteredDuplicates = useMemo(() => duplicateLogs || [], [duplicateLogs]);
+    const filteredDuplicates = useMemo(() => duplicateLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [duplicateLogs, searchQuery]);
     const filteredGhosts = useMemo(() => ghostLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [ghostLogs, searchQuery]);
+    const filteredEmpty = useMemo(() => emptyLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [emptyLogs, searchQuery]);
 
     return { 
         isLoading, hasScanned, searchQuery, setSearchQuery, selectedIds,
-        filteredOrphans, filteredUnbalanced, filteredDuplicates, filteredGhosts,      
+        filteredOrphans, filteredUnbalanced, filteredDuplicates, filteredGhosts, filteredEmpty,      
         allJournalLines,
         scanForErrors, 
         deleteHeader, 

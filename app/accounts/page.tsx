@@ -1,13 +1,15 @@
 "use client";
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useHierarchicalAccountsLogic } from './accounts_logic';
 import { THEME } from '@/lib/theme';
-import { useAuth } from '@/components/authGuard'; // 🛡️ 1. استدعاء مقص الصلاحيات المركزي
-
-// 🎨 تطبيق الإستاندرد الموحد للمنظومة
+import { formatCurrency } from '@/lib/helpers';
+import MasterPage from '@/components/MasterPage';
+import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import UserMenu from '@/components/UserMenu';
+import { usePermissions } from '@/lib/PermissionsContext'; 
+import SecureAction from '@/components/SecureAction'; 
 
 export default function HierarchicalLedgerPage() {
-  // 🚀 استدعاء كل المتغيرات والدوال من اللوجيك (بما فيها التواريخ وزراير الأكشن)
   const { 
     paginatedTree, totalPages, currentPage, setCurrentPage,
     isLoading, searchTerm, setSearchTerm, expandedIds, toggleExpand, expandAll, collapseAll, 
@@ -15,16 +17,12 @@ export default function HierarchicalLedgerPage() {
     startDate, setStartDate, endDate, setEndDate
   } = useHierarchicalAccountsLogic();
 
-  // 🛡️ 2. سحب دالة فحص الصلاحيات بأمان تام
-  let can = (module: string, action: string) => true; // القيمة الافتراضية لو الهوك مش شغال
-  try {
-      const auth = useAuth();
-      if (auth && auth.can) can = auth.can;
-  } catch (e) {
-      // تجاهل الخطأ لإبقاء النظام يعمل
-  }
+  const [mounted, setMounted] = useState(false);
+  const { can, loading: permsLoading } = usePermissions();
 
-  // 🧮 حساب إجماليات ميزان المراجعة بناءً على الشجرة المعروضة
+  useEffect(() => { setMounted(true); }, []);
+
+  // 🧮 حساب إجماليات ميزان المراجعة
   const summary = useMemo(() => {
     let totalDebit = 0;
     let totalCredit = 0;
@@ -40,292 +38,221 @@ export default function HierarchicalLedgerPage() {
     };
   }, [paginatedTree]);
 
+  // 🚀 تجهيز أزرار السايد بار
+  const sidebarActions = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      <SecureAction module="accounts" action="create">
+        <button className="btn-premium-gold" onClick={handleAdd}>
+            ➕ إضافة حساب جديد
+        </button>
+      </SecureAction>
+      
+      {selectedIds.length > 0 && (
+        <>
+          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>إجراءات على ({selectedIds.length})</p>
+          <SecureAction module="accounts" action="edit">
+            <button className="btn-main-glass blue" onClick={() => handleEdit(selectedIds)} disabled={selectedIds.length !== 1}>✏️ تعديل الحساب</button>
+          </SecureAction>
+          <SecureAction module="accounts" action="delete">
+            <button className="btn-main-glass red" onClick={() => handleDelete(selectedIds)}>🗑️ حذف الحساب</button>
+          </SecureAction>
+        </>
+      )}
+
+      <div style={{ display: 'flex', gap: '10px' }}>
+         <button className="btn-main-glass white" style={{flex: 1}} onClick={expandAll}>🔽 فتح الكل</button>
+         <button className="btn-main-glass white" style={{flex: 1}} onClick={collapseAll}>🔼 طي الكل</button>
+      </div>
+
+      <button className="btn-main-glass white" onClick={() => window.print()}>🖨️ طباعة الميزان</button>
+    </div>
+  );
+
   return (
-    <div className="app-wrapper">
+    <MasterPage title="شجرة الحسابات والميزان" subtitle="إدارة المركز المالي ودليل الحسابات - رواسي اليسر">
+      
+      {/* 🚀 إضافة كارت UserMenu الموحد */}
+      <div style={{ marginBottom: '25px', padding: '0 20px', animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <UserMenu />
+      </div>
+
+      <div className="floating-stack-layout">
+        <div className="warm-depth-glow" />
+
+        <div className="content-container">
+          {/* 📡 إدارة السايد بار المركزي */}
+          <RawasiSidebarManager 
+            summary={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div className="summary-glass-card">
+                      <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي المدين 📈</span>
+                      <div style={{fontSize:'18px', fontWeight:900, color: THEME.success}}>{formatCurrency(summary.debit)}</div>
+                  </div>
+                  <div className="summary-glass-card">
+                      <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي الدائن 📉</span>
+                      <div style={{fontSize:'18px', fontWeight:900, color: THEME.danger}}>{formatCurrency(summary.credit)}</div>
+                  </div>
+                  <div className="summary-glass-card" style={{ background: summary.balance === 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', borderColor: summary.balance === 0 ? THEME.success : THEME.warning }}>
+                      <span style={{fontSize:'12px', fontWeight:800, color: summary.balance === 0 ? THEME.success : THEME.warning}}>الرصيد / الفارق ⚖️</span>
+                      <div style={{fontSize:'22px', fontWeight:900, color: 'white'}}>
+                        {formatCurrency(summary.balance)}
+                      </div>
+                      <div style={{fontSize:'10px', marginTop: '4px', color: '#94a3b8'}}>{summary.balance !== 0 && (summary.isDebitBalance ? '(رصيد مدين)' : '(رصيد دائن)')}</div>
+                  </div>
+              </div>
+            }
+            actions={sidebarActions}
+            customFilters={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '10px' }}>
+                  <div>
+                     <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>🔍 بحث في الدليل:</label>
+                     <input type="text" placeholder="الاسم، الكود..." className="glass-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  </div>
+
+                  <div>
+                      <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>📅 من تاريخ:</label>
+                      <input type="date" className="glass-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                  </div>
+                  <div>
+                      <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>📅 إلى تاريخ:</label>
+                      <input type="date" className="glass-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                  </div>
+              </div>
+            }
+            watchDeps={[selectedIds, summary.balance, searchTerm, startDate, endDate]}
+          />
+
+          {/* الكارت الزجاجي الرئيسي - الطبقة الأمامية */}
+          <div className="glass-master-card no-print">
+            <div className="card-header">
+              <h4 style={{ margin: 0, fontWeight: 900, color: THEME.primary }}>الدليل المحاسبي وميزان المراجعة</h4>
+            </div>
+
+            <div className="table-inner-scroll cinematic-scroll" style={{ padding: '20px' }}>
+              
+              <div className="table-header">
+                 <div></div>
+                 <div>اسم الحساب / الكود</div>
+                 <div>التصنيف</div>
+                 <div style={{textAlign: 'center'}}>إجمالي مدين</div>
+                 <div style={{textAlign: 'center'}}>إجمالي دائن</div>
+                 <div style={{textAlign: 'center'}}>الرصيد النهائي</div>
+              </div>
+
+              {(isLoading || permsLoading) ? (
+                <div style={{ textAlign: 'center', marginTop: '50px', fontWeight: 900, fontSize: '16px', color: '#94a3b8' }}>
+                  ⏳ جاري معالجة البيانات المالية وبناء الشجرة...
+                </div>
+              ) : (
+                paginatedTree.map(node => (
+                  <AccountNode 
+                    key={node.id} node={node} expandedIds={expandedIds} toggleExpand={toggleExpand} 
+                    selectedIds={selectedIds} toggleSelection={toggleSelection} depth={1} 
+                  />
+                ))
+              )}
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 🎨 التنسيقات السينمائية (Apple Style) */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
-        
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', sans-serif; }
-        
-        /* الخلفية السينمائية */
-        .app-wrapper {
-          min-height: 100vh;
-          display: flex;
-          direction: rtl;
-          background-image: linear-gradient(rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.95)), url('/ryc_login.jpeg');
-          background-size: cover;
-          background-position: center;
-          background-attachment: fixed;
-          color: ${THEME.white};
-        }
+        .floating-stack-layout { position: relative; width: 100%; padding: 0 20px 20px 20px; z-index: 5; direction: rtl; }
+        .warm-depth-glow { position: absolute; inset: 0; background: radial-gradient(circle at 20% 30%, rgba(197, 160, 89, 0.15) 0%, transparent 70%); z-index: -1; pointer-events: none; }
+        .content-container { max-width: 1600px; margin: 0 auto; }
 
-        .main-content {
-          flex: 1; height: 100vh; overflow-y: auto; padding: 30px 40px;
+        .glass-master-card {
+          background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+          border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.9);
+          box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.08); overflow: hidden;
+          margin-top: 25px; animation: cardFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
+        .card-header { padding: 25px 35px; background: rgba(255, 255, 255, 0.3); border-bottom: 1px solid rgba(0,0,0,0.03); }
 
-        /* الهيدر القياسي */
-        .page-header {
-          display: flex; justify-content: space-between; align-items: center;
-          background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
-          padding: 15px 30px; border-radius: 20px; margin-bottom: 25px;
-          backdrop-filter: blur(10px);
-        }
+        .summary-glass-card { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 15px; border-radius: 16px; text-align: center; transition: 0.3s; }
+        .glass-input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; font-weight: 800; outline: none; transition: 0.3s; color-scheme: dark;}
+        .glass-input:focus { background: rgba(255,255,255,0.2); border-color: ${THEME.goldAccent}; }
 
-        /* 🚀 مركز العمليات (Operations Center) */
-        .operations-center {
-          background: rgba(191, 198, 213, 0.65);
-          backdrop-filter: blur(20px);
-          border: 1px solid ${THEME.glassBorder};
-          border-radius: 24px;
-          padding: 25px;
-          margin-bottom: 30px;
-          box-shadow: 0 15px 35px rgba(0,0,0,0.5);
-        }
+        .btn-premium-gold { width: 100%; padding: 16px; border-radius: 16px; background: linear-gradient(135deg, #c5a059, #977332); color: white; font-weight: 900; border: none; cursor: pointer; box-shadow: 0 10px 25px rgba(197, 160, 89, 0.3); transition: 0.3s; }
+        .btn-premium-gold:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4); filter: brightness(1.1); }
 
-        .op-header {
-          display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
-          color: ${THEME.accentLight}; font-size: 18px; font-weight: 900;
-          border-bottom: 1px solid rgba(162, 82, 82, 0.05); padding-bottom: 15px;
-        }
+        .btn-main-glass { width: 100%; padding: 12px; border-radius: 12px; border: none; font-weight: 900; cursor: pointer; transition: 0.3s; font-size: 13px; }
+        .btn-main-glass.blue { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); }
+        .btn-main-glass.blue:hover:not(:disabled) { background: #3b82f6; color: white; }
+        .btn-main-glass.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .btn-main-glass.red:hover:not(:disabled) { background: #ef4444; color: white; }
+        .btn-main-glass.white { background: rgba(255, 255, 255, 0.1); color: white; border: 1px solid rgba(255, 255, 255, 0.2); }
+        .btn-main-glass.white:hover:not(:disabled) { background: white; color: #1e293b; }
+        .btn-main-glass:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* 🧮 كروت ميزان المراجعة داخل مركز العمليات */
-        .summary-grid {
-          display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;
-        }
-        .summary-card {
-          background: rgba(189, 162, 162, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 16px; padding: 15px; text-align: center;
-          transition: transform 0.3s ease, border-color 0.3s ease;
-        }
-        .summary-card:hover { transform: translateY(-3px); border-color: ${THEME.accent}; background: rgba(194, 123, 123, 0.57); }
-        .summary-title { color: ${THEME.slate}; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-        .summary-value { font-size: 24px; font-weight: 900; font-family: monospace; }
-
-        /* 🛠️ أدوات الفلترة والبحث */
-        .filters-row {
-          display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; align-items: center;
-        }
-        
-        .search-input {
-          flex: 2; min-width: 250px; padding: 14px 20px;
-          background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 12px; color: ${THEME.white}; font-size: 14px; font-weight: 600; outline: none; transition: 0.3s;
-        }
-        .search-input:focus { border-color: ${THEME.accent}; box-shadow: 0 0 10px rgba(202, 138, 4, 0.2); }
-
-        .date-input-group {
-          display: flex; align-items: center; gap: 10px; flex: 1; min-width: 200px;
-          background: rgba(255, 255, 255, 0.02); padding: 5px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);
-        }
-        .date-input-group label { color: ${THEME.slate}; font-size: 13px; font-weight: 700; white-space: nowrap; }
-        .date-input {
-          flex: 1; background: transparent; border: none; color: white; outline: none; font-family: 'Cairo'; color-scheme: dark;
-        }
-
-        /* 🖱️ زراير الأكشن */
-        .actions-row {
-          display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;
-          padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.05);
-        }
-        .actions-group { display: flex; gap: 10px; flex-wrap: wrap; }
-
-        .btn-action {
-          padding: 10px 20px; border-radius: 10px; font-weight: 800; font-size: 14px;
-          border: none; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 8px;
-        }
-        .btn-add { background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentLight}); color: ${THEME.primary}; }
-        .btn-add:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(202, 138, 4, 0.3); }
-        .btn-edit { background: rgba(255,255,255,0.1); color: white; }
-        .btn-edit:hover:not(:disabled) { background: rgba(255,255,255,0.2); }
-        .btn-delete { background: rgba(239, 68, 68, 0.1); color: ${THEME.danger}; border: 1px solid rgba(239, 68, 68, 0.3); }
-        .btn-delete:hover:not(:disabled) { background: ${THEME.danger}; color: white; }
-        
-        .btn-tree { background: transparent; color: ${THEME.slate}; border: 1px solid ${THEME.slate}; }
-        .btn-tree:hover { background: ${THEME.slate}; color: ${THEME.primary}; }
-
-        .btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-
-        /* صفوف شجرة الحسابات */
-        .table-wrapper { width: 100%; overflow-x: auto; padding-bottom: 15px; }
-        .table-min-width { min-width: 900px; }
-
+        /* 🌳 تنسيق جدول الشجرة */
         .table-header {
           display: grid; grid-template-columns: 40px 2.5fr 1fr 1fr 1fr 1.2fr; 
-          padding: 15px 20px; font-weight: 900; color: ${THEME.accent}; 
-          background: rgba(167, 149, 109, 0.1); border-radius: 12px; margin-bottom: 15px;
+          padding: 15px 20px; font-weight: 900; color: #64748b; font-size: 13px;
+          background: rgba(0,0,0,0.02); border-radius: 16px; margin-bottom: 15px; border: 1px solid #f1f5f9;
         }
-
         .acc-row { 
-          background: rgba(255, 255, 255, 0.02); border-radius: 12px; margin-bottom: 8px; 
+          background: white; border-radius: 16px; margin-bottom: 8px; 
           display: grid; grid-template-columns: 40px 2.5fr 1fr 1fr 1fr 1.2fr; 
           align-items: center; padding: 15px 20px; cursor: pointer; 
-          border: 1px solid rgba(255, 255, 255, 0.05); transition: 0.2s;
+          border: 1px solid #f1f5f9; transition: 0.2s; box-shadow: 0 2px 10px rgba(0,0,0,0.01);
         }
-        .acc-row:hover { border-color: ${THEME.accent}; background: rgba(202, 138, 4, 0.05); }
+        .acc-row:hover { border-color: ${THEME.goldAccent}; transform: translateY(-1px); box-shadow: 0 5px 15px rgba(197, 160, 89, 0.1); }
+        .acc-row.selected { background: rgba(197, 160, 89, 0.05); border-color: ${THEME.goldAccent}; }
 
         .entry-line { 
-          background: rgba(0, 0, 0, 0.2); margin: 4px 50px 8px 60px; padding: 12px 20px; 
-          border-radius: 10px; border-right: 3px solid ${THEME.accentLight}; display: grid; 
-          grid-template-columns: 120px 2fr 120px 120px; gap: 15px; font-size: 13px;
-          border-bottom: 1px solid rgba(255,255,255,0.02);
+          background: #f8fafc; margin: 4px 20px 8px 60px; padding: 12px 20px; 
+          border-radius: 12px; border-right: 3px solid ${THEME.goldAccent}; display: grid; 
+          grid-template-columns: 120px 2fr 120px 120px; gap: 15px; font-size: 12px;
+          border: 1px solid #f1f5f9;
         }
 
-        /* 📱 التوافق الكامل مع الجوال */
-        @media (max-width: 1024px) {
-          .summary-grid { grid-template-columns: 1fr; }
-          .actions-row { flex-direction: column; align-items: stretch; }
-          .actions-group { justify-content: space-between; }
-          .btn-action { flex: 1; justify-content: center; }
-        }
-        @media (max-width: 768px) {
-          .main-content { padding: 20px 15px; }
-          .page-header { flex-direction: column-reverse; gap: 15px; text-align: center; }
-          .filters-row { flex-direction: column; align-items: stretch; }
-        }
+        .custom-checkbox { width: 18px; height: 18px; accent-color: ${THEME.goldAccent}; cursor: pointer; }
+        .cinematic-scroll::-webkit-scrollbar { width: 6px; }
+        .cinematic-scroll::-webkit-scrollbar-track { background: transparent; }
+        .cinematic-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+
+        @keyframes cardFadeUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
-
-      {/* المحتوى الرئيسي */}
-      <main className="main-content">
-        
-        {/* الهيدر */}
-        <header className="page-header">
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: 900, color: THEME.white, marginBottom: '5px' }}>شجرة الحسابات والميزان</h1>
-            <p style={{ color: THEME.slate, fontSize: '14px', fontWeight: 600 }}>إدارة المركز المالي - رواسي اليسر</p>
-          </div>
-          <div style={{ textAlign: 'left' }}>
-            <img src="/RYC_Logo.png" alt="Logo" style={{ height: '70px', filter: 'drop-shadow(0px 5px 10px rgba(0,0,0,0.5))' }} />
-          </div>
-        </header>
-
-        {/* 🚀 مركز العمليات (Operations Center) */}
-        <div className="operations-center">
-          <div className="op-header">
-            <span>⚙️ مركز العمليات المالية</span>
-          </div>
-
-          {/* 1. السامري كارد (ميزان المراجعة) */}
-          <div className="summary-grid">
-            <div className="summary-card">
-              <div className="summary-title">إجمالي الحركات المدينة</div>
-              <div className="summary-value" style={{ color: THEME.debit }}>{summary.debit.toLocaleString()}</div>
-            </div>
-            <div className="summary-card">
-              <div className="summary-title">إجمالي الحركات الدائنة</div>
-              <div className="summary-value" style={{ color: THEME.credit }}>{summary.credit.toLocaleString()}</div>
-            </div>
-            <div className="summary-card" style={{ borderColor: summary.balance === 0 ? THEME.debit : THEME.accent }}>
-              <div className="summary-title">الرصيد / الفرق</div>
-              <div className="summary-value" style={{ color: THEME.white }}>
-                {summary.balance.toLocaleString()} {summary.balance !== 0 && (summary.isDebitBalance ? '(مدين)' : '(دائن)')}
-              </div>
-            </div>
-          </div>
-
-          {/* 2. الفلاتر والبحث (تم ربط التواريخ هنا باللوجيك) */}
-          <div className="filters-row">
-            <input 
-              type="text" 
-              className="search-input" 
-              placeholder="🔍 ابحث برقم الحساب، الاسم، أو الوصف..." 
-              value={searchTerm} 
-              onChange={e => setSearchTerm(e.target.value)} 
-            />
-            <div className="date-input-group">
-              <label>من تاريخ:</label>
-              <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            </div>
-            <div className="date-input-group">
-              <label>إلى تاريخ:</label>
-              <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
-          </div>
-
-          {/* 3. زراير الأكشن والتحكم بالشجرة (تم تفعيل المقص هنا ✂️🛡️) */}
-          <div className="actions-row">
-            <div className="actions-group">
-              {can('accounts', 'create') && (
-                <button className="btn-action btn-add" onClick={handleAdd}>➕ حساب جديد</button>
-              )}
-              {can('accounts', 'edit') && (
-                <button className="btn-action btn-edit" onClick={() => handleEdit(selectedIds)} disabled={selectedIds.length !== 1}>✏️ تعديل</button>
-              )}
-              {can('accounts', 'delete') && (
-                <button className="btn-action btn-delete" onClick={() => handleDelete(selectedIds)} disabled={selectedIds.length === 0}>🗑️ حذف</button>
-              )}
-            </div>
-            
-            <div className="actions-group">
-              <button className="btn-action btn-tree" onClick={expandAll}>🔽 فتح الكل</button>
-              <button className="btn-action btn-tree" onClick={collapseAll}>🔼 طي الكل</button>
-            </div>
-          </div>
-        </div>
-
-        {/* شجرة البيانات (الجدول) */}
-        <div className="table-wrapper">
-          <div className="table-min-width">
-            <div className="table-header">
-               <div></div>
-               <div>اسم الحساب / الكود</div>
-               <div>التصنيف</div>
-               <div style={{textAlign: 'center'}}>إجمالي مدين</div>
-               <div style={{textAlign: 'center'}}>إجمالي دائن</div>
-               <div style={{textAlign: 'center'}}>الرصيد الحالي</div>
-            </div>
-
-            {isLoading ? (
-              <div style={{ textAlign: 'center', marginTop: '50px', fontWeight: 900, fontSize: '18px', color: THEME.accent }}>
-                ⏳ جاري معالجة البيانات المالية وبناء الشجرة...
-              </div>
-            ) : (
-              paginatedTree.map(node => (
-                <AccountNode 
-                  key={node.id} node={node} expandedIds={expandedIds} toggleExpand={toggleExpand} 
-                  selectedIds={selectedIds} toggleSelection={toggleSelection} depth={1} 
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-      </main>
-    </div>
+    </MasterPage>
   );
 }
 
-// 📌 مكون الصفوف الفرعية للشجرة
+// 📌 مكون الصفوف الفرعية للشجرة (تم تحديثه ليتناسب مع الخلفية البيضاء للكارت الزجاجي)
 function AccountNode({ node, expandedIds, toggleExpand, selectedIds, toggleSelection, depth }: any) {
   const isExpanded = expandedIds.includes(node.id);
   const isSelected = selectedIds.includes(node.id);
   const hasSub = (node.children?.length > 0) || (node.transactions?.length > 0);
 
   return (
-    <div style={{ marginRight: `${(depth - 1) * 20}px` }}>
+    <div style={{ marginRight: `${(depth - 1) * 25}px` }}>
       <div 
-        className="acc-row" 
+        className={`acc-row ${isSelected ? 'selected' : ''}`}
         onClick={() => hasSub && toggleExpand(node.id)} 
-        style={{ borderRight: `${Math.max(2, 8/depth)}px solid ${THEME.accent}` }}
+        style={{ borderRight: `${Math.max(2, 8/depth)}px solid ${THEME.goldAccent}` }}
       >
         <input 
-          type="checkbox" checked={isSelected} onChange={() => toggleSelection(node.id)} onClick={e=>e.stopPropagation()} 
-          style={{ width: '18px', height: '18px', accentColor: THEME.accent }}
+          type="checkbox" className="custom-checkbox" checked={isSelected} 
+          onChange={() => toggleSelection(node.id)} onClick={e=>e.stopPropagation()} 
         />
         <div>
-          <span style={{ fontWeight: 900, fontSize: '16px', color: THEME.white }}>{node.name}</span>
-          <span style={{ fontSize: '13px', color: THEME.slate, marginRight: '10px' }}>#{node.code}</span>
+          <span style={{ fontWeight: 900, fontSize: '15px', color: THEME.primary }}>{node.name}</span>
+          <span style={{ fontSize: '12px', color: '#94a3b8', marginRight: '10px' }}>#{node.code}</span>
         </div>
-        <div style={{ fontSize: '13px', color: node.is_transactional ? THEME.slate : THEME.accentLight, fontWeight: 700 }}>
+        <div style={{ fontSize: '12px', color: node.is_transactional ? '#64748b' : THEME.goldAccent, fontWeight: 800 }}>
           {node.is_transactional ? 'حساب فرعي' : 'حساب رئيسي'}
         </div>
-        <div style={{ textAlign: 'center', color: THEME.debit, fontWeight: 900, fontFamily: 'monospace', fontSize: '15px' }}>
-          {node.totalDebit.toLocaleString()}
+        <div style={{ textAlign: 'center', color: THEME.success, fontWeight: 900, fontFamily: 'monospace', fontSize: '14px' }}>
+          {formatCurrency(node.totalDebit)}
         </div>
-        <div style={{ textAlign: 'center', color: THEME.credit, fontWeight: 900, fontFamily: 'monospace', fontSize: '15px' }}>
-          {node.totalCredit.toLocaleString()}
+        <div style={{ textAlign: 'center', color: THEME.danger, fontWeight: 900, fontFamily: 'monospace', fontSize: '14px' }}>
+          {formatCurrency(node.totalCredit)}
         </div>
-        <div style={{ textAlign: 'center', fontWeight: 900, color: THEME.white, fontFamily: 'monospace', fontSize: '16px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '6px' }}>
-          {node.balance.toLocaleString()}
+        <div style={{ textAlign: 'center', fontWeight: 900, color: THEME.primary, fontFamily: 'monospace', fontSize: '15px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+          {formatCurrency(node.balance)}
         </div>
       </div>
 
@@ -336,10 +263,10 @@ function AccountNode({ node, expandedIds, toggleExpand, selectedIds, toggleSelec
           ))}
           {node.transactions?.map((t: any, idx: number) => (
             <div key={idx} className="entry-line">
-              <div style={{ fontWeight: 800, color: THEME.accentLight }}>{t.date}</div>
-              <div style={{ color: THEME.slate, fontWeight: 600 }}>{t.description}</div>
-              <div style={{ textAlign: 'center', color: THEME.debit, fontWeight: 700, fontFamily: 'monospace' }}>{t.debit?.toLocaleString() || '-'}</div>
-              <div style={{ textAlign: 'center', color: THEME.credit, fontWeight: 700, fontFamily: 'monospace' }}>{t.credit?.toLocaleString() || '-'}</div>
+              <div style={{ fontWeight: 800, color: THEME.goldAccent }}>{t.date}</div>
+              <div style={{ color: THEME.primary, fontWeight: 700 }}>{t.description}</div>
+              <div style={{ textAlign: 'center', color: THEME.success, fontWeight: 800, fontFamily: 'monospace' }}>{t.debit ? formatCurrency(t.debit) : '-'}</div>
+              <div style={{ textAlign: 'center', color: THEME.danger, fontWeight: 800, fontFamily: 'monospace' }}>{t.credit ? formatCurrency(t.credit) : '-'}</div>
             </div>
           ))}
         </div>

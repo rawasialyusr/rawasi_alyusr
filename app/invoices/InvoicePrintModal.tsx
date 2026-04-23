@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useState, useEffect } from 'react'; 
+import { createPortal } from 'react-dom'; // 🚀 استدعاء البورتال
 import { THEME } from '@/lib/theme';
 import { formatCurrency, formatDate, tafqeet } from '@/lib/helpers';
 import ZatcaQRCode from './ZatcaQRCode';
@@ -18,6 +19,11 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
   const [fetchedProjects, setFetchedProjects] = useState<string>(''); 
   const [isDownloading, setIsDownloading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [mounted, setMounted] = useState(false); // 🚀 للتأكد من الرندر في المتصفح
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,7 +64,7 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
     if (isOpen && data?.id) fetchData();
   }, [data?.id, isOpen]);
 
-  if (!isOpen || !data) return null;
+  if (!isOpen || !data || !mounted) return null;
 
   const handlePrint = () => {
     const content = printRef.current?.outerHTML; 
@@ -169,23 +175,50 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
     e.currentTarget.style.display = 'none';
   };
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', padding: '20px' }}>
+  // 📦 محتوى المودال
+  const modalContent = (
+    <div className="warm-portal-overlay-fullscreen" onClick={onClose}>
       
       <style>{`
-        .pdf-scroll-area { width: 100%; overflow-y: auto; display: flex; justify-content: center; padding-bottom: 40px; }
-        .pdf-scroll-area::-webkit-scrollbar { display: none; } /* إخفاء السكرول بار لشكل أنظف */
+        /* 🚀 البلور الدافئ السينمائي */
+        .warm-portal-overlay-fullscreen {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+            width: 100vw !important; height: 100vh !important;
+            background: radial-gradient(circle at center, rgba(139, 69, 19, 0.4) 0%, rgba(15, 7, 0, 0.9) 100%) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            display: flex !important; flex-direction: column; align-items: center !important; justify-content: flex-start !important;
+            z-index: 999999999 !important;
+            padding: 30px 20px;
+            overflow: hidden;
+        }
+
+        .pdf-scroll-area { 
+            width: 100%; 
+            height: calc(100vh - 120px); 
+            overflow-y: auto; 
+            display: flex; 
+            justify-content: center; 
+            padding-bottom: 40px; 
+        }
+        .pdf-scroll-area::-webkit-scrollbar { display: none; }
+
+        @keyframes modalScaleUp {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
       `}</style>
 
       {/* 🎛️ شريط الأدوات الطائر (Floating Action Bar - Apple Style) */}
-      <div style={{ background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(30px)', padding: '10px 20px', borderRadius: '100px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', flexShrink: 0, border: '1px solid rgba(255,255,255,0.5)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ animation: 'modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)', background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(30px)', padding: '10px 20px', borderRadius: '100px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', flexShrink: 0, border: '1px solid rgba(255,255,255,0.5)' }}>
         <span style={{ fontWeight: 900, color: THEME.primary, fontSize: '14px', marginRight: '10px' }}>معاينة الطباعة</span>
         <div style={{ width: '1px', height: '20px', background: '#cbd5e1' }}></div>
         <button onClick={handleDownloadPDF} disabled={isDownloading} style={{ padding: '8px 20px', background: 'transparent', color: THEME.primary, border: 'none', borderRadius: '50px', cursor: isDownloading ? 'wait' : 'pointer', fontWeight: 800, transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = '#f1f5f9'} onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}>
             {isDownloading ? '⏳ جاري التجهيز...' : '📥 تحميل PDF'}
         </button>
         <button onClick={handlePrint} style={{ padding: '8px 25px', background: THEME.primary, color: 'white', border: 'none', borderRadius: '50px', cursor: 'pointer', fontWeight: 900, boxShadow: `0 4px 15px ${THEME.primary}40`, transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-            طباعة
+            طباعة الفاتورة
         </button>
         <button onClick={onClose} style={{ padding: '8px 20px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '50px', cursor: 'pointer', fontWeight: 800, transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = '#e2e8f0'} onMouseOut={(e) => e.currentTarget.style.background = '#f1f5f9'}>
             إغلاق
@@ -199,19 +232,20 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
           className="a4-paper"
           id="invoice-paper"
           ref={printRef} 
+          onClick={(e) => e.stopPropagation()}
           style={{ 
             width: '210mm', 
-            height: '296.5mm', 
-            overflow: 'hidden', 
+            minHeight: '296.5mm', 
             backgroundColor: '#ffffff', 
             position: 'relative', 
             padding: '12mm 15mm', 
             direction: 'rtl', 
             fontFamily: "'Cairo', sans-serif",
             boxSizing: 'border-box',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', /* ظل ناعم زي الورقة الحقيقية */
+            boxShadow: '0 30px 60px rgba(0,0,0,0.5)', /* ظل عميق لإبراز الورقة */
             borderRadius: '4px',
-            color: '#0f172a'
+            color: '#0f172a',
+            animation: 'modalScaleUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'
           }}
         >
           
@@ -222,7 +256,7 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
             style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70%', opacity: 0.03, pointerEvents: 'none', zIndex: 0, filter: 'grayscale(100%)' }} 
           />
 
-          <div style={{ flex: 1, position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
             
             {/* --- الهيدر النظيف (Clean Header) --- */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '1px solid #e2e8f0', paddingBottom: '20px' }}>
@@ -401,4 +435,7 @@ export default function InvoicePrintModal({ isOpen, onClose, data }: InvoicePrin
       </div>
     </div>
   );
+
+  // 🚀 السحر هنا: حقن المودال في البورتال الخارجي
+  return createPortal(modalContent, document.body);
 }
