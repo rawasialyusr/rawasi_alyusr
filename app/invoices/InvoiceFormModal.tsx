@@ -59,7 +59,10 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         if (!record) return; 
         const qty = Number(record.quantity || 0);
         const price = Number(record.unit_price || 0);
-        const lineTotal = qty * price;
+        
+        // 💡 السطر الوحيد اللي اتعدل: بيجمع السعر المكتوب حالياً + البنود المضافة في الجدول
+        const linesTotal = (record.lines || []).reduce((sum: number, line: any) => sum + (Number(line.quantity) * Number(line.unit_price)), 0);
+        const lineTotal = (qty * price) + linesTotal;
         
         const materialsDiscount = Number(record.materials_discount || 0);
         const taxableAmount = lineTotal - materialsDiscount;
@@ -92,7 +95,49 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                 due_date: dueDateCalculated.toISOString()
             }));
         }
-    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca]); 
+    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca, record?.lines]); // 👈 ضفنا record.lines في الاعتمادات
+
+    // 👇====== تمت إضافة الدوال هنا بدون حذف أي سطر من الكود ======👇
+
+    // 🚀 دالة إضافة البيان للجدول
+    const handleAddStatement = (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (!record.description) {
+            showToast("يرجى إدخال البيان التفصيلي أولاً ⚠️", "warning");
+            return;
+        }
+        if (Number(record.quantity || 0) <= 0 || Number(record.unit_price || 0) <= 0) {
+            showToast("يرجى التأكد من إدخال الكمية والسعر بشكل صحيح ⚠️", "warning");
+            return;
+        }
+
+        const newStatement = {
+            boq_id: record.boq_id || null,
+            description: record.description,
+            quantity: Number(record.quantity),
+            unit: record.unit || 'عدد',
+            unit_price: Number(record.unit_price),
+            total_price: Number(record.quantity) * Number(record.unit_price)
+        };
+
+        setRecord({
+            ...record,
+            lines: [...(record.lines || []), newStatement],
+            // تصفير الخانات المكتوبة بعد ما نزلناهم في الجدول
+            description: '',
+            quantity: '',
+            unit_price: '',
+            boq_id: null
+        });
+    };
+
+    // 🚀 دالة حذف البيان من الجدول
+    const handleRemoveLine = (indexToRemove: number) => {
+        const filteredLines = (record.lines || []).filter((_: any, idx: number) => idx !== indexToRemove);
+        setRecord({ ...record, lines: filteredLines });
+    };
+
+    // 👆============================================================👆
 
     // 🚀 3. دالة التحقق قبل الحفظ
     const handleValidateAndSave = () => {
@@ -334,6 +379,46 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>سعر الوحدة</label>
                         <input type="number" value={record.unit_price ?? ''} onChange={(e) => setRecord({...record, unit_price: e.target.value})} className="glass-input-field" />
                     </div>
+
+                    {/* 🚀 زر إضافة البند والجدول الخاص بالبنود المضافة */}
+                    <div style={{ gridColumn: 'span 3', textAlign: 'left' }}>
+                        <button type="button" onClick={handleAddStatement} style={{ background: THEME.accent, color: 'white', border: 'none', padding: '10px 25px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', transition: '0.3s' }}>
+                            ➕ إدراج البيان في الفاتورة
+                        </button>
+                    </div>
+
+                    {record.lines && record.lines.length > 0 && (
+                        <div style={{ gridColumn: 'span 3', background: 'rgba(255,255,255,0.6)', padding: '15px', borderRadius: '16px', border: `1px solid ${THEME.border}` }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', borderRadius: '0 8px 8px 0', fontSize: '12px' }}>م</th>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', textAlign: 'right', fontSize: '12px' }}>البيان</th>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', fontSize: '12px' }}>الكمية</th>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', fontSize: '12px' }}>الوحدة</th>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', fontSize: '12px' }}>السعر</th>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', fontSize: '12px' }}>الإجمالي</th>
+                                        <th style={{ background: THEME.primary, color: 'white', padding: '10px', borderRadius: '8px 0 0 0', fontSize: '12px' }}>إجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {record.lines.map((line: any, idx: number) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                                            <td style={{ padding: '10px', fontWeight: 900 }}>{idx + 1}</td>
+                                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700 }}>{line.description}</td>
+                                            <td style={{ padding: '10px', fontWeight: 700 }}>{line.quantity}</td>
+                                            <td style={{ padding: '10px', fontWeight: 700 }}>{line.unit}</td>
+                                            <td style={{ padding: '10px', fontWeight: 700 }}>{formatCurrency(line.unit_price)}</td>
+                                            <td style={{ padding: '10px', fontWeight: 900, color: THEME.primary }}>{formatCurrency(line.total_price)}</td>
+                                            <td style={{ padding: '10px' }}>
+                                                <button type="button" onClick={() => handleRemoveLine(idx)} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 900 }}>✖</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
 
                     <SmartCombo 
                         key={`debit-${record.debit_account_id || 'empty'}`}
