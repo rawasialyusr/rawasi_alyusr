@@ -1,107 +1,26 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import React from 'react';
+import { useLoginLogic } from './login_logic'; // 👈 استدعاء العقل المدبر
 
 const THEME = {
   primary: '#0f172a',
   accent: '#ca8a04',
   accentLight: '#eab308',
   white: '#ffffff',
-  slate: '#94a3b8',
-  error: '#ef4444',
-  success: '#10b981'
+  slate: '#94a3b8'
 };
 
 export default function LoginPage() {
-  const router = useRouter();
-  
-  // 🎛️ حالات الفورم
-  const [isSignUp, setIsSignUp] = useState(false); // 👈 للتبديل بين الدخول والتسجيل
-  const [fullName, setFullName] = useState('');    // 👈 لاسم المستخدم الجديد
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // 🧹 1. تنظيف الجلسات الشبح (Ghost Sessions)
-  useEffect(() => {
-    const clearGhostSession = async () => {
-      await supabase.auth.signOut();
-    };
-    clearGhostSession();
-  }, []);
-
-  // 2. مزامنة قيم المتصفح (Autofill)
-  useEffect(() => {
-    const syncFields = () => {
-      const emailField = document.querySelector('input[type="email"]') as HTMLInputElement;
-      const passField = document.querySelector('input[type="password"]') as HTMLInputElement;
-      if (emailField?.value && !email) setEmail(emailField.value);
-      if (passField?.value && !password) setPassword(passField.value);
-    };
-    
-    const intervals = [100, 500, 1000, 2000].map(t => setTimeout(syncFields, t));
-    return () => intervals.forEach(t => clearTimeout(t));
-  }, [email, password]);
-
-  const handleAutoFill = (e: React.AnimationEvent<HTMLInputElement>) => {
-    if (e.animationName === 'onAutoFillStart') {
-      const target = e.target as HTMLInputElement;
-      if (target.type === 'email') setEmail(target.value);
-      if (target.type === 'password') setPassword(target.value);
-    }
-  };
-
-  // 🚀 3. دالة التنفيذ (تسجيل دخول أو حساب جديد)
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    try {
-      if (isSignUp) {
-        // 🆕 إنشاء حساب جديد
-        if (!fullName.trim()) throw new Error('يرجى إدخال الاسم الكامل');
-        if (password.length < 6) throw new Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName, // حفظ الاسم في الميتا داتا
-              role: 'client'       // الرتبة الافتراضية لحد ما الإدارة تغيرها
-            }
-          }
-        });
-
-        if (error) throw error;
-        
-        // لو التسجيل نجح، نرجع وضع تسجيل الدخول ونظهر رسالة
-        setSuccessMsg('✅ تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.');
-        setIsSignUp(false);
-        setPassword(''); // تصفير الباسورد كإجراء أمني
-        
-      } else {
-        // 🔑 تسجيل الدخول
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) throw new Error('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
-        
-        router.push('/invoices'); // توجيه للداشبورد
-      }
-    } catch (error: any) {
-      setErrorMsg(error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // 👈 نقطة الاستدعاء الوحيدة (Single Source)
+  const {
+    isSignUp, toggleSignUp,
+    fullName, setFullName,
+    email, setEmail,
+    password, setPassword,
+    isLoading,
+    handleAutoFill,
+    handleSubmit
+  } = useLoginLogic();
 
   return (
     <div className="login-wrapper">
@@ -248,9 +167,13 @@ export default function LoginPage() {
           align-items: center;
         }
 
-        .submit-btn:hover {
+        .submit-btn:hover:not(:disabled) {
           transform: translateY(-2px);
           box-shadow: 0 15px 25px rgba(202, 138, 4, 0.4);
+        }
+        .submit-btn:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
         }
 
         .toggle-btn {
@@ -267,9 +190,6 @@ export default function LoginPage() {
         }
         .toggle-btn span { color: ${THEME.accent}; text-decoration: underline; }
         .toggle-btn:hover { color: ${THEME.white}; }
-
-        .error-message { background: rgba(239, 68, 68, 0.1); border: 1px solid ${THEME.error}; color: #fca5a5; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; margin-bottom: 20px; }
-        .success-message { background: rgba(16, 185, 129, 0.1); border: 1px solid ${THEME.success}; color: #6ee7b7; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; margin-bottom: 20px; }
       `}</style>
 
       <div className="glass-card">
@@ -279,9 +199,6 @@ export default function LoginPage() {
         
         <h1 className="cinematic-title">رواسي اليسر</h1>
         <p className="cinematic-subtitle">{isSignUp ? 'إنشاء حساب جديد' : 'النظام المالي المتكامل'}</p>
-
-        {errorMsg && <div className="error-message">⚠️ {errorMsg}</div>}
-        {successMsg && <div className="success-message">{successMsg}</div>}
 
         <form onSubmit={handleSubmit}>
           
@@ -334,15 +251,7 @@ export default function LoginPage() {
         </form>
 
         {/* 🔄 زر التبديل بين الدخول والتسجيل */}
-        <button 
-          type="button" 
-          className="toggle-btn" 
-          onClick={() => {
-            setIsSignUp(!isSignUp);
-            setErrorMsg('');
-            setSuccessMsg('');
-          }}
-        >
+        <button type="button" className="toggle-btn" onClick={toggleSignUp}>
           {isSignUp ? (
             <>لديك حساب بالفعل؟ <span>سجل دخولك من هنا</span></>
           ) : (

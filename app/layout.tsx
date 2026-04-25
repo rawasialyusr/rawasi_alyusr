@@ -9,7 +9,10 @@ import { THEME } from '@/lib/theme';
 import { SidebarProvider } from '@/lib/SidebarContext'; 
 import AuthGuard from "../components/authGuard"; 
 import { ToastProvider } from '@/lib/toast-context'; 
-import { PermissionsProvider } from '@/lib/PermissionsContext'; // 🛡️ 1. استدعاء مركز الصلاحيات المركزي
+import { PermissionsProvider } from '@/lib/PermissionsContext';
+
+// 🚀 1. استدعاء محرك الأوفلاين والكاش الجديد (V9)
+import QueryProvider from '../components/QueryProvider';
 
 const cairo = Cairo({ 
   subsets: ["arabic"],
@@ -36,7 +39,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <body className={cairo.className} style={{ position: 'relative', minHeight: '100vh', color: THEME.text }}>
         
-        {/* ستايل الخلفية - سليم كما هو */}
+        {/* 🎨 ستايل الهوية البصرية السيادية */}
         <style dangerouslySetInnerHTML={{__html: `
           .bg-master-container {
             position: fixed; inset: 0; z-index: -4; 
@@ -85,24 +88,26 @@ export default function RootLayout({
         />
 
         <GlobalErrorBoundary>
-            <Providers>
-                <ToastProvider>
-                    <AutoLogoutWrapper>
-                        <AuthGuard> 
-                            {/* 🛡️ 2. تغليف السيستم بنظام الصلاحيات (هنا بيفعل السمارت كومبو والسيكيور أكشن أوتوماتيك) */}
-                            <PermissionsProvider>
-                                <SidebarProvider> 
-                                    <LayoutClient>
-                                        <div style={{ position: 'relative', zIndex: 10 }}>
-                                            {children}
-                                        </div>
-                                    </LayoutClient>
-                                </SidebarProvider>
-                            </PermissionsProvider>
-                        </AuthGuard>
-                    </AutoLogoutWrapper>
-                </ToastProvider>
-            </Providers>
+            {/* 🧠 2. تغليف النظام بمحرك الأوفلاين الجديد (QueryProvider) */}
+            <QueryProvider>
+                <Providers>
+                    <ToastProvider>
+                        <AutoLogoutWrapper>
+                            <AuthGuard> 
+                                <PermissionsProvider>
+                                    <SidebarProvider> 
+                                        <LayoutClient>
+                                            <div style={{ position: 'relative', zIndex: 10 }}>
+                                                {children}
+                                            </div>
+                                        </LayoutClient>
+                                    </SidebarProvider>
+                                </PermissionsProvider>
+                            </AuthGuard>
+                        </AutoLogoutWrapper>
+                    </ToastProvider>
+                </Providers>
+            </QueryProvider>
         </GlobalErrorBoundary>
         
       </body>

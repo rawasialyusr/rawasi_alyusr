@@ -27,7 +27,7 @@ export default function InvoicesPage() {
     handlePostSelected, handleDeleteSelected, handleUnpostSelected,
     handleSave, handleAddNew, handleEdit, isEditModalOpen, setIsEditModalOpen, currentRecord, setCurrentRecord,
     isReceiptModalOpen, setIsReceiptModalOpen, selectedInvoiceForPay, setSelectedInvoiceForPay, handleOpenPaymentModal 
-  } = useInvoicesLogic();
+  } = useInvoicesLogic(); // 👈 تطبيق نقطة الاستدعاء الواحدة (Single Source)
 
   // 🛡️ سحب دالة فحص الصلاحيات وحالة التحميل بأمان تام
   const { can, loading: permsLoading } = usePermissions();
@@ -39,41 +39,58 @@ export default function InvoicesPage() {
   const result = useMemo(() => getInvoiceSummaryAndAging(dataToProcess.filter((i:any)=> i.status !== 'مسودة')), [dataToProcess]);
 
   // =========================================================================
-  // 💎 أعمدة الجدول
+  // 💎 أعمدة الجدول (محصنة بالكامل ومضبوطة مع محرك الذكاء)
   // =========================================================================
   const invoiceColumns = [
     {
       header: 'تحديد',
       accessor: 'id',
-      render: (id: string) => (
-        <input type="checkbox" className="custom-checkbox" checked={selectedIds.includes(id)} 
-          onChange={(e) => {
-            e.stopPropagation(); 
-            setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-          }} 
-        />
-      )
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        return (
+          <input type="checkbox" className="custom-checkbox" checked={selectedIds.includes(row.id)} 
+            onChange={(e) => {
+              e.stopPropagation(); 
+              setSelectedIds(prev => prev.includes(row.id) ? prev.filter(x => x !== row.id) : [...prev, row.id]);
+            }} 
+          />
+        );
+      }
     },
     { 
       header: 'رقم الفاتورة', 
       accessor: 'invoice_number', 
-      render: (v:any) => <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px', letterSpacing: '0.5px' }}>#{v}</b> 
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        return <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px', letterSpacing: '0.5px' }}>#{row.invoice_number}</b>;
+      } 
     },
     { 
       header: 'تاريخ الفاتورة', 
       accessor: 'date', 
-      render: (v: any) => (
-        <span style={{ fontSize: '12px', fontWeight: 900, color: '#0284c7', background: 'rgba(2, 132, 199, 0.1)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
-          {v ? new Date(v).toLocaleDateString('ar-EG') : '---'}
-        </span> 
-      )
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        return (
+          <span style={{ fontSize: '12px', fontWeight: 900, color: '#0284c7', background: 'rgba(2, 132, 199, 0.1)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
+            {row.date ? new Date(row.date).toLocaleDateString('ar-EG') : '---'}
+          </span> 
+        );
+      }
     },
-    { header: 'العميل', accessor: 'client_name', render: (v:any) => <span style={{fontWeight: 800, color: '#1e293b'}}>{v}</span> },
+    { 
+      header: 'العميل', 
+      accessor: 'client_name', 
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        return <span style={{fontWeight: 800, color: '#1e293b'}}>{row.client_name || '---'}</span>;
+      } 
+    },
     {
       header: 'حالة الاعتماد',
       accessor: 'status',
-      render: (status: string) => {
-        const isApproved = status === 'مُعتمد';
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        const isApproved = row.status === 'مُعتمد';
         return (
           <div className={`approval-glass-badge ${isApproved ? 'approved' : 'pending'}`}>
             <span className="dot"></span>
@@ -85,13 +102,14 @@ export default function InvoicesPage() {
     {
       header: 'مهلة السداد',
       accessor: 'due_date',
-      render: (dueDate: any, row: any) => {
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         if (paid >= total && total > 0) return <span className="deadline-badge paid">✅ مكتمل</span>;
-        if (!dueDate) return <span style={{color:'#94a3b8', fontWeight: 'bold'}}>---</span>;
+        if (!row.due_date) return <span style={{color:'#94a3b8', fontWeight: 'bold'}}>---</span>;
         const today = new Date();
-        const due = new Date(dueDate);
+        const due = new Date(row.due_date);
         today.setHours(0, 0, 0, 0);
         due.setHours(0, 0, 0, 0);
         const diffTime = due.getTime() - today.getTime();
@@ -104,8 +122,10 @@ export default function InvoicesPage() {
     {
       header: 'حالة السداد',
       accessor: 'paid_amount',
-      render: (paid: number, row: any) => {
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
         const total = Number(row.total_amount || 0);
+        const paid = Number(row.paid_amount || 0);
         if (paid <= 0) return <span className="glass-badge red">🔴 مستحقة</span>;
         if (paid < total) return <span className="glass-badge orange">⏳ جزئي</span>;
         return <span className="glass-badge green">✅ مسددة</span>;
@@ -114,19 +134,21 @@ export default function InvoicesPage() {
     { 
       header: 'الصافي', 
       accessor: 'total_amount', 
-      render: (v:any, row: any) => {
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         let textColor = '#dc2626'; 
         if (paid >= total && total > 0) textColor = '#16a34a'; 
         else if (paid > 0 && paid < total) textColor = '#d97706'; 
-        return <span style={{ fontWeight: 900, color: textColor, fontSize: '14px', textShadow: `0 0 10px ${textColor}40` }}>{formatCurrency(v)}</span>;
+        return <span style={{ fontWeight: 900, color: textColor, fontSize: '14px', textShadow: `0 0 10px ${textColor}40` }}>{formatCurrency(total)}</span>;
       } 
     },
     {
       header: 'الإجراءات',
       accessor: 'id',
-      render: (_: any, row: any) => {
+      render: (row: any) => {
+        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         const balance = total - paid;
@@ -134,14 +156,14 @@ export default function InvoicesPage() {
         return (
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
             <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print">🖨️</button>
-            {/* 🛡️ زر السداد (يمكننا حمايته بصلاحية الدفع إذا لزم الأمر، حالياً متاح) */}
+            {/* 🛡️ زر السداد */}
             {needsPayment && (
               <button onClick={(e) => {
-                    e.stopPropagation(); 
-                    let propertyName = '';
-                    if (row.project_ids && row.project_ids.length > 0 && projects) propertyName = projects.filter((p: any) => row.project_ids.includes(p.id)).map((p: any) => p.Property || p.property_name || p.project_name || p.name).join('، ');
-                    setSelectedInvoiceForPay({ ...row, id: undefined, invoice_id: row.id, invoice_number: row.invoice_number, client_name: row.client_name, partner_id: row.partner_id, amount: balance, total_amount: balance, property_name: propertyName, project_name: propertyName, description: `سداد دفعة من فاتورة #${row.invoice_number} ${propertyName ? `- عقار: ${propertyName}` : ''}` });
-                    setIsReceiptModalOpen(true);
+                  e.stopPropagation(); 
+                  let propertyName = '';
+                  if (row.project_ids && row.project_ids.length > 0 && projects) propertyName = projects.filter((p: any) => row.project_ids.includes(p.id)).map((p: any) => p.Property || p.property_name || p.project_name || p.name).join('، ');
+                  setSelectedInvoiceForPay({ ...row, id: undefined, invoice_id: row.id, invoice_number: row.invoice_number, client_name: row.client_name, partner_id: row.partner_id, amount: balance, total_amount: balance, property_name: propertyName, project_name: propertyName, description: `سداد دفعة من فاتورة #${row.invoice_number} ${propertyName ? `- عقار: ${propertyName}` : ''}` });
+                  setIsReceiptModalOpen(true);
                 }} className="btn-glass-pay">💰 سداد</button>
             )}
           </div>
@@ -156,7 +178,7 @@ export default function InvoicesPage() {
   const sidebarActions = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       
-      {/* 🛡️ زرار إضافة فاتورة جديدة */}
+      {/* 🛡️ زرار إضافة فاتورة جديدة (محمي بـ SecureAction) */}
       <SecureAction module="invoices" action="create">
         <button className="btn-main-glass gold" onClick={handleAddNew}>
           ➕ إنشاء فاتورة جديدة
@@ -194,12 +216,13 @@ export default function InvoicesPage() {
   );
 
   return (
+    // 👈 تطبيق التغليف السيادي (MasterPage)
     <MasterPage 
       title="فواتير المبيعات" 
       subtitle="مركز إدارة المستخلصات والتحصيل المالي"
     >
       
-      {/* 1. السايد بار (مكانه الصحيح هنا) */}
+      {/* 1. السايد بار (مكانه الصحيح هنا لتطبيق جسر الترحيل) */}
       <RawasiSidebarManager 
         summary={
           <div className="summary-glass-card">
@@ -210,6 +233,7 @@ export default function InvoicesPage() {
         actions={sidebarActions}
         customFilters={
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* 👈 تطبيق مكونات العرض الذكية (SmartCombo) */}
                 <SmartCombo 
                     label="تصفية سريعة بالعميل"
                     icon="🔍"
@@ -228,11 +252,12 @@ export default function InvoicesPage() {
         watchDeps={[selectedIds, sidebarActions, result]}
       />
 
-      {/* 2. محتوى الصفحة (تم حذف العناوين المكررة لترك المجال للماستر بيدج) */}
+      {/* 2. محتوى الصفحة */}
       {(isLoading || permsLoading) ? (
         <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
       ) : (
         <div className="clickable-rows">
+          {/* 👈 تطبيق مكونات العرض الذكية (RawasiSmartTable) */}
           <RawasiSmartTable 
             data={dataToProcess.slice((currentPage-1)*rowsPerPage, currentPage*rowsPerPage)} 
             columns={invoiceColumns} 
