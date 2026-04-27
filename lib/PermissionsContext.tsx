@@ -5,12 +5,14 @@ import { supabase } from './supabase';
 const PermissionsContext = createContext<any>(null);
 
 export const PermissionsProvider = ({ children }: { children: React.ReactNode }) => {
-    const [permissions, setPermissions] = useState<any>({});
+    const [permissions, setPermissions] = useState<any>(null); // 👈 غيرناها لـ null للتمييز بين أول مرة والتحديث
     const [role, setRole] = useState<string>('client');
     const [loading, setLoading] = useState(true);
 
     const fetchPerms = async () => {
-        setLoading(true);
+        // 🛡️ الدرع الماسي: لا تفعل حالة التحميل (Loading) إلا لو كانت البيانات فارغة تماماً (أول مرة فقط)
+        if (!permissions) setLoading(true); 
+        
         try {
             // 1. نجيب اليوزر الحالي
             const { data: { user } } = await supabase.auth.getUser();
@@ -24,28 +26,25 @@ export const PermissionsProvider = ({ children }: { children: React.ReactNode })
                     .single();
                     
                 if (data) {
-                    // 🛡️ تحديد الدور: لو is_admin هو الملك (super_admin)
                     const userRole = data.is_admin ? 'super_admin' : (data.role || 'client');
-                    
                     setRole(userRole);
                     setPermissions(data.permissions || {});
 
-                    // 🚩 رادار للمبرمج (تقدر تمسحه بعد التأكد)
-                    console.log(`🔐 تم تحميل صلاحيات: [${userRole}]`, data.permissions);
+                    console.log(`🔐 تم تحديث الصلاحيات بصمت: [${userRole}]`);
                 }
             }
         } catch (err) {
             console.error("❌ خطأ في تحميل الصلاحيات:", err);
         } finally {
-            setLoading(false);
+            setLoading(false); // 👈 بيقفل التحميل بس المرة دي مش هيأثر على الواجهة لو الداتا موجودة
         }
     };
 
     useEffect(() => {
         fetchPerms();
 
-        // 🔄 تحديث تلقائي لو حصل تغيير في حالة تسجيل الدخول
-        const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+            // 🛡️ فحص ذكي: لو التغيير مجرد "فوكس" أو تحديث جلسة، حدث في الخلفية بدون Loading
             fetchPerms();
         });
 
@@ -54,26 +53,28 @@ export const PermissionsProvider = ({ children }: { children: React.ReactNode })
         };
     }, []);
 
-    // 🧠 الدالة السحرية - تم تحسينها لتكون أكثر مرونة
     const can = (moduleName: string, actionName: string) => {
-        // 1. الإدارة العليا لها "مفتاح ماستر" لكل شيء
         if (role === 'super_admin' || role === 'admin') return true;
-
-        // 2. فحص الصلاحية في الكائن (Object)
-        // بنتأكد إن الموديول موجود، والأكشن جواه موجود وقيمته true بالظبط
         const hasPermission = permissions?.[moduleName]?.[actionName] === true;
-        
         return hasPermission;
     };
 
-    // 📦 تجميع القيم في useMemo عشان الأداء يكون أسرع والزراير متتهزش
     const value = useMemo(() => ({
         can,
         role,
-        permissions, // ضفناها هنا عشان تقدر تشوفها في الـ SecureAction لو حبيت
+        permissions,
         loading,
-        refreshPermissions: fetchPerms // دالة لو حبيت تحدث الصلاحيات يدوي
+        refreshPermissions: fetchPerms 
     }), [permissions, role, loading]);
+
+    // 🚨 السطر السحري: لا تعرض شاشة سوداء أو تمسح الـ children طالما الـ permissions موجودة
+    if (loading && !permissions) {
+        return (
+            <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F4F1EE" }}>
+                <div className="loader">⏳ جاري فحص الصلاحيات السيادية...</div>
+            </div>
+        );
+    }
 
     return (
         <PermissionsContext.Provider value={value}>

@@ -20,7 +20,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkUser = async () => {
-      setLoading(true);
+      // 🛡️ الدرع الماسي (1): لا تفعل حالة التحميل إذا كان المستخدم موجوداً بالفعل
+      if (!user) setLoading(true);
       
       // جلب بيانات الجلسة الحالية
       const { data: { session } } = await supabase.auth.getSession();
@@ -53,11 +54,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         setUser(null);
         setProfile(null);
         router.replace("/login");
+      } else if (session && !user) {
+        setUser(session.user);
       }
     });
 
     return () => authListener.subscription.unsubscribe();
-  }, [router, pathname]);
+  }, [pathname, router]); 
 
   // 🚀 دالة الفحص السحرية "can"
   // بنمرر لها اسم الموديول (مثلاً invoices) والأكشن (مثلاً stamp)
@@ -69,7 +72,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return Array.isArray(perms[module]) && perms[module].includes(action);
   };
 
-  if (loading) {
+  // 🛡️ الدرع الماسي (2) والأهم: لا تعرض شاشة التحميل وتمسح الصفحة إلا لو لم يكن هناك مستخدم مسجل الدخول أصلاً
+  if (loading && !user) {
     return (
       <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F4F1EE" }}>
         <div className="loader">⏳ جاري تأمين الاتصال برواسي...</div>

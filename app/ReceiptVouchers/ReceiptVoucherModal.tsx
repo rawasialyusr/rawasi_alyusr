@@ -5,7 +5,7 @@ import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
 
 // =========================================================================
-// 🔍 مكون البحث الذكي المطور (مع دعم السحب الآلي initialDisplay)
+// 🔍 مكون البحث الذكي المطور (مع دعم السحب الآلي initialDisplay) 💎
 // =========================================================================
 const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,code', displayCol = 'name', filterStatus, tabIndex, multi = false, selectedValues = [], initialDisplay = '' }: any) => {
     const [search, setSearch] = useState<string>(initialDisplay || ''); 
@@ -87,26 +87,32 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
                 tabIndex={tabIndex}
                 placeholder={placeholder || '🔍 ابحث...'}
                 value={search} 
-                onChange={(e) => { setSearch(e.target.value); setShow(true); }}
+                onChange={(e) => { setSearch(e.target.value); setShow(true); loadInitialData(e.target.value); }}
                 onFocus={() => { setShow(true); loadInitialData(search); }}
                 onKeyDown={handleKeyDown} 
                 className="glass-input"
             />
-            {show && results.length > 0 && (
+            {show && (
                 <>
                     <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }} />
                     <div ref={listRef} className="cinematic-scroll glass-dropdown" style={{ zIndex: 2000 }}>
-                        {results.map((item: any, index: number) => {
-                            const isSelected = multi ? selectedValues.some((v: any) => v.id === item.id) : false;
-                            const isHighlighted = index === highlightedIndex;
-                            return (
-                                <div key={item.id} onClick={() => handleItemAction(item)} 
-                                     className={`dropdown-item ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}>
-                                    {multi && <input type="checkbox" checked={isSelected} readOnly style={{ width: '18px', height: '18px', accentColor: THEME.success }} />}
-                                    <span style={{ fontWeight: isSelected ? '900' : 'bold' }}>{item[displayCol] || item.Property || item.invoice_number || item.name}</span>
-                                </div>
-                            );
-                        })}
+                        {isLoading ? (
+                            <div style={{ padding: '15px', textAlign: 'center', fontSize: '12px', color: '#94a3b8', fontWeight: 900 }}>⏳ جاري البحث...</div>
+                        ) : results.length > 0 ? (
+                            results.map((item: any, index: number) => {
+                                const isSelected = multi ? selectedValues.some((v: any) => v.id === item.id) : false;
+                                const isHighlighted = index === highlightedIndex;
+                                return (
+                                    <div key={item.id} onClick={() => handleItemAction(item)} 
+                                         className={`dropdown-item ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}>
+                                        {multi && <input type="checkbox" checked={isSelected} readOnly style={{ width: '18px', height: '18px', accentColor: THEME.success }} />}
+                                        <span style={{ fontWeight: isSelected ? '900' : 'bold' }}>{item[displayCol] || item.Property || item.invoice_number || item.name}</span>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div style={{ padding: '15px', textAlign: 'center', fontSize: '12px', color: '#ef4444', fontWeight: 900 }}>🚫 لا توجد نتائج</div>
+                        )}
                     </div>
                 </>
             )}
@@ -115,12 +121,12 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
 };
 
 // =========================================================================
-// 📝 المودال الرئيسي (سند القبض)
+// 📝 المودال الرئيسي (سند القبض) - مطابق للميثاق الماسي V9
 // =========================================================================
 export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord, onSave }: any) {
     if (!isOpen) return null;
 
-    // 🚀 [إضافة] المراقبة الذكية لجلب الأسماء عند الضغط من الخارج
+    // 🚀 المراقبة الذكية لجلب الأسماء عند الضغط من الخارج
     useEffect(() => {
         const syncNames = async () => {
             if (!isOpen || !record) return;
@@ -199,11 +205,9 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
     };
 
     return (
-        // 💡 التعديل هنا: شيلت position: fixed وشيلت alignItems: center عشان نعالج القص
         <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
             
             <style>{`
-                /* 💡 التعديل هنا: margin: auto بتسنتر المودال وتمنع القص، وشيلنا الـ height الثابت */
                 .glass-modal {
                     background: rgba(255, 255, 255, 0.95);
                     backdrop-filter: blur(25px);
@@ -236,7 +240,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                 }
                 .dropdown-item {
                     padding: 12px; cursor: pointer; border-radius: 8px;
-                    font-size: 13px; transition: all 0.1s; display: flex; align-items: center; gap: 10px;
+                    font-size: 13px; transition: all 0.1s; display: flex; align-items: center; gap: 10px; color: #0f172a;
                 }
                 .dropdown-item.highlighted { background: #f1f5f9; border-right: 4px solid ${THEME.primary}; }
                 .dropdown-item.selected { background: #f0fdf4; border-right: 4px solid ${THEME.success}; }
@@ -253,9 +257,10 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     border: 1px solid rgba(255, 255, 255, 0.8); padding: 18px; border-radius: 16px;
                     font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
                 }
+                .btn-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
             `}</style>
 
-            <div className="glass-modal">
+            <div className="glass-modal" onClick={(e) => e.stopPropagation()}>
                 <h2 style={{ color: THEME.primary, borderBottom: `2px solid ${THEME.accent}40`, paddingBottom: '15px', margin: '0 0 30px 0', fontWeight: 900, fontSize: '26px' }}>
                     💰 {record.id ? 'تعديل سند قبض' : 'إصدار سند قبض جديد'}
                 </h2>
@@ -327,30 +332,6 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                         />
                     </div>
 
-                    {/* --- قسم الخصم (Apple Style) --- */}
-                    <div style={{ gridColumn: '1 / -1', background: 'rgba(245, 158, 11, 0.05)', padding: '20px', borderRadius: '20px', border: `1px dashed rgba(245, 158, 11, 0.3)`, zIndex: 60 }}>
-                        <h4 style={{ color: '#d97706', margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🎁 خصم مسموح به (اختياري)</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '15px' }}>
-                            <div>
-                                <label style={{ fontSize: '12px', fontWeight: 900, color: '#d97706', display: 'block', marginBottom: '6px' }}>مبلغ الخصم</label>
-                                <input type="number" step="0.01" tabIndex={7} placeholder="0.00" value={record.discount_amount ?? ''} onChange={e => setRecord({...record, discount_amount: e.target.value})} className="glass-input" style={{ borderColor: 'rgba(245, 158, 11, 0.3)' }} />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>بيان الخصم</label>
-                                <input type="text" tabIndex={8} placeholder="مثال: خصم تعجيل دفع..." value={record.discount_notes || ''} onChange={e => setRecord({...record, discount_notes: e.target.value})} className="glass-input" />
-                            </div>
-                            <div style={{ zIndex: 50 }}>
-                                <SmartCombo 
-                                    tabIndex={9} 
-                                    label="حساب الخصم" 
-                                    table="accounts" 
-                                    initialDisplay={record.discount_acc_name}
-                                    onSelect={(a: any) => setRecord({...record, discount_acc_id: a.id, discount_acc_name: a.name})} 
-                                />
-                            </div>
-                        </div>
-                    </div>
-
                     {/* --- التوجيه المحاسبي --- */}
                     <div style={{ gridColumn: '1 / -1', background: 'rgba(255, 255, 255, 0.5)', padding: '25px', borderRadius: '20px', border: '1px solid rgba(0,0,0,0.05)', zIndex: 40 }}>
                         <h4 style={{ color: THEME.primary, margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🏦 التوجيه المحاسبي</h4>
@@ -359,7 +340,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                                 <SmartCombo tabIndex={10} label="حساب الصندوق/البنك (مدين)" table="accounts" initialDisplay={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
                             </div>
                             <div style={{ zIndex: 20 }}>
-                                <SmartCombo tabIndex={11} label="حساب العميل (دائن)" table="accounts" initialDisplay={record.partner_acc_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
+                                <SmartCombo tabIndex={11} label="حساب العميل (دائن)" table="accounts" initialDisplay={record.partner_acc_name || record.partner_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
                             </div>
                         </div>
                     </div>

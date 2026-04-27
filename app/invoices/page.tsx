@@ -26,7 +26,8 @@ export default function InvoicesPage() {
     selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage,
     handlePostSelected, handleDeleteSelected, handleUnpostSelected,
     handleSave, handleAddNew, handleEdit, isEditModalOpen, setIsEditModalOpen, currentRecord, setCurrentRecord,
-    isReceiptModalOpen, setIsReceiptModalOpen, selectedInvoiceForPay, setSelectedInvoiceForPay, handleOpenPaymentModal 
+    isReceiptModalOpen, setIsReceiptModalOpen, selectedInvoiceForPay, setSelectedInvoiceForPay, handleOpenPaymentModal,
+    handleSavePayment // 👈 1. سحبنا دالة السداد الحقيقية من اللوجيك
   } = useInvoicesLogic(); // 👈 تطبيق نقطة الاستدعاء الواحدة (Single Source)
 
   // 🛡️ سحب دالة فحص الصلاحيات وحالة التحميل بأمان تام
@@ -253,7 +254,7 @@ export default function InvoicesPage() {
       />
 
       {/* 2. محتوى الصفحة */}
-      {(isLoading || permsLoading) ? (
+      {( (isLoading || permsLoading) && invoices.length === 0 ) ? (
         <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
       ) : (
         <div className="clickable-rows">
@@ -275,14 +276,24 @@ export default function InvoicesPage() {
       )}
 
       {/* 3. المودالز */}
+      
+      {/* 🚀 2. تغليف المودال بحاوية منبثقة (Portal Wrapper) عشان ميظهرش تحت الصفحة، وربط دالة الحفظ */}
       {isReceiptModalOpen && (
-        <ReceiptVoucherModal 
-            isOpen={isReceiptModalOpen} 
-            onClose={() => setIsReceiptModalOpen(false)} 
-            record={selectedInvoiceForPay || {}} 
-            setRecord={setSelectedInvoiceForPay}
-            onSave={() => { setIsReceiptModalOpen(false); setSelectedIds([]); }}
-        />
+        <div style={{ 
+            position: 'fixed', inset: 0, zIndex: 9999999, 
+            background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflowY: 'auto', padding: '20px'
+        }}>
+            <div style={{ width: '100%', maxWidth: '900px', position: 'relative' }}>
+                <ReceiptVoucherModal 
+                    isOpen={isReceiptModalOpen} 
+                    onClose={() => setIsReceiptModalOpen(false)} 
+                    record={selectedInvoiceForPay || {}} 
+                    setRecord={setSelectedInvoiceForPay}
+                    onSave={handleSavePayment} // 👈 3. ربطنا المودال بدالة الحفظ الحقيقية اللي بتأثر في قاعدة البيانات
+                />
+            </div>
+        </div>
       )}
 
       {isEditModalOpen && <InvoiceFormModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} record={currentRecord} setRecord={setCurrentRecord} onSave={handleSave} projects={projects} />}

@@ -13,12 +13,13 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 40, y: 40 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false); // 🛡️ درع جديد للتأكد من التحميل الأول فقط
   const dragStartPos = useRef({ x: 0, y: 0 });
 
   const { actions, summary } = useSidebar(); 
   const { role, can, loading } = usePermissions();
 
-  // 👻 [صائدة الأشباح] - التأكد من وجود المستخدم في الداتابيز
+  // 👻 [صائدة الأشباح] - التأكد من وجود المستخدم في الداتابيز بصمت (بدون Unmount)
   useEffect(() => {
     const verifyRealUser = async () => {
       if (pathname === '/login') return;
@@ -31,6 +32,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       if (error || !data) {
         await supabase.auth.signOut();
         window.location.href = '/login'; 
+      } else {
+        setIsInitialized(true); // ✅ النظام تم اختباره ويمكنه الاستمرار بأمان
       }
     };
     verifyRealUser();
@@ -87,13 +90,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   // 🛡️ دالة الفلترة الصارمة (1-to-1 Mapping)
   const canView = (menuId: string) => {
-    // 1. الإدارة العليا والأدمن لهم وصول كامل
     if (role === 'super_admin' || role === 'admin') return true;
-    
-    // 2. صفحة الملف الشخصي متاحة دائماً (لتغيير الصورة/الباسورد/الخروج)
     if (menuId === 'profile') return true;
-
-    // 3. الفحص المباشر من الداتابيز: هل Permissions[menuId].view === true ؟
     return can(menuId, 'view');
   };
 
@@ -120,7 +118,11 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [isDragging]);
 
   if (pathname === '/login') return <>{children}</>;
-  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl', fontWeight: 900 }}>⏳ جاري تحميل الصلاحيات...</div>;
+
+  // 🚨 الدرع الماسي: لا تعرض شاشة التحميل ولا تمسح الـ children إلا لو النظام لسه بيحمل لأول مرة تماماً 🚨
+  if (loading && !isInitialized) {
+      return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl', fontWeight: 900 }}>⏳ جاري تحميل الصلاحيات...</div>;
+  }
 
   const currentPageTitle = menuGroups.flatMap(g => g.items).find(i => i.path === pathname)?.title || "إدارة النظام";
   let animationDelayCounter = 0;

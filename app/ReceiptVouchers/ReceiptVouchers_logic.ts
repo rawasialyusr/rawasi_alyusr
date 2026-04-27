@@ -1,11 +1,14 @@
 "use client";
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase'; 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/lib/toast-context';
 
 export function useReceiptVouchersLogic() {
-    // 1. حالات البيانات الأساسية
-    const [allData, setAllData] = useState<any[]>([]); // البيانات الخام من الداتابيز
-    const [isLoading, setIsLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const { showToast } = useToast();
+
+    // 1. حالات البيانات الأساسية (UI State)
     const [globalSearch, setGlobalSearch] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -19,12 +22,8 @@ export function useReceiptVouchersLogic() {
     // =========================================================================
     // 🔐 2. نظام الصلاحيات
     // =========================================================================
-    const [permissions, setPermissions] = useState({
-        canAdd: true,
-        canEdit: true,
-        canDelete: true,
-        canPost: true,    
-        canUnpost: true   
+    const [permissions] = useState({
+        canAdd: true, canEdit: true, canDelete: true, canPost: true, canUnpost: true   
     });
 
     const canUserEdit = (record: any) => {
@@ -33,11 +32,11 @@ export function useReceiptVouchersLogic() {
     };
 
     // =========================================================================
-    // 📥 3. جلب البيانات
+    // 📥 3. جلب البيانات (React Query 💎)
     // =========================================================================
-    const fetchFullData = useCallback(async () => {
-        setIsLoading(true);
-        try {
+    const { data: allData = [], isLoading } = useQuery({
+        queryKey: ['receipt_vouchers'],
+        queryFn: async () => {
             const { data: rec, error } = await supabase
                 .from('receipt_vouchers')
                 .select(`*, partners(name), invoices(invoice_number)`)
@@ -47,22 +46,14 @@ export function useReceiptVouchersLogic() {
 
             const { data: allProjects } = await supabase.from('projects').select('id, "Property"');
 
-            const enrichedRec = rec?.map(voucher => ({
+            return rec?.map(voucher => ({
                 ...voucher,
                 project_names: voucher.project_ids && allProjects
                     ? allProjects.filter(p => voucher.project_ids.includes(p.id)).map(p => p.Property).join(' ، ')
                     : '---'
-            }));
-
-            setAllData(enrichedRec || []);
-        } catch (error: any) {
-            console.error("❌ Supabase Error:", error.message);
-        } finally {
-            setIsLoading(false);
+            })) || [];
         }
-    }, []);
-
-    useEffect(() => { fetchFullData(); }, [fetchFullData]);
+    });
 
     // =========================================================================
     // 🔍 4. البحث والفلترة
@@ -102,9 +93,121 @@ export function useReceiptVouchersLogic() {
     }, [allFiltered]);
 
     // =========================================================================
-    // ⌨️ 7. لوجيك التحكم بالكيبورد للجدول
+    // 🚀 7. طابور العمليات (Mutations 💎)
     // =========================================================================
-    const handleTableKeyDown = useCallback((e: React.KeyboardEvent) => {
+
+    // أ. حفظ السند (بدون حقول الخصم لتوافق الـ Schema)
+    const saveMutation = useMutation({
+        mutationFn: async (record: any) => {
+            const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
+            const voucherData = {
+                receipt_number: record.receipt_number || `RV-${Date.now()}`, 
+                date: record.date,
+                payment_method: record.payment_method,
+                amount: Number(record.amount || 0),
+                invoice_id: cleanId(record.invoice_id),
+                partner_id: cleanId(record.partner_id),
+                project_ids: record.project_ids || [],
+                safe_bank_acc_id: cleanId(record.safe_bank_acc_id),
+                partner_acc_id: cleanId(record.partner_acc_id),
+                notes: record.notes || '',
+                status: record.status || 'مسودة'
+                // ❌ تم إزالة الخصم لتجنب الإيرور
+            };
+
+            if (record.id) {
+                const { error } = await supabase.from('receipt_vouchers').update(voucherData).eq('id', record.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('receipt_vouchers').insert([voucherData]);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            setIsEditModalOpen(false);
+            showToast("تم حفظ السند بنجاح 💾", "success");
+            queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
+        },
+        onError: (err: any) => showToast(`خطأ أثناء الحفظ: ${err.message}`, "error")
+    });
+
+    // ب. الترحيل المالي
+    const postMutation = useMutation({
+        mutationFn: async () => {
+            const toPost = allData.filter(rec => selectedIds.includes(rec.id) && rec.status !== 'مُعتمد');
+            if (toPost.length === 0) throw new Error("لا توجد سندات صالحة للترحيل");
+
+            for (const rec of toPost) {
+                const unifiedNotes = rec.notes || `سند قبض #${rec.receipt_number} | ${rec.partners?.name || ''}`;
+                
+                const { data: header, error: hErr } = await supabase.from('journal_headers').insert({
+                    entry_date: rec.date, description: unifiedNotes, status: 'posted', reference_id: rec.id 
+                }).select('id').single();
+                if (hErr) throw hErr;
+
+                const mainProjectId = rec.project_ids?.[0] || null;
+                const paidAmount = Number(rec.amount || 0);
+
+                const lines = [
+                    { header_id: header.id, account_id: rec.safe_bank_acc_id, debit: paidAmount, credit: 0, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes },
+                    { header_id: header.id, account_id: rec.partner_acc_id, debit: 0, credit: paidAmount, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes }
+                ];
+
+                await supabase.from('journal_lines').insert(lines);
+
+                if (rec.invoice_id) {
+                    const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
+                    await supabase.from('invoices').update({ paid_amount: (inv?.paid_amount || 0) + paidAmount }).eq('id', rec.invoice_id);
+                }
+            }
+            await supabase.from('receipt_vouchers').update({ status: 'مُعتمد' }).in('id', selectedIds);
+        },
+        onSuccess: () => {
+            setSelectedIds([]);
+            showToast("تم ترحيل السندات بنجاح ✅", "success");
+            queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
+        },
+        onError: (err: any) => showToast(`خطأ أثناء الترحيل: ${err.message}`, "error")
+    });
+
+    // ج. فك الترحيل والإرجاع
+    const unpostMutation = useMutation({
+        mutationFn: async () => {
+            await supabase.from('journal_headers').delete().in('reference_id', selectedIds);
+            const toUnpost = allData.filter(r => selectedIds.includes(r.id) && r.invoice_id && r.status === 'مُعتمد');
+            for (const rec of toUnpost) {
+                const totalReversed = Number(rec.amount || 0);
+                const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
+                await supabase.from('invoices').update({ paid_amount: Math.max(0, (inv?.paid_amount || 0) - totalReversed) }).eq('id', rec.invoice_id);
+            }
+            await supabase.from('receipt_vouchers').update({ status: 'مسودة' }).in('id', selectedIds);
+        },
+        onSuccess: () => {
+            setSelectedIds([]);
+            showToast("تم فك الترحيل بنجاح 🔴", "success");
+            queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
+        }
+    });
+
+    // د. الحذف
+    const deleteMutation = useMutation({
+        mutationFn: async () => {
+            const postedExists = allData.some(r => selectedIds.includes(r.id) && r.status === 'مُعتمد');
+            if (postedExists) throw new Error("لا يمكن حذف سندات مُرحلة، قم بفك الترحيل أولاً");
+            await supabase.from('receipt_vouchers').delete().in('id', selectedIds);
+        },
+        onSuccess: () => {
+            setSelectedIds([]);
+            showToast("تم الحذف بنجاح 🗑️", "success");
+            queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
+        },
+        onError: (err: any) => showToast(err.message, "error")
+    });
+
+    // =========================================================================
+    // ⌨️ 8. لوجيك التحكم بالكيبورد للجدول
+    // =========================================================================
+    const handleTableKeyDown = (e: React.KeyboardEvent) => {
         if (isEditModalOpen) return; 
 
         switch (e.key) {
@@ -127,215 +230,40 @@ export function useReceiptVouchersLogic() {
                 e.preventDefault();
                 if (focusedIndex !== -1) {
                     const record = receipts[focusedIndex];
-                    if (canUserEdit(record)) handleEdit(record);
+                    if (canUserEdit(record)) {
+                        setCurrentRecord(record);
+                        setIsEditModalOpen(true);
+                    } else {
+                        showToast("لا يمكن تعديل سند مُعتمد", "warning");
+                    }
                 }
                 break;
         }
-    }, [receipts, focusedIndex, isEditModalOpen, canUserEdit]);
-
-    // =========================================================================
-    // 💾 [جديد] 8. حفظ السند (إضافة / تعديل)
-    // =========================================================================
-    const handleSave = async (record: any) => {
-        setIsLoading(true);
-        try {
-            const voucherData = {
-                receipt_number: record.receipt_number || `RV-${Date.now()}`, // سيتجاهل إذا كان الـ DB يُولد تلقائياً
-                date: record.date,
-                payment_method: record.payment_method,
-                amount: Number(record.amount || 0),
-                invoice_id: record.invoice_id || null,
-                partner_id: record.partner_id || null,
-                project_ids: record.project_ids || [],
-                safe_bank_acc_id: record.safe_bank_acc_id || null,
-                partner_acc_id: record.partner_acc_id || null,
-                notes: record.notes || '',
-                status: record.status || 'مسودة',
-                
-                // 🚀 حقول الخصم الجديدة
-                discount_amount: Number(record.discount_amount || 0),
-                discount_notes: record.discount_notes || '',
-                discount_acc_id: record.discount_acc_id || null,
-            };
-
-            if (record.id) {
-                // تعديل
-                const { error } = await supabase.from('receipt_vouchers').update(voucherData).eq('id', record.id);
-                if (error) throw error;
-            } else {
-                // إضافة جديدة
-                const { error } = await supabase.from('receipt_vouchers').insert([voucherData]);
-                if (error) throw error;
-            }
-
-            setIsEditModalOpen(false);
-            fetchFullData();
-        } catch (error: any) {
-            alert("خطأ أثناء الحفظ: " + error.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // =========================================================================
-    // 🚀 9. الترحيل المالي (Post) - 🚀 محدث لدعم الخصم
-    // =========================================================================
-    const handlePostSelected = async () => {
-        if (!selectedIds.length || !permissions.canPost) return;
-        setIsLoading(true);
-        try {
-            const toPost = allData.filter(rec => selectedIds.includes(rec.id) && rec.status !== 'مُعتمد');
-            
-            for (const rec of toPost) {
-                const unifiedNotes = rec.notes || `سند قبض #${rec.receipt_number} | ${rec.partners?.name || ''}`;
-                
-                const { data: header, error: hErr } = await supabase.from('journal_headers').insert({
-                    entry_date: rec.date,
-                    description: unifiedNotes,
-                    status: 'posted',
-                    reference_id: rec.id 
-                }).select('id').single();
-                if (hErr) throw hErr;
-
-                const mainProjectId = rec.project_ids?.[0] || null;
-                const paidAmount = Number(rec.amount || 0);
-                const discountAmount = Number(rec.discount_amount || 0);
-                const totalCredit = paidAmount + discountAmount; // العميل يتم تخفيض مديونيته بالمُحصل + الخصم
-
-                const lines = [
-                    // 1. مدين: حساب الصندوق/البنك بالمبلغ المحصل الفعلي
-                    { header_id: header.id, account_id: rec.safe_bank_acc_id, debit: paidAmount, credit: 0, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes },
-                    // 2. دائن: حساب العميل بإجمالي المبلغ (المحصل + الخصم)
-                    { header_id: header.id, account_id: rec.partner_acc_id, debit: 0, credit: totalCredit, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes }
-                ];
-
-                // 3. مدين: حساب الخصم المسموح به (إذا وجد)
-                if (discountAmount > 0 && rec.discount_acc_id) {
-                    lines.push({ 
-                        header_id: header.id, 
-                        account_id: rec.discount_acc_id, 
-                        debit: discountAmount, 
-                        credit: 0, 
-                        partner_id: rec.partner_id, 
-                        project_id: mainProjectId, 
-                        notes: rec.discount_notes || 'خصم مسموح به' 
-                    });
-                }
-
-                await supabase.from('journal_lines').insert(lines);
-
-                // تحديث الفاتورة: نزيد المبلغ المدفوع بـ (المحصل + الخصم)
-                if (rec.invoice_id) {
-                    const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
-                    await supabase.from('invoices').update({ paid_amount: (inv?.paid_amount || 0) + totalCredit }).eq('id', rec.invoice_id);
-                }
-            }
-
-            await supabase.from('receipt_vouchers').update({ status: 'مُعتمد' }).in('id', selectedIds);
-            alert("✅ تم الترحيل بنجاح");
-            fetchFullData();
-            setSelectedIds([]);
-        } catch (error: any) {
-            alert("خطأ أثناء الترحيل: " + error.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // =========================================================================
-    // 🔙 10. فك الترحيل (Unpost) - 🚀 محدث لدعم عكس الخصم
-    // =========================================================================
-    const handleUnpostSelected = async () => {
-        if (!selectedIds.length || !permissions.canUnpost) return;
-        setIsLoading(true);
-        try {
-            await supabase.from('journal_headers').delete().in('reference_id', selectedIds);
-            
-            const toUnpost = allData.filter(r => selectedIds.includes(r.id) && r.invoice_id && r.status === 'مُعتمد');
-            for (const rec of toUnpost) {
-                const totalReversed = Number(rec.amount || 0) + Number(rec.discount_amount || 0);
-                const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
-                await supabase.from('invoices').update({ paid_amount: Math.max(0, (inv?.paid_amount || 0) - totalReversed) }).eq('id', rec.invoice_id);
-            }
-
-            await supabase.from('receipt_vouchers').update({ status: 'مسودة' }).in('id', selectedIds);
-            alert("✅ تم فك الترحيل بنجاح");
-            fetchFullData();
-            setSelectedIds([]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // =========================================================================
-    // 🔙 11. إرجاع السداد (Refund) - 🚀 محدث لدعم عكس الخصم
-    // =========================================================================
-    const handleRefundSelected = async () => {
-        if (!selectedIds.length) return;
-        if (!confirm("⚠️ هل أنت متأكد من إرجاع السداد؟ سيتم حذف القيود المالية وإعادة مديونية الفواتير كأنها لم تُدفع.")) return;
-
-        setIsLoading(true);
-        try {
-            const toRefund = allData.filter(r => selectedIds.includes(r.id) && r.status === 'مُعتمد');
-
-            for (const rec of toRefund) {
-                await supabase.from('journal_headers').delete().eq('reference_id', rec.id);
-
-                if (rec.invoice_id) {
-                    const totalReversed = Number(rec.amount || 0) + Number(rec.discount_amount || 0);
-                    const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
-                    if (inv) {
-                        const newAmount = Math.max(0, Number(inv.paid_amount || 0) - totalReversed);
-                        await supabase.from('invoices').update({ paid_amount: newAmount }).eq('id', rec.invoice_id);
-                    }
-                }
-            }
-
-            await supabase.from('receipt_vouchers').update({ status: 'مسترجع' }).in('id', selectedIds);
-
-            alert("✅ تم إرجاع السداد بنجاح");
-            fetchFullData();
-            setSelectedIds([]);
-        } catch (err: any) {
-            alert("خطأ أثناء إرجاع السداد: " + err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // =========================================================================
-    // 📝 12. الإضافة، التعديل، والحذف
-    // =========================================================================
-    const handleAddNew = () => {
-        if (!permissions.canAdd) return alert("ليست لديك صلاحية الإضافة");
-        setCurrentRecord({ date: new Date().toISOString().split('T')[0], payment_method: 'نقدي (كاش)', status: 'مسودة', project_ids: [], selected_projects: [] });
-        setIsEditModalOpen(true);
-    };
-
-    const handleEdit = (rec: any) => {
-        if (!canUserEdit(rec)) return alert("لا يمكن تعديل سند مُعتمد أو لا تملك الصلاحية");
-        setCurrentRecord(rec);
-        setIsEditModalOpen(true);
-    };
-
-    const handleDeleteSelected = async () => {
-        if (!confirm("حذف السندات؟") || !permissions.canDelete) return;
-        
-        const postedExists = allData.some(r => selectedIds.includes(r.id) && r.status === 'مُعتمد');
-        if (postedExists) return alert("لا يمكن حذف سندات مُرحلة، قم بفك الترحيل أولاً");
-
-        await supabase.from('receipt_vouchers').delete().in('id', selectedIds);
-        fetchFullData();
-        setSelectedIds([]);
     };
 
     return {
         receipts, allFiltered, isLoading, globalSearch, setGlobalSearch,
         selectedIds, setSelectedIds, currentPage, setCurrentPage,
         rowsPerPage, setRowsPerPage, kpis, isEditModalOpen, setIsEditModalOpen,
-        currentRecord, setCurrentRecord, handleAddNew, handleEdit, handleSave, // 👈 تم إضافة handleSave هنا
-        handlePostSelected, handleUnpostSelected, handleRefundSelected, handleDeleteSelected, 
+        currentRecord, setCurrentRecord, 
+        
+        handleAddNew: () => { 
+            if (!permissions.canAdd) return showToast("ليست لديك صلاحية الإضافة", "error");
+            setCurrentRecord({ date: new Date().toISOString().split('T')[0], payment_method: 'نقدي (كاش)', status: 'مسودة', project_ids: [], selected_projects: [] }); 
+            setIsEditModalOpen(true); 
+        }, 
+        handleEdit: (rec: any) => { 
+            if (canUserEdit(rec)) { setCurrentRecord(rec); setIsEditModalOpen(true); }
+            else showToast("لا يمكن تعديل سند مُعتمد", "warning");
+        }, 
+        
+        handleSave: (record: any) => saveMutation.mutate(record), 
+        handlePostSelected: () => { if(permissions.canPost) postMutation.mutate(); }, 
+        handleUnpostSelected: () => { if(permissions.canUnpost) unpostMutation.mutate(); }, 
+        handleRefundSelected: () => { if(confirm("هل أنت متأكد من إرجاع السداد؟")) unpostMutation.mutate(); }, 
+        handleDeleteSelected: () => { if(confirm("تأكيد الحذف؟") && permissions.canDelete) deleteMutation.mutate(); }, 
+        
         focusedIndex, setFocusedIndex, handleTableKeyDown,
-        permissions, setPermissions, canUserEdit, fetchFullData 
+        permissions, canUserEdit
     };
 }

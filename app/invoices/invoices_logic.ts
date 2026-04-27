@@ -384,9 +384,81 @@ export function useInvoicesLogic() {
     });
 
     // =========================================================================
+    // 🚀 6. السداد الفوري للفاتورة (إنشاء سند قبض + تحديث حالة الفاتورة) 💎
+    // =========================================================================
+    const payMutation = useMutation({
+        mutationFn: async (receiptData: any) => {
+            const autoNumber = `RV-${Date.now()}`;
+            
+            // 🛡️ درع حماية: تحويل أي نص فاضي إلى null عشان الداتابيز ماتضربش إيرور في حقول الـ UUID
+            const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
+
+            const finalAmount = Number(receiptData.amount || 0);
+            
+            // 🛡️ درع حماية 2: التوافق مع قيد הדاتابيز (amount > 0)
+            if (finalAmount <= 0) {
+                throw new Error("AMOUNT_ZERO");
+            }
+
+            // 📦 تجهيز الداتا بما يتطابق بالمللي مع أعمدة الجدول
+            const dataToSave = {
+                receipt_number: receiptData.receipt_number || autoNumber,
+                date: receiptData.date || new Date().toISOString().split('T')[0],
+                amount: finalAmount,
+                payment_method: receiptData.payment_method || 'نقدي (كاش)',
+                notes: receiptData.notes || `سداد دفعة من فاتورة #${receiptData.invoice_number}`,
+                
+                // الحقول المرتبطة (Foreign Keys)
+                partner_id: cleanId(receiptData.partner_id),
+                invoice_id: cleanId(receiptData.invoice_id),
+                safe_bank_acc_id: cleanId(receiptData.safe_bank_acc_id),
+                partner_acc_id: cleanId(receiptData.partner_acc_id),
+                
+                // مصفوفة المشاريع
+                project_ids: receiptData.project_ids && receiptData.project_ids.length > 0 ? receiptData.project_ids : null,
+                
+                status: 'مسودة'
+                
+                // ❌ تم إزالة حقول الخصم لأنها غير موجودة في الداتابيز
+            };
+
+            // 1. إدراج السند في جدول سندات القبض
+            const { error: receiptErr } = await supabase.from('receipt_vouchers').insert([dataToSave]);
+            if (receiptErr) throw receiptErr;
+
+            // 2. 🚀 تحديث المبلغ المدفوع في الفاتورة عشان الحالة تتغير في الجدول!
+            if (dataToSave.invoice_id) {
+                // جلب الفاتورة عشان نعرف هي مدفوع منها كام قبل كده
+                const { data: invData } = await supabase.from('invoices').select('paid_amount').eq('id', dataToSave.invoice_id).single();
+                const oldPaid = Number(invData?.paid_amount || 0);
+                const newPaid = oldPaid + finalAmount;
+
+                // تحديث الفاتورة بالمبلغ الجديد
+                const { error: invErr } = await supabase.from('invoices').update({ paid_amount: newPaid }).eq('id', dataToSave.invoice_id);
+                if (invErr) console.error("تحذير: لم يتم تحديث حالة الفاتورة، لكن السند تم إنشاؤه.", invErr);
+            }
+        },
+        onError: (err: any) => {
+            if (err.message === "AMOUNT_ZERO") {
+                showToast("المبلغ المُسدد يجب أن يكون أكبر من صفر ⚠️", "warning");
+            } else {
+                showToast("حدث خطأ أثناء إصدار سند السداد! ❌", "error");
+                console.error("❌ تفاصيل خطأ السداد:", err.message || err);
+            }
+        },
+        onSuccess: () => {
+            setIsReceiptModalOpen(false);
+            setSelectedInvoiceForPay(null);
+            showToast("تم السداد وتحديث حالة الفاتورة بنجاح ✅", "success");
+        },
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }) // 👈 Refresh اللحظي
+    });
+
+
+    // =========================================================================
     // 🔗 تجميع الحالات والتصدير
     // =========================================================================
-    const isSaving = saveMutation.isPending || postMutation.isPending || unpostMutation.isPending || deleteMutation.isPending || toggleStampMutation.isPending;
+    const isSaving = saveMutation.isPending || postMutation.isPending || unpostMutation.isPending || deleteMutation.isPending || toggleStampMutation.isPending || payMutation.isPending;
     const isLoading = isInvLoading || isProjLoading || isSaving;
 
     return {
@@ -422,6 +494,7 @@ export function useInvoicesLogic() {
         handleDeleteSelected: () => {
             if (!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي؟")) return;
             deleteMutation.mutate();
-        }
+        },
+        handleSavePayment: (record: any) => payMutation.mutate(record), // 👈 السطر السحري
     };
 }
