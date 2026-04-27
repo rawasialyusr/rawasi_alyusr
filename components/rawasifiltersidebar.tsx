@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react'; // 🚀 ضفنا useEffect هنا
+import React, { useState, useEffect } from 'react';
 import { useSidebar } from '@/lib/SidebarContext';
 
 interface RawasiSidebarProps {
@@ -12,6 +12,8 @@ interface RawasiSidebarProps {
   accentColor?: string;
   textColor?: string;
   logoPath?: string;
+  isOpenStatus?: boolean; 
+  setIsOpenStatus?: (val: boolean) => void; 
 }
 
 export default function RawasiFilterSidebar({ 
@@ -23,45 +25,26 @@ export default function RawasiFilterSidebar({
   summarySlot,
   accentColor = '#C5A059',
   textColor = '#FFFFFF',
-  logoPath = '/RYC_Logo.png'
+  logoPath = '/RYC_Logo.png',
+  isOpenStatus,
+  setIsOpenStatus
 }: RawasiSidebarProps) {
   
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
 
-  // 🚀 سحب البيانات اللي اتبعتت من الصفحات عن طريق الـ Manager
   const { summary, actions, customFilters } = useSidebar();
 
   const isOpen = isHovered || isPinned;
 
-  // 🚀 السر هنا: زق وتكشيش الصفحة (The Squeeze Effect)
+  // 🚀 إبلاغ الـ Layout بحالة السايد بار عشان يزق المحتوى
   useEffect(() => {
-    // تحديد العناصر اللي عاوزين نكشيشها
-    const elementsToMove = [document.body];
-    const mainContent = document.querySelector('main'); 
-    if (mainContent) elementsToMove.push(mainContent as HTMLElement);
+    if (setIsOpenStatus) {
+      setIsOpenStatus(isOpen);
+    }
+  }, [isOpen, setIsOpenStatus]);
 
-    // تطبيق الستايل
-    const sidebarWidth = isOpen ? '320px' : '65px';
-    
-    elementsToMove.forEach(el => {
-        el.style.transition = 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
-        el.style.marginRight = '0px'; 
-        el.style.paddingRight = sidebarWidth;
-        el.style.width = '100%'; 
-        el.style.boxSizing = 'border-box';
-    });
-
-    // تنظيف عند الخروج عشان الصفحة ترجع لطبيعتها لو السايد بار اتشال
-    return () => {
-      elementsToMove.forEach(el => {
-        el.style.paddingRight = '0px';
-      });
-    };
-  }, [isOpen]);
-
-  // 🚀 بث أحداث البحث (Events) عشان الـ Manager يلقطها
   const handleSearch = (val: string) => {
     if (onSearch) onSearch(val);
     window.dispatchEvent(new CustomEvent('globalSearch', { detail: val }));
@@ -75,8 +58,9 @@ export default function RawasiFilterSidebar({
   return (
     <>
       <style>{`
+        /* 🚀 عرض السايد بار */
         .filter-sidebar {
-          width: ${isOpen ? '320px' : '65px'};
+          width: ${isOpen ? '280px' : '65px'};
           background: linear-gradient(180deg, rgba(67, 52, 46, 0.98) 0%, rgba(140, 106, 93, 0.4) 100%);
           backdrop-filter: blur(25px) saturate(180%);
           -webkit-backdrop-filter: blur(25px) saturate(180%);
@@ -86,7 +70,7 @@ export default function RawasiFilterSidebar({
           right: 0;
           top: 0;
           z-index: 1000;
-          transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: width 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
           overflow: hidden;
           box-shadow: -10px 0 30px rgba(0,0,0,0.2);
           color: ${textColor};
@@ -107,7 +91,7 @@ export default function RawasiFilterSidebar({
         }
 
         .filter-content {
-          width: 320px; padding: 25px; opacity: ${isOpen ? 1 : 0};
+          width: 280px; padding: 25px 20px; opacity: ${isOpen ? 1 : 0};
           transform: translateX(${isOpen ? '0' : '40px'}); transition: all 0.4s ease;
           display: flex; flex-direction: column; height: 100%; overflow-y: auto; overflow-x: hidden;
         }
@@ -122,7 +106,7 @@ export default function RawasiFilterSidebar({
           border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;
         }
         
-        .sidebar-logo-img { width: 120px; height: auto; filter: drop-shadow(0 0 10px rgba(0,0,0,0.2)); }
+        .sidebar-logo-img { width: 100px; height: auto; filter: drop-shadow(0 0 10px rgba(0,0,0,0.2)); }
 
         .action-grid {
           display: flex; flex-direction: column; gap: 8px; margin-bottom: 25px; flex-shrink: 0;
@@ -146,6 +130,9 @@ export default function RawasiFilterSidebar({
           cursor: pointer; display: flex; align-items: center; justify-content: center;
           transition: 0.3s; z-index: 1001; backdrop-filter: blur(5px);
         }
+        
+        /* 🚀 تنسيق التاريخ */
+        .date-label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 5px; }
       `}</style>
 
       <aside className="filter-sidebar" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
@@ -160,17 +147,15 @@ export default function RawasiFilterSidebar({
         <div className="filter-content">
           <div className="sidebar-logo-container">
             <img src={logoPath} alt="Logo" className="sidebar-logo-img" />
-            <h2 style={{ fontSize: '18px', fontWeight: 900, marginTop: '10px', color: accentColor }}>{title}</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 900, marginTop: '10px', color: accentColor }}>{title}</h2>
           </div>
           
-          {/* دمج السامري من الـ Props القديمة أو من الـ Context الجديد */}
           {(summarySlot || summary) && (
             <div style={{ marginBottom: '25px' }}>
               {summary || summarySlot}
             </div>
           )}
           
-          {/* دمج الأكشنز من الـ Props القديمة أو من الـ Context الجديد */}
           {(extraActions || actions) && (
             <>
               <div className="filter-section-title">⚡ عمليات الصفحة</div>
@@ -183,7 +168,6 @@ export default function RawasiFilterSidebar({
           <div className="filter-section-title">🔍 البحث والفلترة</div>
           <div style={{ flex: 1 }}>
             
-            {/* 1️⃣ خانة البحث */}
             <input 
               type="text" 
               className="filter-input" 
@@ -191,15 +175,12 @@ export default function RawasiFilterSidebar({
               onChange={(e) => handleSearch(e.target.value)} 
             />
 
-            {/* 2️⃣ حاوية التواريخ (ترتيب رأسي) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              
-              {/* تاريخ البداية */}
               <div style={{ position: 'relative' }}>
                 <label className="date-label">من تاريخ</label>
                 <input 
                   type="date" 
-                  className="filter-input date-field" 
+                  className="filter-input" 
                   style={{ marginBottom: 0 }}
                   onChange={(e) => {
                     const d = { ...dates, start: e.target.value };
@@ -209,12 +190,11 @@ export default function RawasiFilterSidebar({
                 />
               </div>
 
-              {/* تاريخ النهاية */}
               <div style={{ position: 'relative' }}>
                 <label className="date-label">إلى تاريخ</label>
                 <input 
                   type="date" 
-                  className="filter-input date-field" 
+                  className="filter-input" 
                   style={{ marginBottom: 0 }}
                   onChange={(e) => {
                     const d = { ...dates, end: e.target.value };
@@ -225,14 +205,10 @@ export default function RawasiFilterSidebar({
               </div>
             </div>
 
-            {/* 3️⃣ الفلاتر المخصصة */}
             {(extraFilters || customFilters) && (
               <div className="animate-fade-in" style={{ 
-                marginTop: '20px', 
-                padding: '15px', 
-                background: 'rgba(0,0,0,0.2)', 
-                borderRadius: '15px', 
-                border: '1px solid rgba(255,255,255,0.05)' 
+                marginTop: '20px', padding: '15px', background: 'rgba(0,0,0,0.2)', 
+                borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' 
               }}>
                   <div className="filter-section-title" style={{ marginBottom: '10px', color: '#94a3b8', fontSize: '9px' }}>فلاتر إضافية</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

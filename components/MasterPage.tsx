@@ -47,14 +47,20 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
   return (
     <div className="clean-page">
       <style>{`
-        .clean-page { padding: 25px 30px 25px 0px !important; margin-right: -25px !important; direction: rtl; min-height: 100vh; }
-
+        .clean-page { 
+      padding: 25px 0px 25px 15px !important; /* 👈 غيرنا القيم لترك مسافة أمان يساراً */
+      margin-right: 0px !important;           /* 👈 غيرنا -25px إلى 0px لتعمل الزقة صح */
+      direction: rtl; 
+      min-height: 100vh; 
+  }
         /* 🎬 هيدر متوازن وأنيق */
-        .master-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 30px; padding-right: 15px; position: relative; z-index: 1000;
-            animation: elegantFloat 4s ease-in-out infinite;
-        }
+       .master-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 30px; 
+      padding-right: 0px !important;          /* 👈 تصفير لمنع التداخل */
+      position: relative; z-index: 1000;
+      animation: elegantFloat 4s ease-in-out infinite;
+  }
         @keyframes elegantFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
         /* 👑 كارت المستخدم المتناسق */
@@ -101,11 +107,12 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
         .title-area p { color: #64748b; fontSize: 14px; fontWeight: 600; marginTop: 4px; }
 
         .glass-container {
-            background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(15px);
-            border-radius: 0px 0px 0px 32px !important; padding: 20px;
-            border: 1px solid rgba(255,255,255,0.8); border-right: none !important;
-            box-shadow: -5px 0 20px rgba(0,0,0,0.02);
-        }
+      background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(15px);
+      border-radius: 0px 0px 0px 32px !important; 
+      padding: 20px 15px 20px 20px;           /* 👈 وضعنا 15px يميناً كمسافة أمان عن السايد بار */
+      border: 1px solid rgba(255,255,255,0.8); border-right: none !important;
+      box-shadow: -5px 0 20px rgba(0,0,0,0.02);
+  }
       `}</style>
 
       <header className="master-header">
