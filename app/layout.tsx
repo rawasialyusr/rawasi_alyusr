@@ -16,12 +16,15 @@ import QueryProvider from '../components/QueryProvider';
 
 const cairo = Cairo({ 
   subsets: ["arabic"],
-  weight: ["400", "700", "900"],
+  weight: ["400", "500", "700", "900"], // أضفنا وزن 500 للجماليات
   display: 'swap',
+  variable: '--font-cairo', // تحويله لـ CSS Variable لأفضل أداء
 });
 
 export const viewport = {
   themeColor: THEME.coffeeDark,
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export const metadata = {
@@ -36,40 +39,52 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl">
-      <body className={cairo.className} style={{ position: 'relative', minHeight: '100vh', color: THEME.text }}>
+    // 🛡️ suppressHydrationWarning يمنع رسائل الخطأ المزعجة في الكونسول
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body 
+        className={`${cairo.className} ${cairo.variable}`} 
+        style={{ 
+          position: 'relative', 
+          minHeight: '100vh', 
+          margin: 0, 
+          backgroundColor: THEME.sandLight,
+          color: THEME.text 
+        }}
+      >
         
-        {/* 🎨 ستايل الهوية البصرية السيادية */}
+        {/* 🎨 ستايل الهوية البصرية السيادية (تحسين الأداء) */}
         <style dangerouslySetInnerHTML={{__html: `
           .bg-master-container {
             position: fixed; inset: 0; z-index: -4; 
             background-color: ${THEME.sandLight}; 
             overflow: hidden;
+            pointer-events: none;
           }
           .bg-image-base {
             position: absolute; inset: 0;
             background-image: url('/ryc_login.jpeg'); 
             background-size: cover;
             background-position: center;
-            filter: blur(50px); 
+            filter: blur(60px); 
             transform: scale(1.1); 
-            opacity: 0.6; 
+            opacity: 0.45; 
           }
           .bg-glass-tint {
             position: absolute; inset: 0; z-index: -3;
             background: linear-gradient(
               135deg, 
-              rgba(244, 241, 238, 0.85) 0%, 
-              rgba(255, 255, 255, 0.9) 50%,
-              rgba(197, 160, 89, 0.15) 100% 
+              rgba(244, 241, 238, 0.8) 0%, 
+              rgba(255, 255, 255, 0.85) 50%,
+              rgba(197, 160, 89, 0.1) 100% 
             );
-            backdrop-filter: blur(10px) saturate(120%);
+            backdrop-filter: blur(10px);
           }
           .watermark-bg {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 60vw; max-width: 700px; opacity: 0.03; z-index: -2;
+            width: 50vw; max-width: 600px; opacity: 0.035; z-index: -2;
             pointer-events: none; user-select: none;
           }
+          @media print { .no-print { display: none !important; } }
         `}} />
 
         <div className="bg-master-container no-print">
@@ -77,18 +92,17 @@ export default function RootLayout({
             <div className="bg-glass-tint"></div>
         </div>
 
-        <img src="/RYC_Logo.png" alt="علامة مائية" className="watermark-bg no-print" />
+        <img src="/RYC_Logo.png" alt="watermark" className="watermark-bg no-print" />
 
         <NextTopLoader 
             color={THEME.goldAccent} 
-            height={4} 
+            height={3} 
             showSpinner={false} 
-            shadow={`0 0 15px ${THEME.goldAccent}`} 
+            shadow={`0 0 10px ${THEME.goldAccent}`} 
             zIndex={99999} 
         />
 
         <GlobalErrorBoundary>
-            {/* 🧠 2. تغليف النظام بمحرك الأوفلاين الجديد (QueryProvider) */}
             <QueryProvider>
                 <Providers>
                     <ToastProvider>
@@ -96,12 +110,13 @@ export default function RootLayout({
                             <AuthGuard> 
                                 <PermissionsProvider>
                                     <SidebarProvider> 
+                                        {/* LayoutClient هو المتحكم في حركة السايد بار والصفحة */}
                                         <LayoutClient>
-                                            <div style={{ position: 'relative', zIndex: 10 }}>
+                                            <div style={{ position: 'relative', zIndex: 1 }}>
                                                 {children}
                                             </div>
                                         </LayoutClient>
-                                    </SidebarProvider>
+                                    </SidebarProvider> 
                                 </PermissionsProvider>
                             </AuthGuard>
                         </AutoLogoutWrapper>

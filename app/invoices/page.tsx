@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom'; // 🚀 استدعاء البورتال لتحرير المودال
 import { useInvoicesLogic } from './invoices_logic';
 import { THEME } from '@/lib/theme';
 import { formatCurrency, getInvoiceSummaryAndAging } from '@/lib/helpers'; 
@@ -35,6 +36,12 @@ export default function InvoicesPage() {
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
+
+  // 🚀 حماية الـ Portal من مشاكل الـ SSR في Next.js
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const dataToProcess = useMemo(() => (allFiltered?.length > 0 ? allFiltered : invoices), [allFiltered, invoices]);
   const result = useMemo(() => getInvoiceSummaryAndAging(dataToProcess.filter((i:any)=> i.status !== 'مسودة')), [dataToProcess]);
@@ -260,14 +267,10 @@ export default function InvoicesPage() {
         <div className="clickable-rows">
           {/* 👈 تطبيق مكونات العرض الذكية (RawasiSmartTable) */}
           <RawasiSmartTable 
-            data={dataToProcess.slice((currentPage-1)*rowsPerPage, currentPage*rowsPerPage)} 
-            columns={invoiceColumns} 
-            title="" 
-            onRowClick={(row) => {
-                if(can('invoices', 'edit') || can('invoices', 'view')) {
-                   handleEdit(row);
-                }
-            }} 
+              data={dataToProcess.slice((currentPage-1)*rowsPerPage, currentPage*rowsPerPage)} 
+              columns={invoiceColumns} 
+              title="" 
+              onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
           />
           <div style={{ padding: '20px', display: 'flex', justifyContent: 'center' }}>
             <PaginationPanel totalItems={dataToProcess.length} currentPage={currentPage} rowsPerPage={rowsPerPage} onPageChange={setCurrentPage} onRowsChange={setRowsPerPage} />
@@ -277,11 +280,11 @@ export default function InvoicesPage() {
 
       {/* 3. المودالز */}
       
-      {/* 🚀 2. تغليف المودال بحاوية منبثقة (Portal Wrapper) عشان ميظهرش تحت الصفحة، وربط دالة الحفظ */}
-      {isReceiptModalOpen && (
+      {/* 🚀 الحل السحري: استخدام createPortal لمودال السداد لكسر قيود إطار الصفحة */}
+      {mounted && isReceiptModalOpen && createPortal(
         <div style={{ 
-            position: 'fixed', inset: 0, zIndex: 9999999, 
-            background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(10px)',
+            position: 'fixed', inset: 0, zIndex: 999999999, 
+            background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(10px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', overflowY: 'auto', padding: '20px'
         }}>
             <div style={{ width: '100%', maxWidth: '900px', position: 'relative' }}>
@@ -293,12 +296,30 @@ export default function InvoicesPage() {
                     onSave={handleSavePayment} // 👈 3. ربطنا المودال بدالة الحفظ الحقيقية اللي بتأثر في قاعدة البيانات
                 />
             </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {isEditModalOpen && <InvoiceFormModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} record={currentRecord} setRecord={setCurrentRecord} onSave={handleSave} projects={projects} />}
+      {isEditModalOpen && (
+          <InvoiceFormModal 
+            isOpen={isEditModalOpen} 
+            onClose={() => setIsEditModalOpen(false)} 
+            record={currentRecord} 
+            setRecord={setCurrentRecord} 
+            onSave={handleSave} 
+            projects={projects} 
+          />
+      )}
       
-      {isPrintModalOpen && <InvoicePrintModal isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} data={printData} />}
+      {/* 🚀 غيرنا data إلى record وتأكدنا إن isOpen بـ true وبعتنا projects بذكاء */}
+      {isPrintModalOpen && (
+          <InvoicePrintModal 
+            isOpen={true} 
+            onClose={() => setIsPrintModalOpen(false)} 
+            record={printData} 
+            projects={projects} // 👈 دي اللي كانت ناقصة عشان كده مكانش لاقي أسماء العماير!
+          />
+      )}
       
     </MasterPage>
   );

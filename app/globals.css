@@ -381,17 +381,31 @@ td {
   .app-branding { top: 16px; right: 16px; }
 
   .summary-bar { flex-direction: column; gap: 12px; border-radius: var(--radius-lg); margin-bottom: 15px; }
+  
 }
 
+/* 🖨️ وضع الطباعة */
 /* 🖨️ وضع الطباعة */
 @media print {
   .no-print, button, nav, .sidebar, .btn, .app-branding, .summary-bar {
     display: none !important;
   }
+  
+  /* 🚨 السر هنا: إزالة التصغير والـ transform اللي كان بيرحل الصفحة يمين! */
+  html, body {
+    zoom: 1 !important; 
+    transform: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   body {
     background: white !important;
     color: black !important;
   }
+  
   .table-container { box-shadow: none; border: none; }
   table { border: 1px solid #ddd; }
   thead th { border-bottom: 2px solid #000; color: #000; }

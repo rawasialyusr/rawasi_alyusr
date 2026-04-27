@@ -12,6 +12,10 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
 
+  // 🛡️ إضافة درع حماية الهيدريشن (لمنع الخطأ في الكونسول)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   useEffect(() => {
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -113,6 +117,17 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
       border: 1px solid rgba(255,255,255,0.8); border-right: none !important;
       box-shadow: -5px 0 20px rgba(0,0,0,0.02);
   }
+
+        /* 📱 🚀 تعديلات الموبايل الإضافية بدون حذف أي سطر */
+        @media (max-width: 768px) {
+          .clean-page { padding: 10px 5px !important; }
+          .master-header { flex-direction: column; align-items: flex-start; gap: 15px; margin-bottom: 20px; }
+          .title-area h1 { font-size: 22px !important; }
+          .title-area p { font-size: 12px !important; }
+          .glass-container { padding: 15px 10px !important; border-radius: 20px !important; }
+          .u-info-text { display: none; } /* إخفاء الاسم لتوفير مساحة للهيدر في الموبايل */
+          .imperial-trigger { padding: 5px 10px; align-self: flex-end; }
+        }
       `}</style>
 
       <header className="master-header">
@@ -139,8 +154,8 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
         </div>
       </header>
 
-      {/* 🚀 الـ Portal الموزون */}
-      {isMenuOpen && typeof document !== 'undefined' && createPortal(
+      {/* 🚀 الـ Portal الموزون - تمت إضافة شرط الـ mounted لمنع خطأ الهيدريشن */}
+      {mounted && isMenuOpen && typeof document !== 'undefined' && createPortal(
         <div className="supreme-dropdown" style={{ top: coords.top, left: coords.left }} onClick={(e) => e.stopPropagation()}>
             <div className="drop-item" onClick={() => router.push('/profile')}><span>👤</span> بروفيلي</div>
             <div className="drop-item" onClick={() => router.push('/settings')}><span>⚙️</span> الإعدادات</div>

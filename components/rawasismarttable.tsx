@@ -11,11 +11,11 @@ const THEME = {
 };
 
 interface Column {
-    header?: string; // جعلناه اختيارياً لدعم الـ Label
-    label?: string;  // أضفنا Label ليطابق كود الصفحة
-    key?: string;    // أضفنا key ليطابق كود الصفحة
+    header?: string;
+    label?: string;
+    key?: string;
     accessor?: string;
-    render?: (row: any) => React.ReactNode; // تعديل التوقيع ليناسب استخدامنا
+    render?: (row: any) => React.ReactNode;
 }
 
 interface RawasiSmartTableProps {
@@ -23,18 +23,18 @@ interface RawasiSmartTableProps {
     data: any[];
     columns: Column[];
     fileName?: string;
-    selectable?: boolean; // 👈 إضافة خاصية التحديد
+    selectable?: boolean;
     selectedIds?: any[];
     onSelectionChange?: (ids: any[]) => void;
+    onRowClick?: (row: any) => void; // 👈 أضف هذا السطر
     emptyMessage?: string;
 }
 
 export default function RawasiSmartTable({ 
     title, data, columns, fileName = 'Rawasi_Report', 
-    selectable, selectedIds = [], onSelectionChange, emptyMessage 
+    selectable, selectedIds = [], onSelectionChange, onRowClick, emptyMessage // 👈 أضفها هنا
 }: RawasiSmartTableProps) {
     
-    // 📊 دالة تصدير Excel (معدلة لتقرأ الـ Key والـ Accessor)
     const exportToExcel = () => {
         if (!data || data.length === 0) return toast.error('عفواً، لا توجد بيانات للتصدير ❌');
         const toastId = toast.loading('جاري تحضير ملف Excel... ⏳');
@@ -58,7 +58,6 @@ export default function RawasiSmartTable({
         }
     };
 
-    // 📄 دالة تصدير PDF
     const exportToPDF = () => {
         if (!data || data.length === 0) return toast.error('عفواً، لا توجد بيانات للتصدير ❌');
         const toastId = toast.loading('جاري تحضير ملف PDF... ⏳');
@@ -68,7 +67,7 @@ export default function RawasiSmartTable({
             const tableRows = data.map(row => columns.map(col => String(row[col.key || col.accessor || ''] || '---')));
             (doc as any).autoTable({
                 head: [tableColumn], body: tableRows,
-                styles: { halign: 'right', font: 'courier' }, // ملاحظة: الـ PDF العادي لا يدعم العربي بسهولة بدون خط خارجي
+                styles: { halign: 'right', font: 'courier' },
                 headStyles: { fillColor: [67, 52, 46] }
             });
             doc.save(`${fileName}.pdf`);
@@ -78,12 +77,18 @@ export default function RawasiSmartTable({
         }
     };
 
-    // 🎬 Animations
     const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
     const itemVariants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
     return (
-        <div style={{ background: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(15px)', borderRadius: '20px', padding: '20px', border: `1px solid rgba(255,255,255,0.5)`, boxShadow: '0 8px 32px rgba(0,0,0,0.05)' }}>
+        <div style={{ 
+            background: 'rgba(255, 255, 255, 0.7)', 
+            backdropFilter: 'blur(15px)', 
+            borderRadius: '20px', 
+            padding: '20px', 
+            border: `1px solid rgba(255,255,255,0.5)`, 
+            boxShadow: '0 8px 32px rgba(0,0,0,0.05)' 
+        }}>
             
             {title && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -124,9 +129,9 @@ export default function RawasiSmartTable({
                             <tr><td colSpan={columns.length + (selectable ? 1 : 0)} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>{emptyMessage || 'لا توجد بيانات'}</td></tr>
                         ) : (
                             data.map((row, rowIndex) => (
-                                <motion.tr key={row.id || rowIndex} variants={itemVariants} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+                               <motion.tr key={row.id || rowIndex} variants={itemVariants} onClick={() => onRowClick?.(row)} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', cursor: onRowClick ? 'pointer' : 'default' }}>
                                     {selectable && (
-                                        <td style={{ padding: '12px 15px' }}>
+                                        <td style={{ padding: '12px 15px' }} onClick={(e) => e.stopPropagation()}>
                                             <input 
                                                 type="checkbox" 
                                                 checked={selectedIds.includes(row.id)}
@@ -142,7 +147,6 @@ export default function RawasiSmartTable({
                                     )}
                                     {columns.map((col, colIndex) => (
                                         <td key={colIndex} style={{ padding: '12px 15px' }}>
-                                            {/* 🚀 السطر السحري: دعم الـ Render المخصص أو الـ Key أو الـ Accessor */}
                                             {col.render ? col.render(row) : (row[col.key || col.accessor || ''] || '---')}
                                         </td>
                                     ))}
