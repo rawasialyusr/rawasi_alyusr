@@ -6,15 +6,71 @@ import { formatCurrency, tafqeet } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context'; 
 import ZatcaQRCode from './ZatcaQRCode'; 
 import { QRCodeSVG } from 'qrcode.react'; 
+import { supabase } from '@/lib/supabase'; // 🚀 استدعاء Supabase
 
 // --- [المودال الرئيسي لطباعة ومعاينة الفاتورة] ---
 export default function InvoicePrintModal({ isOpen, onClose, record, setRecord = () => {}, onSave, isSaving, projects }: any) {
     const { showToast } = useToast(); 
     const [mounted, setMounted] = useState(false); 
+    const [creatorInfo, setCreatorInfo] = useState<{username: string, fullName: string} | null>(null); 
 
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // =========================================================================
+    // 🚀 جلب بيانات منشئ الفاتورة (فلتر كاسح لكل احتمالات أسماء الأعمدة)
+    // =========================================================================
+    useEffect(() => {
+        const fetchCreatorInfo = async () => {
+            if (!isOpen) return;
+
+            try {
+                // 1. جلب بيانات الجلسة الحالية عشان نستخدمها كبديل قوي لو الفاتورة جديدة
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                // 2. تحديد الـ ID (بتاع اللي كرت الفاتورة، ولو مفيش يبقى اللي فاتح السيستم دلوقتي)
+                const targetUserId = record?.created_by || session?.user?.id;
+
+                let fetchedFullName = '';
+                let fetchedUsername = '';
+
+                if (targetUserId) {
+                    // سحب *كل* الأعمدة من جدول profiles عشان نتفادى مشكلة اسم العمود
+                    const { data: profile, error } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', targetUserId)
+                        .single();
+                    
+                    if (!error && profile) {
+                        // سحب الاسم الفعلي من أي عمود محتمل
+                        fetchedFullName = profile.full_name || profile.name || profile.nickname || '';
+                        // سحب اليوزر نيم
+                        fetchedUsername = profile.username || profile.email || '';
+                    }
+                }
+
+                // 3. خطة بديلة: لو البروفايل فاضي، هنسحب من الميتا-داتا بتاعت الـ Session نفسه
+                if (!fetchedFullName && session?.user) {
+                    fetchedFullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
+                }
+                if (!fetchedUsername && session?.user) {
+                    fetchedUsername = session.user.email ? session.user.email.split('@')[0] : '';
+                }
+
+                // 4. اعتماد البيانات النهائية
+                setCreatorInfo({ 
+                    username: fetchedUsername || 'مستخدم النظام', 
+                    fullName: fetchedFullName || record?.created_by_name || 'المحاسب المعتمد' 
+                });
+
+            } catch (err) {
+                console.error("خطأ في جلب بيانات المحاسب للباركود:", err);
+            }
+        };
+        fetchCreatorInfo();
+    }, [isOpen, record?.created_by]);
 
     // =========================================================================
     // 🚀 سحب المشاريع بذكاء استراتيجي (دعم المصفوفات، النصوص، والبيانات الجاهزة)
@@ -148,23 +204,31 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
         setTimeout(() => { document.title = originalTitle; }, 1000);
     };
 
-    const accountantName = record.users?.name || record.created_by_name || record.profiles?.full_name || 'المحاسب المعتمد';
-    const signatureData = `مُعتمد إلكترونياً\nبواسطة: ${accountantName}\nالتاريخ: ${new Date().toLocaleDateString('ar-EG')}`;
+    // 🚀 تهيئة بيانات التوقيع والباركود
+    const finalFullName = creatorInfo?.fullName || 'المحاسب المعتمد';
+    
+    // 🚀 استخراج تاريخ ووقت إنشاء الفاتورة من الداتابيز (created_at) بدلاً من وقت الطباعة
+    const creationDateObj = record?.created_at ? new Date(record.created_at) : (record?.date ? new Date(record.date) : new Date());
+    const creationTime = creationDateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const creationDate = creationDateObj.toLocaleDateString('ar-EG');
+    
+    // 🚀 الباركود يحمل اسم المحاسب الحقيقي والتاريخ والوقت فقط (بدون يوزرنيم للأمان)
+    const signatureData = `تم الاعتماد إلكترونياً\nتاريخ الإصدار: ${creationDate}\nوقت الإصدار: ${creationTime}\nبواسطة: ${finalFullName}`;
+    
     const amountInWords = tafqeet(Number(record.total_amount || 0));
 
-    // 📦 محتوى المعاينة والطباعة
+    // 📦 محتوى المعاينة 
     const modalContent = (
         <div className="print-modal-overlay">
             
             <style>{`
                 body { overflow: hidden !important; }
 
-                /* 💻 شاشة المعاينة */
                 .print-modal-overlay {
                     position: fixed !important; 
                     inset: 0 !important;
-                    background: rgba(15, 23, 42, 0.85) !important;
-                    backdrop-filter: blur(8px) !important;
+                    background: rgba(40, 24, 10, 0.85) !important; 
+                    backdrop-filter: blur(10px) !important; 
                     z-index: 999999999 !important;
                     display: flex !important; 
                     flex-direction: column !important; 
@@ -192,7 +256,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 .action-btn.close { background: #fee2e2; color: #dc2626; }
                 .action-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
 
-                /* 📄 تصميم الورقة في المعاينة */
                 .a4-preview-box {
                     width: 210mm !important; 
                     min-height: 297mm !important; 
@@ -202,25 +265,39 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     margin: 0 auto 40px auto !important; 
                     box-shadow: 0 20px 50px rgba(0,0,0,0.4);
                     direction: rtl; 
-                    border-radius: 4px;
+                    border-radius: 24px !important; 
+                    overflow: hidden !important;
                     display: flex !important;
                     flex-direction: column !important; 
                     box-sizing: border-box !important; 
                 }
 
                 .inv-header { display: grid; grid-template-columns: 180px 1fr 180px; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; width: 100%; gap: 15px; }
+                
                 .header-qr { display: flex; justify-content: flex-start; } 
                 .header-center { text-align: center; }
                 .header-logo { display: flex; justify-content: flex-end; } 
                 .header-logo img { max-height: 120px; width: auto; max-width: 100%; object-fit: contain; } 
-                .qr-container { padding: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; }
+                
+                .qr-container { padding: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
 
                 .inv-title-box { text-align: center; margin-bottom: 25px; }
-                .inv-title { font-size: 22px; font-weight: 900; border: 2.5px solid #000; padding: 8px 35px; display: inline-block; background: #f8fafc; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
+                .inv-title { font-size: 22px; font-weight: 900; border: 2.5px solid #000; padding: 8px 35px; display: inline-block; background: #f8fafc; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; border-radius: 12px; }
 
                 .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-                .info-box { border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 18px 15px 12px 15px; display: flex; flex-direction: column; justify-content: center; position: relative; background: #fff; min-height: 90px; }
-                .box-label { position: absolute; top: -10px; right: 15px; background: white; padding: 0 8px; font-size: 12px; font-weight: 900; color: #475569; }
+                
+                .info-box { 
+                    border: 1.5px solid #cbd5e1; 
+                    border-radius: 16px !important; 
+                    padding: 18px 15px 12px 15px; 
+                    display: flex; flex-direction: column; justify-content: center;
+                    position: relative; background: #fff; min-height: 90px; 
+                }
+                .box-label { 
+                    position: absolute; top: -10px; right: 20px; background: white; 
+                    padding: 0 10px; font-size: 12px; font-weight: 900; color: #475569; 
+                    border-radius: 20px; 
+                }
 
                 .inner-table { width: 100%; border-collapse: collapse; }
                 .inner-table td { padding: 4px 0; font-size: 13px; vertical-align: middle; }
@@ -228,14 +305,14 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 .value-cell { text-align: right; font-weight: 900; color: #0f172a; }
                 .value-highlight { color: ${THEME.primary}; font-size: 15px; font-weight: 900; }
 
-                .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px; }
+                .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px; border-radius: 12px; overflow: hidden; }
                 .inv-table th { background: #f8fafc; padding: 12px; text-align: center; border-bottom: 2px solid #94a3b8; border-top: 2px solid #94a3b8; color: #0f172a; font-weight: 900; }
                 .inv-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #1e293b; font-weight: 700; }
                 .inv-table td.desc { text-align: right; font-weight: 900; }
 
-                .inv-footer-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; gap: 40px; }
+                .inv-footer-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; flex-grow: 1; gap: 40px; }
                 .inv-amount-words { flex: 1; display: flex; flex-direction: column; }
-                .inv-amount-words .words-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 15px; border-radius: 8px; font-weight: 900; font-size: 15px; color: #0f172a; line-height: 1.6; }
+                .inv-amount-words .words-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 15px; border-radius: 16px; font-weight: 900; font-size: 15px; color: #0f172a; line-height: 1.6; }
                 
                 .signature-area { margin-top: 30px; text-align: center; align-self: flex-start; }
                 .signature-title { font-weight: 900; font-size: 13px; color: #64748b; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
@@ -244,9 +321,8 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 .inv-total-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; font-weight: 700; color: #334155; }
                 .inv-total-row.tax { color: #0284c7; }
                 .inv-total-row.discount { color: #dc2626; }
-                .inv-total-row.grand-total { border-top: 2px solid #0f172a; padding-top: 12px; margin-top: 12px; font-size: 20px; font-weight: 900; color: #0f172a; background: #f1f5f9; padding: 10px; border-radius: 8px; }
+                .inv-total-row.grand-total { border-top: 2px solid #0f172a; padding-top: 12px; margin-top: 12px; font-size: 20px; font-weight: 900; color: #0f172a; background: #f1f5f9; padding: 10px; border-radius: 12px; }
 
-                /* 🚨 الفوتر يُدفع للأسفل تلقائياً */
                 .inv-footer-contact { 
                     margin-top: auto !important; 
                     border-top: 2px solid #e2e8f0; 
@@ -257,7 +333,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     font-weight: 700; 
                 }
 
-                /* 🖨️ سحر الطباعة: إجبار التغطية الكاملة 100% لتجاوز أي تعارض */
                 @media print {
                     @page { 
                         size: A4 portrait; 
@@ -273,7 +348,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         overflow: visible !important;
                     }
 
-                    /* 🚨 إخفاء كل الموقع وراء الفاتورة تماماً من الـ DOM لمنع التشوهات */
                     body > *:not(.print-modal-overlay) {
                         display: none !important;
                     }
@@ -286,7 +360,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         visibility: visible !important; 
                     }
                     
-                    /* 🚨 الحاوية تأخذ حجم الشاشة بالكامل (لا يمين ولا يسار) */
                     .print-modal-overlay { 
                         position: absolute !important; 
                         left: 0 !important; 
@@ -301,13 +374,12 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         margin: 0 !important; 
                     }
                     
-                    /* 🚨 الورقة تطابق حجم الـ A4 وتملأه من الزاوية (0,0) بقوة الـ Absolute */
                     .a4-preview-box { 
                         position: absolute !important; 
                         top: 0 !important; 
                         left: 0 !important; 
-                        width: 100% !important; /* 100% من عرض الـ 210mm */
-                        height: 100% !important; /* 100% من طول الـ 297mm (وهنا الديل هينزل لآخر الصفحة) */
+                        width: 100% !important; 
+                        height: 100% !important; 
                         margin: 0 !important; 
                         box-shadow: none !important; 
                         border: none !important;
@@ -316,6 +388,7 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         direction: rtl !important; 
                         display: flex !important;
                         flex-direction: column !important;
+                        border-radius: 0 !important; 
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
                     }
@@ -441,12 +514,13 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         <div style={{ fontSize: '13px', fontWeight: 900, marginBottom: '6px', color: '#64748b' }}>المبلغ الإجمالي كتابة (Amount in Words):</div>
                         <div className="words-box">{amountInWords}</div>
                         
-                        {/* التوقيع الإلكتروني */}
+                        {/* 🚀 التوقيع الإلكتروني والباركود */}
                         <div className="signature-area">
-                            <div className="signature-title">المحاسب المعتمد / Signature</div>
+                            <div className="signature-title">معتمد إلكترونياً من / E-Signature</div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <QRCodeSVG value={signatureData} size={75} level="M" />
-                                <div style={{ fontSize: '14px', fontWeight: 900, marginTop: '8px', color: THEME.primary }}>{accountantName}</div>
+                                {/* 👈 النص المطبوع: الاسم الفعلي للمحاسب فقط */}
+                                <div style={{ fontSize: '14px', fontWeight: 900, marginTop: '8px', color: THEME.primary }}>{finalFullName}</div>
                             </div>
                         </div>
                     </div>

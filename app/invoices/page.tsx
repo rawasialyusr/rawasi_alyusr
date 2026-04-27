@@ -181,12 +181,10 @@ export default function InvoicesPage() {
   ];
 
   // =========================================================================
-  // 🎛️ أزرار السايد بار (مؤمنة بالصلاحيات 🛡️)
+  // 🎛️ أزرار السايد بار
   // =========================================================================
   const sidebarActions = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      
-      {/* 🛡️ زرار إضافة فاتورة جديدة (محمي بـ SecureAction) */}
       <SecureAction module="invoices" action="create">
         <button className="btn-main-glass gold" onClick={handleAddNew}>
           ➕ إنشاء فاتورة جديدة
@@ -196,25 +194,17 @@ export default function InvoicesPage() {
       {selectedIds.length > 0 && (
         <>
           <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({selectedIds.length})</p>
-          
-          {/* 🛡️ زرار الاعتماد والترحيل */}
           <SecureAction module="invoices" action="post">
             <button className="btn-main-glass blue" onClick={handlePostSelected}>🚀 اعتماد وترحيل</button>
           </SecureAction>
-
-          {/* 🛡️ زرار التعليق */}
           <SecureAction module="invoices" action="post">
             <button className="btn-main-glass yellow" onClick={handleUnpostSelected}>🔴 تعليق الفاتورة</button>
           </SecureAction>
-
-          {/* 🛡️ زرار التعديل */}
           {selectedIds.length === 1 && (
             <SecureAction module="invoices" action="edit">
               <button className="btn-main-glass white" onClick={() => handleEdit(dataToProcess.find(i => i.id === selectedIds[0]))}>📝 تعديل البيانات</button>
             </SecureAction>
           )}
-
-          {/* 🛡️ زرار الحذف */}
           <SecureAction module="invoices" action="delete">
             <button className="btn-main-glass red" onClick={handleDeleteSelected}>🗑️ حذف نهائي</button>
           </SecureAction>
@@ -224,13 +214,11 @@ export default function InvoicesPage() {
   );
 
   return (
-    // 👈 تطبيق التغليف السيادي (MasterPage)
     <MasterPage 
       title="فواتير المبيعات" 
       subtitle="مركز إدارة المستخلصات والتحصيل المالي"
     >
       
-      {/* 1. السايد بار (مكانه الصحيح هنا لتطبيق جسر الترحيل) */}
       <RawasiSidebarManager 
         summary={
           <div className="summary-glass-card">
@@ -241,7 +229,6 @@ export default function InvoicesPage() {
         actions={sidebarActions}
         customFilters={
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* 👈 تطبيق مكونات العرض الذكية (SmartCombo) */}
                 <SmartCombo 
                     label="تصفية سريعة بالعميل"
                     icon="🔍"
@@ -260,12 +247,10 @@ export default function InvoicesPage() {
         watchDeps={[selectedIds, sidebarActions, result]}
       />
 
-      {/* 2. محتوى الصفحة */}
       {( (isLoading || permsLoading) && invoices.length === 0 ) ? (
         <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
       ) : (
         <div className="clickable-rows">
-          {/* 👈 تطبيق مكونات العرض الذكية (RawasiSmartTable) */}
           <RawasiSmartTable 
               data={dataToProcess.slice((currentPage-1)*rowsPerPage, currentPage*rowsPerPage)} 
               columns={invoiceColumns} 
@@ -278,14 +263,21 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* 3. المودالز */}
+      {/* ==================================================================== */}
+      {/* 🚀 المودالز */}
+      {/* ==================================================================== */}
       
-      {/* 🚀 الحل السحري: استخدام createPortal لمودال السداد لكسر قيود إطار الصفحة */}
+      {/* 🚨 التعديل الجذري هنا: حولنا الـ background لدرجة دافئة (بني/عسلي) */}
       {mounted && isReceiptModalOpen && createPortal(
         <div style={{ 
             position: 'fixed', inset: 0, zIndex: 999999999, 
-            background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(10px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflowY: 'auto', padding: '20px'
+            background: 'rgba(40, 24, 10, 0.85)', /* 👈 السر هنا: درجة لونية دافئة جداً */
+            backdropFilter: 'blur(10px)',
+            display: 'flex', 
+            alignItems: 'flex-start',
+            justifyContent: 'center', 
+            overflowY: 'auto', 
+            padding: '50px 20px' 
         }}>
             <div style={{ width: '100%', maxWidth: '900px', position: 'relative' }}>
                 <ReceiptVoucherModal 
@@ -293,7 +285,7 @@ export default function InvoicesPage() {
                     onClose={() => setIsReceiptModalOpen(false)} 
                     record={selectedInvoiceForPay || {}} 
                     setRecord={setSelectedInvoiceForPay}
-                    onSave={handleSavePayment} // 👈 3. ربطنا المودال بدالة الحفظ الحقيقية اللي بتأثر في قاعدة البيانات
+                    onSave={handleSavePayment} 
                 />
             </div>
         </div>,
@@ -311,13 +303,12 @@ export default function InvoicesPage() {
           />
       )}
       
-      {/* 🚀 غيرنا data إلى record وتأكدنا إن isOpen بـ true وبعتنا projects بذكاء */}
       {isPrintModalOpen && (
           <InvoicePrintModal 
             isOpen={true} 
             onClose={() => setIsPrintModalOpen(false)} 
             record={printData} 
-            projects={projects} // 👈 دي اللي كانت ناقصة عشان كده مكانش لاقي أسماء العماير!
+            projects={projects} 
           />
       )}
       
