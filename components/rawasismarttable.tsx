@@ -26,15 +26,34 @@ interface RawasiSmartTableProps {
     selectable?: boolean;
     selectedIds?: any[];
     onSelectionChange?: (ids: any[]) => void;
-    onRowClick?: (row: any) => void; // 👈 أضف هذا السطر
+    onRowClick?: (row: any) => void;
     emptyMessage?: string;
+    
+    // 🚀 خصائص الـ Pagination المدمجة (اختيارية لعدم كسر الصفحات القديمة)
+    enablePagination?: boolean;
+    currentPage?: number;
+    totalItems?: number;
+    rowsPerPage?: number;
+    onPageChange?: (page: number) => void;
+    onRowsChange?: (rows: number) => void;
 }
 
 export default function RawasiSmartTable({ 
     title, data, columns, fileName = 'Rawasi_Report', 
-    selectable, selectedIds = [], onSelectionChange, onRowClick, emptyMessage // 👈 أضفها هنا
+    selectable, selectedIds = [], onSelectionChange, onRowClick, emptyMessage,
+    
+    // 🚀 تهيئة الخصائص الافتراضية للتصفح
+    enablePagination = false,
+    currentPage = 1,
+    totalItems = 0,
+    rowsPerPage = 50,
+    onPageChange,
+    onRowsChange
 }: RawasiSmartTableProps) {
     
+    // 🧮 حساب عدد الصفحات الديناميكي
+    const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+
     const exportToExcel = () => {
         if (!data || data.length === 0) return toast.error('عفواً، لا توجد بيانات للتصدير ❌');
         const toastId = toast.loading('جاري تحضير ملف Excel... ⏳');
@@ -156,6 +175,57 @@ export default function RawasiSmartTable({
                     </motion.tbody>
                 </table>
             </div>
+
+            {/* 🚀 شريط الـ Pagination السيادي الجديد */}
+            {enablePagination && totalItems > 0 && (
+                <div style={{ 
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                    padding: '15px 20px', marginTop: '15px', borderTop: '1px solid rgba(0,0,0,0.05)',
+                    background: 'rgba(255,255,255,0.4)', borderRadius: '12px', flexWrap: 'wrap', gap: '15px'
+                }}>
+                    
+                    {/* 🔢 قائمة اختيار عدد السجلات */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 900, color: '#64748b' }}>عرض:</span>
+                        <select 
+                            value={rowsPerPage} 
+                            onChange={(e) => {
+                                if (onRowsChange) onRowsChange(Number(e.target.value));
+                                if (onPageChange) onPageChange(1); // العودة للصفحة الأولى تلقائياً عند تغيير العدد
+                            }}
+                            style={{ padding: '8px 15px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontWeight: 800, cursor: 'pointer', background: 'white', color: '#0f172a' }}
+                        >
+                            <option value="50">50 سجل</option>
+                            <option value="100">100 سجل</option>
+                            <option value="500">500 سجل</option>
+                        </select>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>من إجمالي {totalItems}</span>
+                    </div>
+
+                    {/* ⏪ أزرار التحكم في الصفحات ⏩ */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button 
+                            disabled={currentPage === 1} 
+                            onClick={(e) => { e.stopPropagation(); if(onPageChange) onPageChange(currentPage - 1); }} 
+                            style={{ padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 900, cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, color: '#0f172a', transition: '0.2s' }}
+                        >
+                            السابق
+                        </button>
+
+                        <div style={{ background: THEME.goldAccent, color: 'white', padding: '8px 20px', borderRadius: '12px', fontWeight: 900, fontSize: '13px', boxShadow: `0 4px 10px ${THEME.goldAccent}40` }}>
+                            صفحة {currentPage} من {totalPages}
+                        </div>
+
+                        <button 
+                            disabled={currentPage >= totalPages} 
+                            onClick={(e) => { e.stopPropagation(); if(onPageChange) onPageChange(currentPage + 1); }} 
+                            style={{ padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 900, cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', opacity: currentPage >= totalPages ? 0.5 : 1, color: '#0f172a', transition: '0.2s' }}
+                        >
+                            التالي
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -37,6 +37,9 @@ interface SmartComboProps {
     // 🛡️ [الجديد]: صلاحيات الوصول للحقل نفسه
     permModule?: string;           // الموديول المطلوب للوصول (مثال: receipts)
     permAction?: string;           // الصلاحية المطلوبة (مثال: financial)
+
+    // 🔗 [الجديد السحري]: الفلاتر المتسلسلة (Chained Filters) لسحب البيانات الذكي
+    filter?: { column: string; value: any }; 
 }
 
 export default function SmartCombo({ 
@@ -47,7 +50,8 @@ export default function SmartCombo({
     strict = false, isTextArea = false, disabled = false, freeText = false,
     allowAddNew = false, requiredPermission, onAddNew, isSensitive = false, showRecent = false, 
     enableClear = false, showAvatar = false, isMobileBottomSheet = false,
-    permModule, permAction // 👈 استلام خصائص الصلاحية
+    permModule, permAction,
+    filter // 👈 استلام فلتر التصفية (مثال: project_id)
 }: SmartComboProps) {
     
     const [search, setSearch] = useState<string>(initialDisplay || ''); 
@@ -131,9 +135,9 @@ export default function SmartCombo({
         else if (!multi && !freeText) setSearch('');
     }, [initialDisplay, multi, freeText]);
 
-    // 📡 دالة البحث الذكية
+    // 📡 دالة البحث الذكية (مع دعم الفلاتر المتسلسلة 🚀)
     const loadData = async (query = '') => {
-        if (!hasFieldAccess) return; // منع جلب البيانات لو مقفول
+        if (!hasFieldAccess) return; 
         setIsLoading(true);
         try {
             if (options && options.length > 0) {
@@ -150,6 +154,12 @@ export default function SmartCombo({
             let q = supabase.from(table).select('*').limit(20); 
             
             if (table === 'accounts') q = q.eq('is_transactional', true);
+            
+            // 🔗 [تطبيق الفلتر المتسلسل] إذا كان مبعوثاً (مثال: project_id = 123)
+            if (filter && filter.column && filter.value) {
+                q = q.eq(filter.column, filter.value);
+            }
+
             if (customQuery) q = customQuery(q);
 
             if (query) {
@@ -166,17 +176,17 @@ export default function SmartCombo({
         }
     };
 
-    // ⏱️ [الحساسية القصوى]: 150ms
+    // ⏱️ [الحساسية القصوى]: 150ms (ومراقبة الفلتر)
     useEffect(() => {
         const searchLen = search?.length || 0; 
-        if (searchLen < 1 && !show) { setResults([]); return; }
+        if (searchLen < 1 && !show && !filter) { setResults([]); return; }
         
         const timer = setTimeout(() => {
             if (show && hasFieldAccess) loadData(search);
         }, 150); 
         
         return () => clearTimeout(timer);
-    }, [search, table, options, show, hasFieldAccess]); 
+    }, [search, table, options, show, hasFieldAccess, filter]); // 👈 تحديث نتائج البحث عند تغير الفلتر
 
     // 🖱️ Scroll
     useEffect(() => {

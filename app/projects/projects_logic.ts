@@ -1,8 +1,13 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useMutation, useQueryClient } from '@tanstack/react-query'; // 🚀 محرك العمليات
+import { useToast } from '@/lib/toast-context'; // 🚀 التنبيهات السيادية
 
 export function useProjectsLogic() {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+
   const [projects, setProjects] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]); 
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
@@ -21,7 +26,48 @@ export function useProjectsLogic() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // 🔍 دالة الفحص العميق لقاعدة البيانات (Diagnostic Tool) - محدثة للتحقق من الربط بـ IDs
+  // =========================================================================
+  // 🚀 حالات ودوال إدارة المقايسة (WBS)
+  // =========================================================================
+  const [isBoqModalOpen, setIsBoqModalOpen] = useState(false);
+  const [currentBoqRecord, setCurrentBoqRecord] = useState<any>({
+      item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, 
+      estimated_labor_cost: 0, estimated_operational_cost: 0
+  });
+
+  const saveBoqMutation = useMutation({
+      mutationFn: async (record: any) => {
+          const payload = {
+              project_id: selectedProject.id,
+              parent_id: record.item_type === 'فرعي' ? record.parent_id : null,
+              item_type: record.item_type,
+              work_item: record.work_item,
+              unit: record.unit || 'مقطوعية',
+              contract_quantity: Number(record.contract_quantity) || 0,
+              unit_contract_price: Number(record.unit_contract_price) || 0,
+              estimated_labor_cost: Number(record.estimated_labor_cost) || 0,
+              estimated_operational_cost: Number(record.estimated_operational_cost) || 0
+          };
+
+          if (record.id) {
+              const { error } = await supabase.from('boq_budget').update(payload).eq('id', record.id);
+              if (error) throw error;
+          } else {
+              const { error } = await supabase.from('boq_budget').insert([payload]);
+              if (error) throw error;
+          }
+      },
+      onSuccess: () => {
+          setIsBoqModalOpen(false);
+          if (selectedProject) loadProjectDetails(selectedProject); // تحديث الداتا محلياً
+          showToast("تم حفظ البند في المقايسة بنجاح ✅", "success");
+      },
+      onError: (err: any) => {
+          showToast(`خطأ في حفظ البند: ${err.message}`, "error");
+      }
+  });
+
+  // 🔍 دالة الفحص العميق لقاعدة البيانات (Diagnostic Tool)
   const runDiagnostics = async () => {
     if (!selectedProject) {
       alert("يرجى اختيار مشروع أولاً من القائمة الجانبية لتشغيل الفحص عليه.");
@@ -71,7 +117,6 @@ export function useProjectsLogic() {
     setIsLoading(true);
     const { data: projData } = await supabase
       .from('projects')
-      // ربط الـ client_id بجدول الشركاء لجلب الاسم
       .select(`*, client:partners!client_id(name)`)
       .order('created_at', { ascending: false });
     if (projData) setProjects(projData);
@@ -103,15 +148,11 @@ export function useProjectsLogic() {
     setIsDetailsLoading(true);
 
     try {
-      // سحب البيانات واستخدام الجداول المربوطة بالـ IDs لجلب الأسماء
       const [stagesRes, boqRes, expRes, laborRes, invRes] = await Promise.all([
         supabase.from('project_stages').select('*').eq('project_id', project.id),
-        supabase.from('boq_budget').select('*').eq('project_id', project.id), 
-        // ربط المصروفات بالمورد عن طريق payee_id
+        supabase.from('boq_budget').select('*').eq('project_id', project.id).order('created_at', { ascending: true }), 
         supabase.from('expenses').select('*, payee:partners!payee_id(name)').eq('project_id', project.id), 
-        // ربط العمالة بالعامل عن طريق worker_partner_id
         supabase.from('labor_daily_logs').select('*, worker:partners!worker_partner_id(name)').eq('project_id', project.id),
-        // ربط المستخلصات بالحسابات عن طريق IDs الحسابات
         supabase.from('invoices').select('*, creditor:accounts!creditor_account_id(name), debtor:accounts!debtor_account_id(name)').eq('project_id', project.id) 
       ]);
 
@@ -154,7 +195,6 @@ export function useProjectsLogic() {
     }
   };
 
-  // دالة تحديث حالة المشروع
   const updateProjectStatus = async (newStatus: string) => {
     if (!selectedProject) return;
     const { error } = await supabase
@@ -166,7 +206,7 @@ export function useProjectsLogic() {
       setSelectedProject({ ...selectedProject, status: newStatus });
       setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, status: newStatus } : p));
     } else {
-      alert("خطأ في تحديث الحالة: " + error.message);
+      showToast("خطأ في تحديث الحالة: " + error.message, "error");
     }
   };
 
@@ -174,7 +214,6 @@ export function useProjectsLogic() {
     setSearchQuery(''); setFilterStatus('الكل'); setFilterClient('الكل'); setDateFrom(''); setDateTo('');
   };
 
-  // 📊 المؤشرات الذكية والتحليلات المالية
   const kpis = useMemo(() => {
     if (!selectedProject) return null;
     const totalContract = Number(selectedProject.contract_value) || 0;
@@ -211,7 +250,6 @@ export function useProjectsLogic() {
 
     const requiredCashflow = totalEstimatedBudget - actualCost;
 
-    // 🆕 إضافة ميزة تنبيهات المخاطر (Risk Alerts)
     const alerts = [];
     if (budgetHealth === 'red') alerts.push("🚨 تجاوز الميزانية المعتمدة");
     if (timeStatus.includes('تأخر')) alerts.push("⚠️ تأخر في الجدول الزمني");
@@ -226,14 +264,15 @@ export function useProjectsLogic() {
     };
   }, [selectedProject, projectDetails]);
 
-  // تحليل ربحية بنود المقايسة
+  // 🚀 تحليل ربحية بنود المقايسة (تم التحديث لجمع العمالة + التشغيل)
   const boqAnalysis = useMemo(() => {
     return projectDetails.boq.map((item: any) => {
       const actualSpentOnItem = projectDetails.expenses
         .filter((e: any) => e.work_item === item.work_item)
         .reduce((sum: number, e: any) => sum + Number(e.total_price || 0), 0);
 
-      const estimatedCost = Number(item.estimated_labor_cost || 0);
+      // حساب إجمالي التكلفة التقديرية للبند (عمالة + تشغيل)
+      const estimatedCost = Number(item.estimated_labor_cost || 0) + Number(item.estimated_operational_cost || 0);
       const variance = estimatedCost - actualSpentOnItem;
       
       return {
@@ -245,7 +284,6 @@ export function useProjectsLogic() {
     });
   }, [projectDetails]);
 
-  // 🆕 ميزة: تحليل التدفق النقدي الشهري (Monthly Cashflow Analysis)
   const monthlyAnalysis = useMemo(() => {
     if (!projectDetails.expenses.length && !projectDetails.invoices.length) return [];
     
@@ -276,6 +314,11 @@ export function useProjectsLogic() {
     isFilterOpen, setIsFilterOpen, searchQuery, setSearchQuery, 
     filterStatus, setFilterStatus, filterClient, setFilterClient, 
     dateFrom, setDateFrom, dateTo, setDateTo, runDiagnostics, resetFilters, 
-    updateRecommendations, updateProjectStatus
+    updateRecommendations, updateProjectStatus,
+
+    // 🚀 تصدير متغيرات المقايسة للواجهة
+    isBoqModalOpen, setIsBoqModalOpen,
+    currentBoqRecord, setCurrentBoqRecord,
+    handleSaveBoq: (data: any) => saveBoqMutation.mutate(data)
   };
 }

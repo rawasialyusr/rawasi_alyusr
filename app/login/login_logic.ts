@@ -2,26 +2,29 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/lib/toast-context'; // 🚀 استدعاء نظام التنبيهات السيادي
+import { useToast } from '@/lib/toast-context'; 
 
 export function useLoginLogic() {
   const router = useRouter();
   const { showToast } = useToast();
   
-  // 🎛️ حالات الفورم
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // 🧹 1. تنظيف الجلسات الشبح (Ghost Sessions)
+  // 🛡️ 1. الحارس الذكي (بديل تنظيف الجلسات المدمر)
   useEffect(() => {
-    const clearGhostSession = async () => {
-      await supabase.auth.signOut();
+    const checkExistingSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // لو المستخدم مسجل دخول بالفعل، انقله للداشبورد فوراً ولا تبقيه في صفحة الدخول
+        router.replace('/invoices');
+      }
     };
-    clearGhostSession();
-  }, []);
+    checkExistingSession();
+  }, [router]);
 
   // 2. مزامنة قيم المتصفح (Autofill)
   useEffect(() => {
@@ -53,11 +56,15 @@ export function useLoginLogic() {
   // 🚀 3. دالة التنفيذ (تسجيل دخول أو حساب جديد)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+        return showToast('الرجاء إدخال البريد الإلكتروني وكلمة المرور', 'warning');
+    }
+    
     setIsLoading(true);
 
     try {
       if (isSignUp) {
-        // 🆕 إنشاء حساب جديد
         if (!fullName.trim()) throw new Error('يرجى إدخال الاسم الكامل');
         if (password.length < 6) throw new Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
 
@@ -65,10 +72,7 @@ export function useLoginLogic() {
           email,
           password,
           options: {
-            data: {
-              full_name: fullName,
-              role: 'client' 
-            }
+            data: { full_name: fullName, role: 'client' }
           }
         });
 
@@ -77,6 +81,7 @@ export function useLoginLogic() {
         showToast('✅ تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.', 'success');
         setIsSignUp(false);
         setPassword(''); 
+        setIsLoading(false);
         
       } else {
         // 🔑 تسجيل الدخول
@@ -88,16 +93,20 @@ export function useLoginLogic() {
         if (error) throw new Error('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
         
         showToast('تم تسجيل الدخول بنجاح! 🚀', 'success');
-        router.push('/invoices'); // توجيه للداشبورد
+        
+        router.refresh(); 
+        
+        // 🚀 توجيه آمن باستخدام replace لمنع الرجوع لصفحة اللوجن بالخطأ
+        setTimeout(() => {
+          router.replace('/invoices'); 
+        }, 500);
       }
     } catch (error: any) {
-      showToast(error.message, 'error'); // 👈 الاعتماد على التنبيهات السيادية بدل الـ HTML
-    } finally {
-      setIsLoading(false);
-    }
+      showToast(error.message, 'error'); 
+      setIsLoading(false); // يتم إيقاف التحميل فقط في حالة الخطأ لكي يستطيع المحاولة مجدداً
+    } 
   };
 
-  // 🎯 تجريد المخرجات (Pure Return)
   return {
     isSignUp, toggleSignUp,
     fullName, setFullName,

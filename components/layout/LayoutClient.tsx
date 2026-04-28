@@ -49,12 +49,61 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [pathname, router]);
 
   const menuGroups = [
-    { group: "الداشبورد والملخصات", items: [{ id: 'global_summary', title: 'الملخص العام', icon: '📊', path: '/GlobalSummary' }, { id: 'financial_center', title: 'المركز المالي', icon: '🏦', path: '/financial-center' }] },
-    { group: "الحسابات والمالية", items: [{ id: 'journal', title: 'قيود اليومية', icon: '📝', path: '/journal' }, { id: 'ledger', title: 'دفتر الأستاذ', icon: '📒', path: '/ledger' }, { id: 'journal_errors', title: 'رادار الأخطاء', icon: '🛡️', path: '/journal-errors' }, { id: 'payments', title: 'سندات الصرف', icon: '🔴', path: '/finance/vouchers' }, { id: 'receipts', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' }, { id: 'revenue', title: 'الإيرادات', icon: '📈', path: '/revenue' }, { id: 'expenses', title: 'المصروفات', icon: '📉', path: '/expenses' }, { id: 'invoices', title: 'الفواتير والمستخلصات', icon: '🧾', path: '/invoices' }] },
-    { group: "العمالة والموارد البشرية", items: [{ id: 'employees', title: 'سجل الموظفين', icon: '👔', path: '/employees' }, { id: 'labor_logs', title: 'يوميات الميدان', icon: '👷', path: '/labor_logs' }, { id: 'payroll', title: 'مسيرات الرواتب', icon: '💵', path: '/payroll' }, { id: 'emp_adv', title: 'سلف الموظفين', icon: '💸', path: '/emp_adv' }, { id: 'emp_ded', title: 'خصومات الموظفين', icon: '✂️', path: '/emp_ded' }, { id: 'housing', title: 'الإعاشة والسكن', icon: '🏠', path: '/housing' }] },
-    { group: "المشاريع والشركاء", items: [{ id: 'projects', title: 'المشاريع والمواقع', icon: '🏗️', path: '/projects' }, { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' }] },
-    { group: "النظام والتقارير", items: [{ id: 'reports', title: 'التقارير الشاملة', icon: '📑', path: '/reports' }, { id: 'settings', title: 'إعدادات النظام', icon: '⚙️', path: '/settings' }, { id: 'profile', title: 'الملف الشخصي', icon: '👤', path: '/profile' }] }
-  ];
+    { 
+        group: "الداشبورد والملخصات", 
+        items: [
+            { id: 'global_summary', title: 'الملخص العام', icon: '📊', path: '/GlobalSummary' }, 
+            { id: 'dashboard', title: 'لوحة القيادة', icon: '🖥️', path: '/Dashboard' },
+            { id: 'financial_center', title: 'المركز المالي', icon: '🏦', path: '/financial-center' }
+        ] 
+    },
+    { 
+        group: "الحسابات والمالية", 
+        items: [
+            { id: 'accounts', title: 'دليل الحسابات', icon: '🗂️', path: '/accounts' },
+            { id: 'journal', title: 'قيود اليومية', icon: '📝', path: '/journal' }, 
+            { id: 'ledger', title: 'دفتر الأستاذ', icon: '📒', path: '/ledger' }, 
+            { id: 'journal_errors', title: 'رادار الأخطاء', icon: '🛡️', path: '/journal-errors' }, 
+            { id: 'payments', title: 'سندات الصرف', icon: '🔴', path: '/PaymentVouchers' }, 
+            { id: 'receipts', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' }, 
+            { id: 'revenue', title: 'الإيرادات', icon: '📈', path: '/revenue' }, 
+            { id: 'expenses', title: 'المصروفات', icon: '📉', path: '/expenses' }, 
+            { id: 'invoices', title: 'الفواتير ومطالبات العملاء', icon: '🧾', path: '/invoices' }
+        ] 
+    },
+    { 
+        group: "المشاريع والشركاء", 
+        items: [
+            { id: 'fieldops', title: 'رادار الميدان الحي', icon: '📡', path: '/fieldops' },
+            { id: 'projects', title: 'غرفة المشاريع', icon: '🏗️', path: '/projects' }, 
+            { id: 'subclaims', title: 'مستخلصات مقاولي الباطن', icon: '📑', path: '/subclaims' },
+            { id: 'boqcatalog', title: 'الدليل الموحد للبنود (BOQ)', icon: '📚', path: '/boqcatalog' },
+            { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' }
+        ] 
+    },
+    { 
+        group: "العمالة والموارد البشرية", 
+        items: [
+            { id: 'employees', title: 'سجل الموظفين', icon: '👔', path: '/employees' }, 
+            { id: 'team', title: 'إدارة فرق العمل', icon: '👥', path: '/team' },
+            { id: 'labor_logs', title: 'يوميات الميدان', icon: '👷', path: '/labor_logs' }, 
+            { id: 'payroll', title: 'مسيرات الرواتب', icon: '💵', path: '/payroll' }, 
+            { id: 'emp_adv', title: 'سلف الموظفين', icon: '💸', path: '/emp_adv' }, 
+            { id: 'violations', title: 'المخالفات والجزاءات', icon: '⚠️', path: '/violations' },
+            { id: 'emp_ded', title: 'خصومات أخرى', icon: '✂️', path: '/emp_ded' }, 
+            { id: 'housing', title: 'الإعاشة والسكن', icon: '🏠', path: '/housing' }
+        ] 
+    },
+    { 
+        group: "النظام والتقارير", 
+        items: [
+            { id: 'reports', title: 'التقارير الشاملة', icon: '📊', path: '/reports' }, 
+            { id: 'import', title: 'استيراد البيانات', icon: '📥', path: '/import' },
+            { id: 'settings', title: 'إعدادات النظام', icon: '⚙️', path: '/settings' }, 
+            { id: 'profile', title: 'الملف الشخصي', icon: '👤', path: '/profile' }
+        ] 
+    }
+];
 
   const canView = (menuId: string) => {
     if (role === 'super_admin' || role === 'admin') return true;

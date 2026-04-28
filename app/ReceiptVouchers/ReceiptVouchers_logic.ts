@@ -71,7 +71,7 @@ export function useReceiptVouchersLogic() {
     }, [allData, globalSearch]);
 
     // =========================================================================
-    // 📄 5. التقسيم لصفحات
+    // 📄 5. التقسيم لصفحات (اختياري لو الجدول الذكي بيقوم بالمهمة)
     // =========================================================================
     const receipts = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -96,23 +96,31 @@ export function useReceiptVouchersLogic() {
     // 🚀 7. طابور العمليات (Mutations 💎)
     // =========================================================================
 
-    // أ. حفظ السند (بدون حقول الخصم لتوافق الـ Schema)
+    // أ. حفظ السند (تم التحديث لحفظ البنود JSONB 🚀)
     const saveMutation = useMutation({
         mutationFn: async (record: any) => {
             const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
+            
+            // 🚀 حساب الإجمالي من البنود (لو اليوزر ضاف بنود) أو ناخد المبلغ المكتوب مباشرة
+            const hasLines = record.lines && record.lines.length > 0;
+            const totalLinesAmount = hasLines 
+                ? record.lines.reduce((sum: number, line: any) => sum + (Number(line.quantity || 1) * Number(line.unit_price || 0)), 0)
+                : 0;
+            const finalAmount = hasLines ? totalLinesAmount : Number(record.amount || 0);
+
             const voucherData = {
                 receipt_number: record.receipt_number || `RV-${Date.now()}`, 
                 date: record.date,
                 payment_method: record.payment_method,
-                amount: Number(record.amount || 0),
+                amount: finalAmount, // 🚀 الإجمالي المحسوب
                 invoice_id: cleanId(record.invoice_id),
                 partner_id: cleanId(record.partner_id),
                 project_ids: record.project_ids || [],
                 safe_bank_acc_id: cleanId(record.safe_bank_acc_id),
                 partner_acc_id: cleanId(record.partner_acc_id),
                 notes: record.notes || '',
-                status: record.status || 'مسودة'
-                // ❌ تم إزالة الخصم لتجنب الإيرور
+                status: record.status || 'مسودة',
+                lines_data: record.lines || [] // 🚀🚀 الثغرة اتقفلت: حفظ البنود كـ JSONB
             };
 
             if (record.id) {
@@ -131,7 +139,7 @@ export function useReceiptVouchersLogic() {
         onError: (err: any) => showToast(`خطأ أثناء الحفظ: ${err.message}`, "error")
     });
 
-    // ب. الترحيل المالي
+    // ب. الترحيل المالي (Direct Ledger Posting)
     const postMutation = useMutation({
         mutationFn: async () => {
             const toPost = allData.filter(rec => selectedIds.includes(rec.id) && rec.status !== 'مُعتمد');
@@ -140,21 +148,84 @@ export function useReceiptVouchersLogic() {
             for (const rec of toPost) {
                 const unifiedNotes = rec.notes || `سند قبض #${rec.receipt_number} | ${rec.partners?.name || ''}`;
                 
+                // 1. إنشاء رأس القيد
                 const { data: header, error: hErr } = await supabase.from('journal_headers').insert({
                     entry_date: rec.date, description: unifiedNotes, status: 'posted', reference_id: rec.id 
                 }).select('id').single();
+                
                 if (hErr) throw hErr;
 
                 const mainProjectId = rec.project_ids?.[0] || null;
                 const paidAmount = Number(rec.amount || 0);
 
-                const lines = [
-                    { header_id: header.id, account_id: rec.safe_bank_acc_id, debit: paidAmount, credit: 0, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes },
-                    { header_id: header.id, account_id: rec.partner_acc_id, debit: 0, credit: paidAmount, partner_id: rec.partner_id, project_id: mainProjectId, notes: unifiedNotes }
-                ];
+                let journalLines: any[] = [];
 
-                await supabase.from('journal_lines').insert(lines);
+                // 2. الطرف المدين (حساب الصندوق / البنك اللي دخلت فيه الفلوس)
+                journalLines.push({ 
+                    header_id: header.id, 
+                    account_id: rec.safe_bank_acc_id, 
+                    item_name: `استلام دفعة بـ ${rec.payment_method}`,
+                    quantity: 1,
+                    unit_price: paidAmount,
+                    debit: paidAmount, // 👈 البنك بيزيد (مدين)
+                    credit: 0, 
+                    partner_id: rec.partner_id, 
+                    project_id: mainProjectId, 
+                    notes: unifiedNotes 
+                });
 
+                // 3. الطرف الدائن (بنود السند الديناميكية من الـ JSONB)
+                const itemsArray = rec.lines_data || []; 
+
+                if (itemsArray.length > 0) {
+                    let totalLinesCredit = 0;
+                    itemsArray.forEach((item: any) => {
+                        const lineTotal = Number(item.quantity || 1) * Number(item.unit_price || 0);
+                        totalLinesCredit += lineTotal;
+                        
+                        journalLines.push({
+                            header_id: header.id, 
+                            account_id: rec.partner_acc_id, 
+                            item_name: item.description || item.item_name || 'بند إيراد', 
+                            quantity: item.quantity || 1,
+                            unit_price: item.unit_price || 0,
+                            debit: 0, 
+                            credit: lineTotal, // 👈 دائن (الإيراد/العميل)
+                            partner_id: rec.partner_id, 
+                            project_id: item.project_id || mainProjectId, 
+                            notes: item.notes || unifiedNotes
+                        });
+                    });
+                    
+                    // 🛡️ حماية محاسبية: التأكد من توازن القيد
+                    if (totalLinesCredit !== paidAmount) {
+                         await supabase.from('journal_headers').delete().eq('id', header.id); // Rollback
+                         throw new Error(`القيد غير متزن للسند ${rec.receipt_number}. إجمالي البنود لا يساوي إجمالي السند.`);
+                    }
+
+                } else {
+                    // السلوك الافتراضي: سطر دائن إجمالي
+                    journalLines.push({ 
+                        header_id: header.id, 
+                        account_id: rec.partner_acc_id, 
+                        item_name: `سداد من العميل / إيراد عام`,
+                        quantity: 1,
+                        unit_price: paidAmount,
+                        debit: 0, 
+                        credit: paidAmount, // 👈 دائن
+                        partner_id: rec.partner_id, 
+                        project_id: mainProjectId, 
+                        notes: unifiedNotes 
+                    });
+                }
+
+                const { error: linesErr } = await supabase.from('journal_lines').insert(journalLines);
+                if (linesErr) {
+                    await supabase.from('journal_headers').delete().eq('id', header.id); // Rollback
+                    throw linesErr;
+                }
+
+                // 4. تحديث الفاتورة (إن وجدت)
                 if (rec.invoice_id) {
                     const { data: inv } = await supabase.from('invoices').select('paid_amount').eq('id', rec.invoice_id).single();
                     await supabase.from('invoices').update({ paid_amount: (inv?.paid_amount || 0) + paidAmount }).eq('id', rec.invoice_id);
@@ -231,7 +302,7 @@ export function useReceiptVouchersLogic() {
                 if (focusedIndex !== -1) {
                     const record = receipts[focusedIndex];
                     if (canUserEdit(record)) {
-                        setCurrentRecord(record);
+                        setCurrentRecord({...record, lines: record.lines_data || []}); 
                         setIsEditModalOpen(true);
                     } else {
                         showToast("لا يمكن تعديل سند مُعتمد", "warning");
@@ -249,11 +320,15 @@ export function useReceiptVouchersLogic() {
         
         handleAddNew: () => { 
             if (!permissions.canAdd) return showToast("ليست لديك صلاحية الإضافة", "error");
-            setCurrentRecord({ date: new Date().toISOString().split('T')[0], payment_method: 'نقدي (كاش)', status: 'مسودة', project_ids: [], selected_projects: [] }); 
+            setCurrentRecord({ date: new Date().toISOString().split('T')[0], payment_method: 'نقدي (كاش)', status: 'مسودة', project_ids: [], selected_projects: [], lines: [] }); 
             setIsEditModalOpen(true); 
         }, 
         handleEdit: (rec: any) => { 
-            if (canUserEdit(rec)) { setCurrentRecord(rec); setIsEditModalOpen(true); }
+            if (canUserEdit(rec)) { 
+                // 🚀 سحب البنود المحفوظة وعرضها في المودال
+                setCurrentRecord({...rec, lines: rec.lines_data || []}); 
+                setIsEditModalOpen(true); 
+            }
             else showToast("لا يمكن تعديل سند مُعتمد", "warning");
         }, 
         

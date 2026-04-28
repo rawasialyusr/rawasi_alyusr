@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import * as XLSX from 'xlsx';
+import { toast } from 'react-hot-toast'; // 🚀 استدعاء الإشعارات
 
 export function useExpensesLogic() {
     const [expenses, setExpenses] = useState<any[]>([]);
@@ -157,10 +158,10 @@ export function useExpensesLogic() {
         return expenses.filter(exp => {
             const search = globalSearch.toLowerCase().trim();
             const matchesGlobal = (exp.payee_name || '').toLowerCase().includes(search) || 
-                                 (exp.notes || '').toLowerCase().includes(search) || 
-                                 (exp.description || '').toLowerCase().includes(search) ||
-                                 (exp.sub_contractor || '').toLowerCase().includes(search) ||
-                                 (exp.site_ref || '').toLowerCase().includes(search);
+                                  (exp.notes || '').toLowerCase().includes(search) || 
+                                  (exp.description || '').toLowerCase().includes(search) ||
+                                  (exp.sub_contractor || '').toLowerCase().includes(search) ||
+                                  (exp.site_ref || '').toLowerCase().includes(search);
             const matchesAcc = filterAccount === 'الكل' || exp.creditor_account === filterAccount;
             const matchesStatus = filterStatus === 'الكل' || (filterStatus === 'مرحل' && exp.is_posted) || (filterStatus === 'معلق' && !exp.is_posted);
             const matchesDate = (!dateFrom || exp.exp_date >= dateFrom) && (!dateTo || exp.exp_date <= dateTo);
@@ -168,33 +169,39 @@ export function useExpensesLogic() {
         });
     }, [expenses, globalSearch, filterAccount, filterStatus, dateFrom, dateTo]);
 
-    const paginatedExpenses = useMemo(() => {
-        const start = (currentPage - 1) * rowsPerPage;
-        return allFiltered.slice(start, start + rowsPerPage);
-    }, [allFiltered, currentPage, rowsPerPage]);
+    // 🚀 تم الاستغناء عن paginatedExpenses هنا لترك المهمة للجدول الذكي لمنع الـ Double Slicing
 
     const totalAmount = useMemo(() => allFiltered.reduce((sum, exp) => sum + ((Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0)), 0), [allFiltered]);
     const totalPages = Math.ceil(allFiltered.length / rowsPerPage) || 1;
 
-    const handleSaveExpense = async () => {
+    const handleSaveExpense = async (passedRecord?: any) => {
         setIsSaving(true);
+        
+        // 🚀 السحر هنا: الاعتماد على البيانات الموزونة اللي جاية من المودال مباشرة
+        const finalRecord = passedRecord || currentExpense;
+
         const payload = {
-            exp_date: currentExpense.exp_date,
-            sub_contractor: currentExpense.sub_contractor, 
-            site_ref: currentExpense.site_ref,             
-            creditor_account: currentExpense.creditor_account,
-            description: currentExpense.description,
-            payee_name: currentExpense.payee_name, 
-            payment_method: currentExpense.payment_method || currentExpense.method,
-            payment_account: currentExpense.payment_account,
-            employee_name: currentExpense.employee_name,
-            quantity: Number(currentExpense.quantity),
-            unit_price: Number(currentExpense.unit_price),
-            vat_amount: Number(currentExpense.vat_amount || 0),
-            discount_amount: Number(currentExpense.discount_amount || 0),
-            discount_account: currentExpense.discount_account || null,
-            notes: currentExpense.notes,                   
-            invoice_image: currentExpense.invoice_image    
+            exp_date: finalRecord.exp_date,
+            sub_contractor: finalRecord.sub_contractor, 
+            site_ref: finalRecord.site_ref,             
+            creditor_account: finalRecord.creditor_account,
+            description: finalRecord.description,
+            payee_name: finalRecord.payee_name, 
+            payment_method: finalRecord.payment_method || finalRecord.method || 'كاش',
+            payment_account: finalRecord.payment_account,
+            employee_name: finalRecord.employee_name,
+            
+            // 🛡️ تأمين جدار الحماية: الكمية مستحيل تكون صفر أو فاضية عشان Constraint الداتابيز
+            quantity: Number(finalRecord.quantity) > 0 ? Number(finalRecord.quantity) : 1,
+            unit_price: Number(finalRecord.unit_price) || 0,
+            vat_amount: Number(finalRecord.vat_amount || 0),
+            discount_amount: Number(finalRecord.discount_amount || 0),
+            discount_account: finalRecord.discount_account || null,
+            notes: finalRecord.notes,                   
+            invoice_image: finalRecord.invoice_image,
+            
+            // 🚀 حفظ بنود المصروف كـ JSONB
+            lines_data: finalRecord.lines_data || []
         };
 
         let result;
@@ -213,6 +220,57 @@ export function useExpensesLogic() {
             alert("خطأ في الحفظ: " + result.error.message);
         }
         setIsSaving(false);
+    };
+
+    // =========================================================================
+    // 🚀 دالة السداد المباشر من شاشة المصروفات وإصدار سند الصرف
+    // =========================================================================
+    const handleSavePayment = async (paymentData: any) => {
+        setIsSaving(true);
+        const toastId = toast.loading('جاري إصدار سند الصرف وتحديث المصروف...');
+        try {
+            // 1. استخراج بيانات المستخدم الحالي للتوقيع
+            const { data: { session } } = await supabase.auth.getSession();
+
+            // 2. تكوين بيانات السند
+            const voucherPayload = {
+                expense_id: paymentData.id, 
+                voucher_number: `PV-${Date.now().toString().slice(-6)}`,
+                date: paymentData.payment_date || new Date().toISOString().split('T')[0],
+                payee_name: paymentData.payee_name || paymentData.sub_contractor,
+                amount: paymentData.amount,
+                payment_method: paymentData.payment_method,
+                payment_account: paymentData.payment_account,
+                site_ref: paymentData.site_ref,
+                description: paymentData.payment_notes || `سداد مصروف لـ ${paymentData.description || 'أعمال مقاولات'}`,
+                reference_number: paymentData.reference_number || '',
+                is_posted: false, 
+                created_by: session?.user?.id
+            };
+
+            // 3. إدراج السند في الداتابيز
+            const { error: voucherErr } = await supabase.from('payment_vouchers').insert([voucherPayload]);
+            if (voucherErr) throw voucherErr;
+
+            // 4. تحديث قيمة الدفع في المصروف الأصلي
+            const currentPaid = Number(paymentData.paid_amount || 0);
+            const newPaidAmount = currentPaid + Number(paymentData.amount);
+
+            const { error: expErr } = await supabase
+                .from('expenses')
+                .update({ paid_amount: newPaidAmount })
+                .eq('id', paymentData.id);
+            
+            if (expErr) throw expErr;
+
+            toast.success('تم إصدار سند الصرف وتحديث المصروف بنجاح ✅', { id: toastId });
+            await fetchExpenses(); 
+        } catch (error: any) {
+            console.error(error);
+            toast.error(`حدث خطأ أثناء السداد: ${error.message}`, { id: toastId });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const calculateDistribution = async () => {
@@ -280,7 +338,7 @@ export function useExpensesLogic() {
             setDistributionPreview(null);
             setIsEditModalOpen(false);
             setCurrentExpense(defaultExp);
-            setIsDistributionEnabled(false); // 🟢 قفل التوزيع بعد الحفظ
+            setIsDistributionEnabled(false); 
             alert(`✅ تم توزيع المصروف على ${payload.length} مشروع بنجاح!`);
         }
         setIsSaving(false);
@@ -323,7 +381,6 @@ export function useExpensesLogic() {
         setIsSaving(false);
     };
 
-    // 🟢 تصفير حالة التوزيع عند الإضافة والتعديل
     const handleAddNew = () => { setCurrentExpense(defaultExp); setEditingId(null); setIsDistributionEnabled(false); setIsEditModalOpen(true); };
     
     const handleEditSelected = () => {
@@ -336,9 +393,46 @@ export function useExpensesLogic() {
     };
 
     const handleDeleteSelected = async () => {
-        if (!confirm('حذف المصروفات المختارة نهائياً من قاعدة البيانات؟')) return;
-        const { error } = await supabase.from('expenses').delete().in('id', selectedIds);
-        if (!error) { await fetchExpenses(); setSelectedIds([]); }
+        if (selectedIds.length === 0) return;
+        
+        if (!confirm('⚠️ تحذير: حذف المصروفات المختارة سيؤدي أيضاً إلى حذف (سندات الصرف) و(القيود المحاسبية) المرتبطة بها نهائياً! هل أنت متأكد؟')) return;
+        
+        setIsSaving(true);
+        const toastId = toast.loading('جاري المسح التسلسلي للمصروفات والسندات...');
+
+        try {
+            // 1. البحث عن سندات الصرف المرتبطة بهذه المصروفات
+            const { data: linkedVouchers } = await supabase
+                .from('payment_vouchers')
+                .select('id')
+                .in('expense_id', selectedIds);
+
+            const voucherIds = linkedVouchers?.map(v => v.id) || [];
+
+            // 2 & 3. مسح قيود سندات الصرف، ثم مسح سندات الصرف نفسها
+            if (voucherIds.length > 0) {
+                await supabase.from('journal_headers').delete().in('reference_id', voucherIds);
+                await supabase.from('payment_vouchers').delete().in('id', voucherIds);
+            }
+
+            // 4. مسح القيود المحاسبية الخاصة بالمصروفات الأساسية (إن كانت مُرحلة)
+            await supabase.from('journal_headers').delete().in('reference_id', selectedIds);
+
+            // 5. أخيراً: مسح المصروفات نفسها
+            const { error: expError } = await supabase.from('expenses').delete().in('id', selectedIds);
+            
+            if (expError) throw expError;
+
+            toast.success('تم المسح التسلسلي وتنظيف الدفاتر بنجاح 🗑️✅', { id: toastId });
+            await fetchExpenses(); 
+            setSelectedIds([]); 
+
+        } catch (error: any) {
+            console.error("Cascade Delete Error:", error);
+            toast.error(`حدث خطأ أثناء الحذف: ${error.message}`, { id: toastId });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handlePostSingle = async (id: string, skipFetch: boolean = false) => {
@@ -539,15 +633,22 @@ export function useExpensesLogic() {
     return {
         isLoading, globalSearch, setGlobalSearch, dateFrom, setDateFrom, dateTo, setDateTo,
         filterAccount, setFilterAccount, filterStatus, setFilterStatus,
-        filteredExpenses: paginatedExpenses, totalAmount, selectedIds, setSelectedIds,
+        
+        // 🚀 تم استبدال الـ paginated بالفلتر الكامل عشان الـ SmartTable بيعمل القص تلقائي
+        filteredExpenses: allFiltered, 
+        
+        totalAmount, selectedIds, setSelectedIds,
         currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, totalResults: allFiltered.length,
         isEditModalOpen, setIsEditModalOpen, currentExpense, setCurrentExpense, isSaving, handleSaveExpense,
+        
+        handleSavePayment, // 🚀 دالة السداد الجديدة تم إضافتها للاستخدام
+
         handleAddNew, handleEditSelected, handleDeleteSelected, handlePostSingle, handlePostSelected, exportToExcel, editingId,
         projects, contractors, payees, accounts, boqItems, historicalData, handleUnpostSingle, handleUnpostSelected, handlePostAllUnposted,
         isBulkFixModalOpen, setIsBulkFixModalOpen, bulkFixAccounts, setBulkFixAccounts, handleBulkFixSave,
         distributionPreview, setDistributionPreview, calculateDistribution, confirmDistribution,
         
-        isDistributionEnabled, setIsDistributionEnabled, // 🟢 تم تصدير الحالة للواجهة
+        isDistributionEnabled, setIsDistributionEnabled, 
         
         canAdd, canEdit, canDelete, canPost, canView, canExport, userRole
     };

@@ -1,126 +1,128 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
+import React from 'react';
+import { useLedgerLogic } from './ledger_logic';
+import MasterPage from '@/components/MasterPage';
+import RawasiSmartTable from '@/components/rawasismarttable';
+import SmartCombo from '@/components/SmartCombo';
+import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import { formatCurrency } from '@/lib/helpers';
+import { THEME } from '@/lib/theme';
 
 export default function AccountLedger() {
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const logic = useLedgerLogic();
 
-  // 1. جلب قائمة الحسابات لملء القائمة المنسدلة
-  useEffect(() => {
-    const fetchAccounts = async () => {
-      const { data } = await supabase.from('accounts').select('id, name, code').order('code');
-      if (data) setAccounts(data);
-    };
-    fetchAccounts();
-  }, []);
-
-  // 2. جلب حركات الحساب المختار (Joining lines with headers)
-  const fetchLedger = async (accountId: string) => {
-    if (!accountId) return;
-    setIsLoading(true);
-    
-    const { data, error } = await supabase
-      .from('journal_lines')
-      .select(`
-        id,
-        debit,
-        credit,
-        item_name,
-        notes,
-        journal_headers (entry_date, description),
-        projects (name),
-        partners (name)
-      `)
-      .eq('account_id', accountId)
-      .order('journal_headers(entry_date)', { ascending: true });
-
-    if (data) {
-      // حساب الرصيد التراكمي برمجياً
-      let runningBalance = 0;
-      const enrichedData = data.map((entry: any) => {
-        runningBalance += (Number(entry.debit) - Number(entry.credit));
-        return { ...entry, runningBalance };
-      });
-      setLedgerEntries(enrichedData);
+  // 🏗️ تعريف أعمدة الجدول (مع حراس الرندر)
+  const columns = [
+    { 
+      header: 'التاريخ', 
+      render: (row: any) => row ? <span>{row.journal_headers?.entry_date}</span> : null
+    },
+    { 
+      header: 'البيان / المشروع', 
+      render: (row: any) => row ? (
+        <div>
+          <div style={{ fontWeight: 900, color: THEME.primary }}>{row.item_name}</div>
+          <div style={{ fontSize: '11px', opacity: 0.7, color: '#64748b' }}>
+            {row.projects?.name || 'مصاريف إدارية'} | {row.partners?.name || 'عام'}
+          </div>
+        </div>
+      ) : null
+    },
+    { 
+      header: 'مدين (+)', 
+      render: (row: any) => row ? <span style={{ color: THEME.success, fontWeight: 700 }}>{row.debit > 0 ? formatCurrency(row.debit) : '-'}</span> : null
+    },
+    { 
+      header: 'دائن (-)', 
+      render: (row: any) => row ? <span style={{ color: THEME.ruby, fontWeight: 700 }}>{row.credit > 0 ? formatCurrency(row.credit) : '-'}</span> : null
+    },
+    { 
+      header: 'الرصيد المتراكم', 
+      render: (row: any) => row ? <b style={{ fontWeight: 900, color: THEME.coffeeDark }}>{formatCurrency(row.runningBalance)}</b> : null
     }
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    fetchLedger(selectedAccountId);
-  }, [selectedAccountId]);
-
-  const totalDebit = useMemo(() => ledgerEntries.reduce((sum, e) => sum + Number(e.debit), 0), [ledgerEntries]);
-  const totalCredit = useMemo(() => ledgerEntries.reduce((sum, e) => sum + Number(e.credit), 0), [ledgerEntries]);
+  ];
 
   return (
-    <div style={{ direction: 'rtl', padding: '30px', backgroundColor: '#F4F1EE', minHeight: '100vh', fontFamily: 'Cairo, sans-serif' }}>
-      <h1 style={{ color: '#2D2421', fontWeight: 900 }}>📊 كشف حساب تفصيلي (دفتر الأستاذ)</h1>
+    <MasterPage title="كشف حساب تفصيلي" subtitle="استعراض حركات الأستاذ العام والتحليل المالي">
       
-      {/* اختيار الحساب */}
-      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '15px', marginBottom: '20px', border: '2px solid #DBC4AD' }}>
-        <label style={{ fontWeight: 900, display: 'block', marginBottom: '10px' }}>اختر الحساب للمراجعة:</label>
-        <select 
-          style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #DBC4AD', fontWeight: 700 }}
-          value={selectedAccountId}
-          onChange={(e) => setSelectedAccountId(e.target.value)}
+      <RawasiSidebarManager 
+        summary={
+          <div className="summary-card">
+            <span style={{ fontSize: '12px', fontWeight: 800, opacity: 0.8 }}>إجمالي رصيد الحساب</span>
+            <div style={{ fontSize: '24px', fontWeight: 900, marginTop: '5px' }}>
+              {formatCurrency(logic.currentBalance)}
+            </div>
+            <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', margin: '15px 0' }} />
+            <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                حركة مدينة: {formatCurrency(logic.totalDebit)} <br/>
+                حركة دائنة: {formatCurrency(logic.totalCredit)}
+            </div>
+          </div>
+        }
+      />
+
+      <style>{`
+        .control-panel {
+          position: relative; /* 👈 السحر هنا: تفعيل التموضع النسبي */
+          z-index: 100;      /* 👈 رفع الحاوية فوق مستوى الجدول */
+          background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(15px);
+          padding: 30px;
+          border-radius: 24px;
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          margin-bottom: 25px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+          display: flex;
+          align-items: flex-end;
+          gap: 20px;
+        }
+        .summary-card {
+          background: linear-gradient(135deg, ${THEME.coffeeDark}, ${THEME.primary});
+          color: white;
+          padding: 20px;
+          border-radius: 20px;
+          box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+      `}</style>
+
+      {/* 🎯 لوحة التحكم المركزية */}
+      <div className="control-panel">
+        <div style={{ flex: 1 }}>
+          <SmartCombo 
+            label="🔍 ابحث واختر الحساب المالي للمراجعة"
+            table="accounts"
+            displayCol="name"
+            searchCols="name,code"
+            placeholder="اكتب اسم الحساب أو الكود (مثلاً: البنك، العهدة...)"
+            onSelect={(val: any) => logic.setSelectedAccountId(val?.id || '')}
+          />
+        </div>
+        <button 
+          onClick={() => window.print()}
+          style={{ 
+            padding: '14px 25px', borderRadius: '14px', border: 'none', 
+            background: THEME.coffeeDark, color: THEME.goldAccent, 
+            fontWeight: 900, cursor: 'pointer', height: '52px'
+          }}
         >
-          <option value="">-- اختر حساباً من الشجرة --</option>
-          {accounts.map(acc => (
-            <option key={acc.id} value={acc.id}>{acc.code} - {acc.name}</option>
-          ))}
-        </select>
+          🖨️ طباعة الكشف
+        </button>
       </div>
 
-      {/* ملخص الأرصدة */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-        <div style={{ background: 'white', padding: '15px', borderRadius: '12px', textAlign: 'center', borderBottom: '4px solid #166534' }}>
-          <div style={{ fontSize: '12px', fontWeight: 900 }}>إجمالي المدين</div>
-          <div style={{ fontSize: '20px', fontWeight: 900, color: '#166534' }}>{totalDebit.toLocaleString()}</div>
-        </div>
-        <div style={{ background: 'white', padding: '15px', borderRadius: '12px', textAlign: 'center', borderBottom: '4px solid #991B1B' }}>
-          <div style={{ fontSize: '12px', fontWeight: 900 }}>إجمالي الدائن</div>
-          <div style={{ fontSize: '20px', fontWeight: 900, color: '#991B1B' }}>{totalCredit.toLocaleString()}</div>
-        </div>
-        <div style={{ background: '#6F4E37', padding: '15px', borderRadius: '12px', textAlign: 'center', color: 'white' }}>
-          <div style={{ fontSize: '12px', fontWeight: 900 }}>الرصيد الحالي</div>
-          <div style={{ fontSize: '24px', fontWeight: 900 }}>{(totalDebit - totalCredit).toLocaleString()}</div>
-        </div>
-      </div>
+      {/* الجدول الماسي */}
+      {!logic.selectedAccountId ? (
+          <div style={{ textAlign: 'center', padding: '100px', color: '#94a3b8', background: 'white', borderRadius: '24px', fontWeight: 900 }}>
+             👆 يرجى اختيار حساب من القائمة أعلاه لعرض كشف الحساب.
+          </div>
+      ) : (
+          <RawasiSmartTable 
+            data={logic.entries}
+            columns={columns}
+            isLoading={logic.isLoading}
+            enableExport={true}
+          />
+      )}
 
-      {/* جدول الحركات */}
-      <div style={{ backgroundColor: 'white', borderRadius: '20px', overflow: 'hidden', border: '2px solid #DBC4AD' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
-          <thead>
-            <tr style={{ background: '#2D2421', color: 'white' }}>
-              <th style={{ padding: '15px' }}>التاريخ</th>
-              <th style={{ padding: '15px' }}>البيان / المشروع</th>
-              <th style={{ padding: '15px' }}>مدين (+)</th>
-              <th style={{ padding: '15px' }}>دائن (-)</th>
-              <th style={{ padding: '15px' }}>الرصيد</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>⏳ جاري جلب قيود اليومية...</td></tr>
-            ) : ledgerEntries.map((entry) => (
-              <tr key={entry.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '12px' }}>{entry.journal_headers?.entry_date}</td>
-                <td style={{ padding: '12px' }}>
-                  <div style={{ fontWeight: 900 }}>{entry.item_name}</div>
-                  <div style={{ fontSize: '11px', color: '#666' }}>{entry.projects?.name} | {entry.partners?.name}</div>
-                </td>
-                <td style={{ padding: '12px', color: '#166534', fontWeight: 700 }}>{entry.debit > 0 ? entry.debit.toLocaleString() : '-'}</td>
-                <td style={{ padding: '12px', color: '#991B1B', fontWeight: 700 }}>{entry.credit > 0 ? entry.credit.toLocaleString() : '-'}</td>
-                <td style={{ padding: '12px', fontWeight: 900, backgroundColor: '#fdfbf9' }}>{entry.runningBalance.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </MasterPage>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
-import { createPortal } from 'react-dom'; // 🚀 استدعاء البورتال لتحرير المودال
+import { createPortal } from 'react-dom'; 
 import { useInvoicesLogic } from './invoices_logic';
 import { THEME } from '@/lib/theme';
 import { formatCurrency, getInvoiceSummaryAndAging } from '@/lib/helpers'; 
-import { usePermissions } from '@/lib/PermissionsContext'; // 🛡️ استدعاء نظام الصلاحيات المركزي
-import SecureAction from '@/components/SecureAction';      // 🛡️ مغلف الأمان للأزرار
+import { usePermissions } from '@/lib/PermissionsContext'; 
+import SecureAction from '@/components/SecureAction';      
 import MasterPage from '@/components/MasterPage';
 
 // 🧱 المكونات
@@ -28,16 +28,14 @@ export default function InvoicesPage() {
     handlePostSelected, handleDeleteSelected, handleUnpostSelected,
     handleSave, handleAddNew, handleEdit, isEditModalOpen, setIsEditModalOpen, currentRecord, setCurrentRecord,
     isReceiptModalOpen, setIsReceiptModalOpen, selectedInvoiceForPay, setSelectedInvoiceForPay, handleOpenPaymentModal,
-    handleSavePayment // 👈 1. سحبنا دالة السداد الحقيقية من اللوجيك
-  } = useInvoicesLogic(); // 👈 تطبيق نقطة الاستدعاء الواحدة (Single Source)
+    handleSavePayment 
+  } = useInvoicesLogic(); 
 
-  // 🛡️ سحب دالة فحص الصلاحيات وحالة التحميل بأمان تام
   const { can, loading: permsLoading } = usePermissions();
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
 
-  // 🚀 حماية الـ Portal من مشاكل الـ SSR في Next.js
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -47,21 +45,24 @@ export default function InvoicesPage() {
   const result = useMemo(() => getInvoiceSummaryAndAging(dataToProcess.filter((i:any)=> i.status !== 'مسودة')), [dataToProcess]);
 
   // =========================================================================
-  // 💎 أعمدة الجدول (محصنة بالكامل ومضبوطة مع محرك الذكاء)
+  // 💎 أعمدة الجدول
   // =========================================================================
   const invoiceColumns = [
     {
       header: 'تحديد',
       accessor: 'id',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         return (
-          <input type="checkbox" className="custom-checkbox" checked={selectedIds.includes(row.id)} 
-            onChange={(e) => {
-              e.stopPropagation(); 
-              setSelectedIds(prev => prev.includes(row.id) ? prev.filter(x => x !== row.id) : [...prev, row.id]);
-            }} 
-          />
+          // 🚀 السر هنا: onClick مع stopPropagation يمنع البابلينج تماماً
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-block' }}>
+              <input type="checkbox" className="custom-checkbox" checked={selectedIds.includes(row.id)} 
+                onChange={(e) => {
+                  e.stopPropagation(); 
+                  setSelectedIds(prev => prev.includes(row.id) ? prev.filter(x => x !== row.id) : [...prev, row.id]);
+                }} 
+              />
+          </div>
         );
       }
     },
@@ -69,7 +70,7 @@ export default function InvoicesPage() {
       header: 'رقم الفاتورة', 
       accessor: 'invoice_number', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         return <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px', letterSpacing: '0.5px' }}>#{row.invoice_number}</b>;
       } 
     },
@@ -77,7 +78,7 @@ export default function InvoicesPage() {
       header: 'تاريخ الفاتورة', 
       accessor: 'date', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         return (
           <span style={{ fontSize: '12px', fontWeight: 900, color: '#0284c7', background: 'rgba(2, 132, 199, 0.1)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
             {row.date ? new Date(row.date).toLocaleDateString('ar-EG') : '---'}
@@ -89,7 +90,7 @@ export default function InvoicesPage() {
       header: 'العميل', 
       accessor: 'client_name', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         return <span style={{fontWeight: 800, color: '#1e293b'}}>{row.client_name || '---'}</span>;
       } 
     },
@@ -97,7 +98,7 @@ export default function InvoicesPage() {
       header: 'حالة الاعتماد',
       accessor: 'status',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         const isApproved = row.status === 'مُعتمد';
         return (
           <div className={`approval-glass-badge ${isApproved ? 'approved' : 'pending'}`}>
@@ -111,7 +112,7 @@ export default function InvoicesPage() {
       header: 'مهلة السداد',
       accessor: 'due_date',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         if (paid >= total && total > 0) return <span className="deadline-badge paid">✅ مكتمل</span>;
@@ -131,7 +132,7 @@ export default function InvoicesPage() {
       header: 'حالة السداد',
       accessor: 'paid_amount',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         if (paid <= 0) return <span className="glass-badge red">🔴 مستحقة</span>;
@@ -143,7 +144,7 @@ export default function InvoicesPage() {
       header: 'الصافي', 
       accessor: 'total_amount', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         let textColor = '#dc2626'; 
@@ -156,7 +157,7 @@ export default function InvoicesPage() {
       header: 'الإجراءات',
       accessor: 'id',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس دفاعي إلزامي
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         const balance = total - paid;
@@ -164,7 +165,6 @@ export default function InvoicesPage() {
         return (
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
             <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print">🖨️</button>
-            {/* 🛡️ زر السداد */}
             {needsPayment && (
               <button onClick={(e) => {
                   e.stopPropagation(); 
@@ -267,11 +267,10 @@ export default function InvoicesPage() {
       {/* 🚀 المودالز */}
       {/* ==================================================================== */}
       
-      {/* 🚨 التعديل الجذري هنا: حولنا الـ background لدرجة دافئة (بني/عسلي) */}
       {mounted && isReceiptModalOpen && createPortal(
         <div style={{ 
             position: 'fixed', inset: 0, zIndex: 999999999, 
-            background: 'rgba(40, 24, 10, 0.85)', /* 👈 السر هنا: درجة لونية دافئة جداً */
+            background: 'rgba(40, 24, 10, 0.85)', 
             backdropFilter: 'blur(10px)',
             display: 'flex', 
             alignItems: 'flex-start',
