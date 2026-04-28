@@ -76,6 +76,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         items: [
             { id: 'fieldops', title: 'رادار الميدان الحي', icon: '📡', path: '/fieldops' },
             { id: 'projects', title: 'غرفة المشاريع', icon: '🏗️', path: '/projects' }, 
+            { id: 'materials', title: 'توريد الخامات', icon: '🧱', path: '/materials' },
             { id: 'subclaims', title: 'مستخلصات مقاولي الباطن', icon: '📑', path: '/subclaims' },
             { id: 'boqcatalog', title: 'الدليل الموحد للبنود (BOQ)', icon: '📚', path: '/boqcatalog' },
             { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' }
