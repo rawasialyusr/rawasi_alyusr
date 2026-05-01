@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import { useRouter } from 'next/navigation'; 
 import { useToast } from '@/lib/toast-context'; 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // 🚀 محرك الأوفلاين والكاش السيادي
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; 
+import { resolvePartnerId } from '@/lib/accounting'; // 💎 الباب الثامن: استدعاء التوجيه الذكي للذمم
 
 export function useInvoicesLogic() {
     const router = useRouter();
@@ -114,12 +115,11 @@ export function useInvoicesLogic() {
     }), [allFiltered]);
 
     // =========================================================================
-    // 🎬 عمليات الواجهة (UI Actions) - 🚀 هنا تم حل مشكلة سحب العماير
+    // 🎬 عمليات الواجهة (UI Actions)
     // =========================================================================
     const handleOpenPaymentModal = async (inv: any) => {
         const balance = Number(inv.total_amount || 0) - Number(inv.paid_amount || 0);
         
-        // 🚀 معالجة سحب المشاريع بقوة لضمان سحب العماير مهما كانت صيغة الآيديهات
         let pIds: string[] = [];
         if (Array.isArray(inv.project_ids)) {
             pIds = inv.project_ids.map((id: any) => String(id));
@@ -157,7 +157,6 @@ export function useInvoicesLogic() {
     };
 
     const handleEdit = (inv: any) => {
-        // 🚀 معالجة سحب المشاريع لضمان ظهور العماير في الفورم عند التعديل
         let pIds: string[] = [];
         if (Array.isArray(inv.project_ids)) {
             pIds = inv.project_ids.map((id: any) => String(id));
@@ -180,134 +179,134 @@ export function useInvoicesLogic() {
         mutationFn: async (record: any) => {
             const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
             const invoiceHeader = {
-                invoice_number: record.invoice_number, date: record.date, partner_id: cleanId(record.partner_id),
-                client_name: record.client_name, project_ids: record.project_ids || null, boq_id: cleanId(record.boq_id),
-                description: record.description, quantity: Number(record.quantity) || 0, unit: record.unit || 'عدد',
-                unit_price: Number(record.unit_price) || 0, line_total: Number(record.line_total) || 0,
-                materials_discount: Number(record.materials_discount) || 0, taxable_amount: Number(record.taxable_amount) || 0,
-                tax_amount: Number(record.tax_amount) || 0, guarantee_percent: Number(record.guarantee_percent) || 0,
-                guarantee_amount: Number(record.guarantee_amount) || 0, total_amount: Number(record.total_amount) || 0,
-                debit_account_id: cleanId(record.debit_account_id), credit_account_id: cleanId(record.credit_account_id),
-                materials_acc_id: cleanId(record.materials_acc_id), guarantee_acc_id: cleanId(record.guarantee_acc_id),
-                tax_acc_id: cleanId(record.tax_acc_id), status: record.status || 'معلق', due_in_days: Number(record.due_in_days) || 0,
-                due_date: record.due_date, paid_amount: Number(record.paid_amount) || 0, skip_zatca: record.skip_zatca || false,
-                lines: record.lines || record.items || [] 
+                invoice_number: record.invoice_number, 
+                date: record.date, 
+                partner_id: cleanId(record.partner_id),
+                client_name: record.client_name, 
+                project_ids: record.project_ids || null, 
+                description: record.description, 
+                materials_discount: Number(record.materials_discount) || 0, 
+                taxable_amount: Number(record.taxable_amount) || 0,
+                tax_amount: Number(record.tax_amount) || 0, 
+                guarantee_percent: Number(record.guarantee_percent) || 0,
+                guarantee_amount: Number(record.guarantee_amount) || 0, 
+                total_amount: Number(record.total_amount) || 0,
+                debit_account_id: cleanId(record.debit_account_id), 
+                credit_account_id: cleanId(record.credit_account_id),
+                materials_acc_id: cleanId(record.materials_acc_id), 
+                guarantee_acc_id: cleanId(record.guarantee_acc_id),
+                tax_acc_id: cleanId(record.tax_acc_id), 
+                status: record.status || 'معلق', 
+                due_in_days: Number(record.due_in_days) || 0,
+                due_date: record.due_date, 
+                paid_amount: Number(record.paid_amount) || 0, 
+                skip_zatca: record.skip_zatca || false,
+                lines_data: record.lines || record.items || [] 
             };
-
-            let savedInvoiceId = record.id;
-            let finalHeader = { ...invoiceHeader, id: savedInvoiceId };
 
             if (record.id) {
                 const { error: headErr } = await supabase.from('invoices').update(invoiceHeader).eq('id', record.id);
                 if (headErr) throw headErr;
             } else {
-                const { data: newHead, error: headErr } = await supabase.from('invoices').insert([invoiceHeader]).select('id').single();
+                const { error: headErr } = await supabase.from('invoices').insert([invoiceHeader]);
                 if (headErr) throw headErr;
-                savedInvoiceId = newHead.id;
-                finalHeader.id = savedInvoiceId;
             }
-
-            const linesToSave = record.lines || record.items || [];
-            if (savedInvoiceId && linesToSave.length > 0) {
-                try {
-                    if (record.id) await supabase.from('invoice_lines').delete().eq('invoice_id', savedInvoiceId);
-                    const preparedLines = linesToSave.map((line: any) => ({
-                        invoice_id: savedInvoiceId, item_id: cleanId(line.item_id), description: line.description || '',
-                        unit: line.unit || 'عدد', quantity: Number(line.quantity) || 0, unit_price: Number(line.unit_price) || 0,
-                        total_price: Number(line.total_price) || (Number(line.quantity) * Number(line.unit_price)) || 0
-                    }));
-                    const { error: linesErr } = await supabase.from('invoice_lines').insert(preparedLines);
-                    if (linesErr) console.warn("تم حفظ البنود في الفاتورة لكن تجاهلنا خطأ جدول البنود القديم", linesErr);
-                } catch(e) {
-                    console.warn("تجاوزنا جدول invoice_lines واعتمنا على عمود lines المدمج.");
-                }
-            }
-            return finalHeader;
         },
-        onMutate: async (record) => {
-            await queryClient.cancelQueries({ queryKey: ['invoices'] });
-            const previous = queryClient.getQueryData(['invoices']);
-            queryClient.setQueryData(['invoices'], (old: any[] = []) => {
-                if (record.id) {
-                    return old.map(inv => inv.id === record.id ? { ...inv, ...record } : inv);
-                } else {
-                    return [{ ...record, id: `temp-${Date.now()}`, status: 'معلق', partners: { name: record.client_name } }, ...old];
-                }
-            });
+        onSuccess: () => {
             setIsEditModalOpen(false);
-            showToast("تم الحفظ محلياً.. سيتم المزامنة ⏳", "info");
-            return { previous };
+            showToast("تم حفظ الفاتورة بنجاح 💾", "success");
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
         },
-        onError: (err, vars, context) => {
-            queryClient.setQueryData(['invoices'], context?.previous);
-            setIsEditModalOpen(true);
-            showToast("حدث خطأ أثناء الحفظ! ❌", "error");
-        },
-        onSuccess: () => showToast("تم مزامنة الفاتورة والبنود بنجاح 💾", "success"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] })
+        onError: (err: any) => {
+            showToast(`حدث خطأ أثناء الحفظ! ❌ ${err.message}`, "error");
+        }
     });
 
-    // 2. الترحيل (Post)
+    // 2. الترحيل الماسي 💎 (Sub-ledger Accounting + Smart Routing)
     const postMutation = useMutation({
         mutationFn: async () => {
             if (!selectedIds.length) return 0;
             const toPost = invoices.filter((inv: any) => selectedIds.includes(inv.id) && inv.status !== 'مُعتمد');
             if (toPost.length === 0) throw new Error('ALREADY_POSTED');
 
+            const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
+
             for (const inv of toPost) {
                 const invDate = inv.date || new Date().toISOString().split('T')[0];
-                const { data: newHeader, error: headerErr } = await supabase
+                const safePartnerId = cleanId(inv.partner_id);
+                const mainProjectId = (inv.project_ids && inv.project_ids.length > 0) ? inv.project_ids[0] : null;
+
+                const { data: header, error: headerErr } = await supabase
                     .from('journal_headers')
                     .insert({ entry_date: invDate, description: `فاتورة #${inv.invoice_number} | ${inv.client_name}`, status: 'posted', reference_id: inv.id })
                     .select('id').single();
 
                 if (headerErr) throw headerErr;
-                const headerId = newHeader.id;
-                const linesToInsert: any[] = [];
+                const headerId = header.id;
+                
+                const journalLines: any[] = [];
 
-                const addJLine = (accId: string, debit: number, credit: number, label: string) => {
-                    if (accId && (debit > 0 || credit > 0)) {
-                        linesToInsert.push({
-                            header_id: headerId, account_id: accId, partner_id: inv.partner_id,
-                            project_id: (inv.project_ids && inv.project_ids[0]) || null, item_name: inv.description || label,
-                            quantity: Number(inv.quantity) || 1, unit_price: Number(inv.unit_price) || 0,
-                            debit: debit, credit: credit, notes: `${label}: ${inv.invoice_number}`
-                        });
-                    }
-                };
+                // 💎 تم تطبيق التوجيه الذكي resolvePartnerId على جميع أطراف القيود
+                // 1️⃣ إجمالي قيمة الأعمال (العميل مدين، إيراد الشركة دائن)
+                if (Number(inv.taxable_amount) > 0) {
+                    journalLines.push(
+                        { header_id: headerId, account_id: inv.debit_account_id, debit: Number(inv.taxable_amount), credit: 0, partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `قيمة أعمال منجزة - فاتورة ${inv.invoice_number}` },
+                        { header_id: headerId, account_id: inv.credit_account_id, debit: 0, credit: Number(inv.taxable_amount), partner_id: resolvePartnerId(inv.credit_account_id, safePartnerId), project_id: mainProjectId, notes: `إيراد أعمال - فاتورة ${inv.invoice_number}` }
+                    );
+                }
 
-                addJLine(inv.credit_account_id, 0, Number(inv.line_total), "إيراد مبيعات");
-                if (!inv.skip_zatca && Number(inv.tax_amount) > 0) addJLine(inv.tax_acc_id, 0, Number(inv.tax_amount), "ضريبة قيمة مضافة");
-                addJLine(inv.debit_account_id, Number(inv.total_amount), 0, "مستحق على العميل");
-                if (Number(inv.materials_discount) > 0) addJLine(inv.materials_acc_id, Number(inv.materials_discount), 0, "خصم خامات");
-                if (Number(inv.guarantee_amount) > 0) addJLine(inv.guarantee_acc_id, Number(inv.guarantee_amount), 0, "محتجز ضمان أعمال");
+                // 2️⃣ خصم الخامات (العميل دائن، حساب الخامات مدين)
+                if (Number(inv.materials_discount) > 0) {
+                    journalLines.push(
+                        { header_id: headerId, account_id: inv.debit_account_id, debit: 0, credit: Number(inv.materials_discount), partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `استقطاع خامات موردة - فاتورة ${inv.invoice_number}` },
+                        { header_id: headerId, account_id: inv.materials_acc_id, debit: Number(inv.materials_discount), credit: 0, partner_id: resolvePartnerId(inv.materials_acc_id, safePartnerId), project_id: mainProjectId, notes: `تسوية خامات - فاتورة ${inv.invoice_number}` }
+                    );
+                }
 
-                const { error: jErr } = await supabase.from('journal_lines').insert(linesToInsert);
-                if (jErr) throw jErr;
+                // 3️⃣ ضريبة القيمة المضافة (العميل مدين، حساب مصلحة الزكاة دائن)
+                if (!inv.skip_zatca && Number(inv.tax_amount) > 0) {
+                    journalLines.push(
+                        { header_id: headerId, account_id: inv.debit_account_id, debit: Number(inv.tax_amount), credit: 0, partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `ضريبة قيمة مضافة 15% - فاتورة ${inv.invoice_number}` },
+                        { header_id: headerId, account_id: inv.tax_acc_id, debit: 0, credit: Number(inv.tax_amount), partner_id: resolvePartnerId(inv.tax_acc_id, safePartnerId), project_id: mainProjectId, notes: `مخرجات ضريبة - فاتورة ${inv.invoice_number}` }
+                    );
+                }
+
+                // 4️⃣ ضمان الأعمال (العميل دائن، حساب التأمينات المحتجزة مدين)
+                if (Number(inv.guarantee_amount) > 0) {
+                    journalLines.push(
+                        { header_id: headerId, account_id: inv.debit_account_id, debit: 0, credit: Number(inv.guarantee_amount), partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `استقطاع ضمان أعمال (${inv.guarantee_percent || 0}%) - فاتورة ${inv.invoice_number}` },
+                        { header_id: headerId, account_id: inv.guarantee_acc_id, debit: Number(inv.guarantee_amount), credit: 0, partner_id: resolvePartnerId(inv.guarantee_acc_id, safePartnerId), project_id: mainProjectId, notes: `تأمينات محتجزة - فاتورة ${inv.invoice_number}` }
+                    );
+                }
+
+                // 🛡️ التوازن المحاسبي
+                const totalDebits = journalLines.reduce((sum, l) => sum + l.debit, 0);
+                const totalCredits = journalLines.reduce((sum, l) => sum + l.credit, 0);
+                if (Math.abs(totalDebits - totalCredits) > 0.01) {
+                    await supabase.from('journal_headers').delete().eq('id', headerId);
+                    throw new Error(`القيد غير متزن للفاتورة ${inv.invoice_number} - المبالغ غير صحيحة.`);
+                }
+
+                const { error: jErr } = await supabase.from('journal_lines').insert(journalLines);
+                if (jErr) {
+                    await supabase.from('journal_headers').delete().eq('id', headerId);
+                    throw jErr;
+                }
             }
             await supabase.from('invoices').update({ status: 'مُعتمد' }).in('id', selectedIds);
             return toPost.length;
         },
-        onMutate: async () => {
-            await queryClient.cancelQueries({ queryKey: ['invoices'] });
-            const previous = queryClient.getQueryData(['invoices']);
-            queryClient.setQueryData(['invoices'], (old: any[]) => 
-                old?.map(inv => selectedIds.includes(inv.id) ? { ...inv, status: 'مُعتمد' } : inv)
-            );
-            return { previous };
-        },
-        onError: (err, vars, context) => {
-            queryClient.setQueryData(['invoices'], context?.previous);
+        onError: (err: any) => {
             if (err.message === 'ALREADY_POSTED') showToast("الفواتير المختارة مُرحلة بالفعل! ⚠️", "warning");
-            else showToast("حدث خطأ أثناء الترحيل! ❌", "error");
+            else showToast(`حدث خطأ أثناء الترحيل: ${err.message}`, "error");
         },
         onSuccess: (count) => {
             if (count > 0) {
                 setSelectedIds([]);
-                showToast(`✅ تم ترحيل ${count} فاتورة بنجاح!`, "success");
+                showToast(`✅ تم الترحيل وإنشاء القيود لـ ${count} فاتورة!`, "success");
+                queryClient.invalidateQueries({ queryKey: ['invoices'] });
             }
-        },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] })
+        }
     });
 
     // 3. المسح المتسلسل (Deep Cascade Unposting)
@@ -333,23 +332,12 @@ export function useInvoicesLogic() {
             }
             await supabase.from('invoices').update({ status: 'معلق', paid_amount: 0 }).in('id', selectedIds);
         },
-        onMutate: async () => {
-            await queryClient.cancelQueries({ queryKey: ['invoices'] });
-            const previous = queryClient.getQueryData(['invoices']);
-            queryClient.setQueryData(['invoices'], (old: any[]) => 
-                old?.map(inv => selectedIds.includes(inv.id) ? { ...inv, status: 'معلق', paid_amount: 0 } : inv)
-            );
-            return { previous };
-        },
-        onError: (err, vars, context) => {
-            queryClient.setQueryData(['invoices'], context?.previous);
-            showToast("حدث خطأ أثناء التراجع عن الترحيل! ❌", "error");
-        },
+        onError: () => showToast("حدث خطأ أثناء التراجع عن الترحيل! ❌", "error"),
         onSuccess: () => {
             setSelectedIds([]);
-            showToast("تم إلغاء الترحيل والسدادات المرتبطة بنجاح 🔴", "success");
-        },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] })
+            showToast("تم إلغاء الترحيل بنجاح 🔴", "success");
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        }
     });
 
     // 4. الحذف (Delete)
@@ -364,21 +352,12 @@ export function useInvoicesLogic() {
             }
             await supabase.from('invoices').delete().in('id', selectedIds);
         },
-        onMutate: async () => {
-            await queryClient.cancelQueries({ queryKey: ['invoices'] });
-            const previous = queryClient.getQueryData(['invoices']);
-            queryClient.setQueryData(['invoices'], (old: any[]) => old?.filter(inv => !selectedIds.includes(inv.id)));
-            return { previous };
-        },
-        onError: (err, vars, context) => {
-            queryClient.setQueryData(['invoices'], context?.previous);
-            showToast("حدث خطأ أثناء الحذف! ❌", "error");
-        },
+        onError: () => showToast("حدث خطأ أثناء الحذف! ❌", "error"),
         onSuccess: () => {
             setSelectedIds([]);
             showToast("تم الحذف النهائي بنجاح 🗑️", "success");
-        },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] })
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        }
     });
 
     // 5. حالة الختم (Toggle Stamp)
@@ -387,20 +366,11 @@ export function useInvoicesLogic() {
             const { error } = await supabase.from('invoices').update({ is_stamped: !currentStatus }).eq('id', id);
             if (error) throw error;
         },
-        onMutate: async ({ id, currentStatus }) => {
-            await queryClient.cancelQueries({ queryKey: ['invoices'] });
-            const previous = queryClient.getQueryData(['invoices']);
-            queryClient.setQueryData(['invoices'], (old: any[]) => 
-                old?.map(inv => inv.id === id ? { ...inv, is_stamped: !currentStatus } : inv)
-            );
-            return { previous };
-        },
-        onError: (err, vars, context) => {
-            queryClient.setQueryData(['invoices'], context?.previous);
-            showToast("حدث خطأ أثناء محاولة ختم الفاتورة! ❌", "error");
-        },
-        onSuccess: () => showToast("تم تحديث حالة الختم بنجاح ✨", "success"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] })
+        onError: () => showToast("حدث خطأ أثناء محاولة ختم الفاتورة! ❌", "error"),
+        onSuccess: () => {
+            showToast("تم تحديث حالة الختم بنجاح ✨", "success");
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        }
     });
 
     // 6. السداد الفوري
@@ -430,8 +400,7 @@ export function useInvoicesLogic() {
 
             if (dataToSave.invoice_id) {
                 const { data: invData } = await supabase.from('invoices').select('paid_amount').eq('id', dataToSave.invoice_id).single();
-                const oldPaid = Number(invData?.paid_amount || 0);
-                const newPaid = oldPaid + finalAmount;
+                const newPaid = Number(invData?.paid_amount || 0) + finalAmount;
                 await supabase.from('invoices').update({ paid_amount: newPaid }).eq('id', dataToSave.invoice_id);
             }
         },
@@ -442,9 +411,9 @@ export function useInvoicesLogic() {
         onSuccess: () => {
             setIsReceiptModalOpen(false);
             setSelectedInvoiceForPay(null);
-            showToast("تم السداد وتحديث حالة الفاتورة بنجاح ✅", "success");
-        },
-        onSettled: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }) 
+            showToast("تم السداد وتحديث الفاتورة بنجاح ✅", "success");
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        }
     });
 
     const isSaving = saveMutation.isPending || postMutation.isPending || unpostMutation.isPending || deleteMutation.isPending || toggleStampMutation.isPending || payMutation.isPending;

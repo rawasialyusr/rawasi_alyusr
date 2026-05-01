@@ -91,7 +91,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'payroll', title: 'مسيرات الرواتب', icon: '💵', path: '/payroll' }, 
             { id: 'emp_adv', title: 'سلف الموظفين', icon: '💸', path: '/emp_adv' }, 
             { id: 'violations', title: 'المخالفات والجزاءات', icon: '⚠️', path: '/violations' },
-            { id: 'emp_ded', title: 'خصومات أخرى', icon: '✂️', path: '/emp_ded' }, 
             { id: 'housing', title: 'الإعاشة والسكن', icon: '🏠', path: '/housing' }
         ] 
     },

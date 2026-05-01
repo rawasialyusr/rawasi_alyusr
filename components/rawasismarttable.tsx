@@ -10,9 +10,10 @@ const THEME = {
     coffeeDark: '#43342E', goldAccent: '#C5A059', sandLight: '#F4F1EE', sandDark: '#E6D5C3', success: '#166534', danger: '#be123c', border: '#eef2f6'
 };
 
+// 🟢 التعديل الأهم: تغيير النوع ليقبل React.ReactNode (مثل الـ Checkbox) بالإضافة للنصوص
 interface Column {
-    header?: string;
-    label?: string;
+    header?: React.ReactNode | string; 
+    label?: React.ReactNode | string;
     key?: string;
     accessor?: string;
     render?: (row: any) => React.ReactNode;
@@ -29,7 +30,7 @@ interface RawasiSmartTableProps {
     onRowClick?: (row: any) => void;
     emptyMessage?: string;
     
-    // 🚀 خصائص الـ Pagination المدمجة (اختيارية لعدم كسر الصفحات القديمة)
+    // 🚀 خصائص الـ Pagination المدمجة
     enablePagination?: boolean;
     currentPage?: number;
     totalItems?: number;
@@ -42,7 +43,6 @@ export default function RawasiSmartTable({
     title, data, columns, fileName = 'Rawasi_Report', 
     selectable, selectedIds = [], onSelectionChange, onRowClick, emptyMessage,
     
-    // 🚀 تهيئة الخصائص الافتراضية للتصفح
     enablePagination = false,
     currentPage = 1,
     totalItems = 0,
@@ -61,7 +61,8 @@ export default function RawasiSmartTable({
             const exportData = data.map(row => {
                 const newRow: any = {};
                 columns.forEach(col => { 
-                    const headerName = col.label || col.header || 'Column';
+                    // إذا كان الهيدر عبارة عن كود React، لا تقم بتصديره كاسم عمود (استخدم مفتاح بديل)
+                    const headerName = typeof col.label === 'string' ? col.label : (typeof col.header === 'string' ? col.header : col.accessor || 'Column');
                     const keyName = col.key || col.accessor || '';
                     newRow[headerName] = row[keyName] || '---'; 
                 });
@@ -82,7 +83,8 @@ export default function RawasiSmartTable({
         const toastId = toast.loading('جاري تحضير ملف PDF... ⏳');
         try {
             const doc = new jsPDF('p', 'pt', 'a4');
-            const tableColumn = columns.map(col => col.label || col.header || '');
+            // التأكد أن الـ PDF يقرأ النصوص فقط من الهيدر
+            const tableColumn = columns.map(col => typeof col.label === 'string' ? col.label : (typeof col.header === 'string' ? col.header : col.accessor || ''));
             const tableRows = data.map(row => columns.map(col => String(row[col.key || col.accessor || ''] || '---')));
             (doc as any).autoTable({
                 head: [tableColumn], body: tableRows,
@@ -138,6 +140,7 @@ export default function RawasiSmartTable({
                             )}
                             {columns.map((col, idx) => (
                                 <th key={idx} style={{ padding: '15px', textAlign: 'right', color: THEME.coffeeDark, fontWeight: 900, fontSize: '13px', borderBottom: `2px solid ${THEME.goldAccent}40` }}>
+                                    {/* 🟢 الآن يمكن رسم الـ Checkbox هنا بدون أخطاء */}
                                     {col.label || col.header}
                                 </th>
                             ))}
@@ -176,22 +179,19 @@ export default function RawasiSmartTable({
                 </table>
             </div>
 
-            {/* 🚀 شريط الـ Pagination السيادي الجديد */}
             {enablePagination && totalItems > 0 && (
                 <div style={{ 
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
                     padding: '15px 20px', marginTop: '15px', borderTop: '1px solid rgba(0,0,0,0.05)',
                     background: 'rgba(255,255,255,0.4)', borderRadius: '12px', flexWrap: 'wrap', gap: '15px'
                 }}>
-                    
-                    {/* 🔢 قائمة اختيار عدد السجلات */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ fontSize: '12px', fontWeight: 900, color: '#64748b' }}>عرض:</span>
                         <select 
                             value={rowsPerPage} 
                             onChange={(e) => {
                                 if (onRowsChange) onRowsChange(Number(e.target.value));
-                                if (onPageChange) onPageChange(1); // العودة للصفحة الأولى تلقائياً عند تغيير العدد
+                                if (onPageChange) onPageChange(1);
                             }}
                             style={{ padding: '8px 15px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', fontWeight: 800, cursor: 'pointer', background: 'white', color: '#0f172a' }}
                         >
@@ -202,7 +202,6 @@ export default function RawasiSmartTable({
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>من إجمالي {totalItems}</span>
                     </div>
 
-                    {/* ⏪ أزرار التحكم في الصفحات ⏩ */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button 
                             disabled={currentPage === 1} 
@@ -211,11 +210,9 @@ export default function RawasiSmartTable({
                         >
                             السابق
                         </button>
-
                         <div style={{ background: THEME.goldAccent, color: 'white', padding: '8px 20px', borderRadius: '12px', fontWeight: 900, fontSize: '13px', boxShadow: `0 4px 10px ${THEME.goldAccent}40` }}>
                             صفحة {currentPage} من {totalPages}
                         </div>
-
                         <button 
                             disabled={currentPage >= totalPages} 
                             onClick={(e) => { e.stopPropagation(); if(onPageChange) onPageChange(currentPage + 1); }} 

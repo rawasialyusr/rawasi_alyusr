@@ -5,14 +5,14 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
-import UserMenu from '@/components/UserMenu';
 import { usePermissions } from '@/lib/PermissionsContext'; 
 import SecureAction from '@/components/SecureAction'; 
 
 export default function HierarchicalLedgerPage() {
   const { 
+    accounts, 
     paginatedTree, totalPages, currentPage, setCurrentPage,
-    isLoading, searchTerm, setSearchTerm, expandedIds, toggleExpand, expandAll, collapseAll, 
+    isLoading, isDeleting, searchTerm, setSearchTerm, expandedIds, toggleExpand, expandAll, collapseAll, 
     selectedIds, toggleSelection, handleDelete, handleAdd, handleEdit,
     startDate, setStartDate, endDate, setEndDate
   } = useHierarchicalAccountsLogic();
@@ -22,14 +22,16 @@ export default function HierarchicalLedgerPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // 🧮 حساب إجماليات ميزان المراجعة
+  // 🧮 السامري المحاسبي الدقيق (ميزان المراجعة)
   const summary = useMemo(() => {
     let totalDebit = 0;
     let totalCredit = 0;
-    paginatedTree.forEach(node => {
-      totalDebit += node.totalDebit || 0;
-      totalCredit += node.totalCredit || 0;
+
+    paginatedTree.forEach((node: any) => {
+      totalDebit += Number(node.totalDebit) || 0;
+      totalCredit += Number(node.totalCredit) || 0;
     });
+
     return {
       debit: totalDebit,
       credit: totalCredit,
@@ -51,10 +53,12 @@ export default function HierarchicalLedgerPage() {
         <>
           <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>إجراءات على ({selectedIds.length})</p>
           <SecureAction module="accounts" action="edit">
-            <button className="btn-main-glass blue" onClick={() => handleEdit(selectedIds)} disabled={selectedIds.length !== 1}>✏️ تعديل الحساب</button>
+            <button className="btn-main-glass blue" onClick={() => handleEdit(selectedIds)} disabled={selectedIds.length !== 1 || isDeleting}>✏️ تعديل الحساب</button>
           </SecureAction>
           <SecureAction module="accounts" action="delete">
-            <button className="btn-main-glass red" onClick={() => handleDelete(selectedIds)}>🗑️ حذف الحساب</button>
+            <button className="btn-main-glass red" onClick={() => handleDelete(selectedIds)} disabled={isDeleting}>
+              {isDeleting ? '⏳ جاري الحذف...' : '🗑️ حذف الحساب'}
+            </button>
           </SecureAction>
         </>
       )}
@@ -71,16 +75,10 @@ export default function HierarchicalLedgerPage() {
   return (
     <MasterPage title="شجرة الحسابات والميزان" subtitle="إدارة المركز المالي ودليل الحسابات - رواسي اليسر">
       
-      {/* 🚀 إضافة كارت UserMenu الموحد */}
-      <div style={{ marginBottom: '25px', padding: '0 20px', animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-        <UserMenu />
-      </div>
-
       <div className="floating-stack-layout">
         <div className="warm-depth-glow" />
 
         <div className="content-container">
-          {/* 📡 إدارة السايد بار المركزي */}
           <RawasiSidebarManager 
             summary={
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -122,7 +120,6 @@ export default function HierarchicalLedgerPage() {
             watchDeps={[selectedIds, summary.balance, searchTerm, startDate, endDate]}
           />
 
-          {/* الكارت الزجاجي الرئيسي - الطبقة الأمامية */}
           <div className="glass-master-card no-print">
             <div className="card-header">
               <h4 style={{ margin: 0, fontWeight: 900, color: THEME.primary }}>الدليل المحاسبي وميزان المراجعة</h4>
@@ -144,7 +141,7 @@ export default function HierarchicalLedgerPage() {
                   ⏳ جاري معالجة البيانات المالية وبناء الشجرة...
                 </div>
               ) : (
-                paginatedTree.map(node => (
+                paginatedTree.map((node: any) => (
                   <AccountNode 
                     key={node.id} node={node} expandedIds={expandedIds} toggleExpand={toggleExpand} 
                     selectedIds={selectedIds} toggleSelection={toggleSelection} depth={1} 
@@ -157,7 +154,6 @@ export default function HierarchicalLedgerPage() {
         </div>
       </div>
 
-      {/* 🎨 التنسيقات السينمائية (Apple Style) */}
       <style>{`
         .floating-stack-layout { position: relative; width: 100%; padding: 0 20px 20px 20px; z-index: 5; direction: rtl; }
         .warm-depth-glow { position: absolute; inset: 0; background: radial-gradient(circle at 20% 30%, rgba(197, 160, 89, 0.15) 0%, transparent 70%); z-index: -1; pointer-events: none; }
@@ -187,18 +183,29 @@ export default function HierarchicalLedgerPage() {
         .btn-main-glass.white:hover:not(:disabled) { background: white; color: #1e293b; }
         .btn-main-glass:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* 🌳 تنسيق جدول الشجرة */
         .table-header {
           display: grid; grid-template-columns: 40px 2.5fr 1fr 1fr 1fr 1.2fr; 
           padding: 15px 20px; font-weight: 900; color: #64748b; font-size: 13px;
           background: rgba(0,0,0,0.02); border-radius: 16px; margin-bottom: 15px; border: 1px solid #f1f5f9;
         }
+
+        /* 🚀 تمييز مرئي قوي للحساب الرئيسي مقابل الفرعي */
         .acc-row { 
-          background: white; border-radius: 16px; margin-bottom: 8px; 
+          border-radius: 16px; margin-bottom: 8px; 
           display: grid; grid-template-columns: 40px 2.5fr 1fr 1fr 1fr 1.2fr; 
           align-items: center; padding: 15px 20px; cursor: pointer; 
           border: 1px solid #f1f5f9; transition: 0.2s; box-shadow: 0 2px 10px rgba(0,0,0,0.01);
         }
+        /* تصميم الحساب الرئيسي (Root) */
+        .acc-row.root-node {
+          background: rgba(15, 23, 42, 0.03); /* لون رمادي داكن خفيف */
+          border: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        /* تصميم الحساب الفرعي (Child) */
+        .acc-row.child-node {
+          background: white;
+        }
+
         .acc-row:hover { border-color: ${THEME.goldAccent}; transform: translateY(-1px); box-shadow: 0 5px 15px rgba(197, 160, 89, 0.1); }
         .acc-row.selected { background: rgba(197, 160, 89, 0.05); border-color: ${THEME.goldAccent}; }
 
@@ -215,43 +222,48 @@ export default function HierarchicalLedgerPage() {
         .cinematic-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
 
         @keyframes cardFadeUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </MasterPage>
   );
 }
 
-// 📌 مكون الصفوف الفرعية للشجرة (تم تحديثه ليتناسب مع الخلفية البيضاء للكارت الزجاجي)
+// 📌 مكون الصفوف الفرعية للشجرة
 function AccountNode({ node, expandedIds, toggleExpand, selectedIds, toggleSelection, depth }: any) {
   const isExpanded = expandedIds.includes(node.id);
   const isSelected = selectedIds.includes(node.id);
   const hasSub = (node.children?.length > 0) || (node.transactions?.length > 0);
+  
+  // 💡 تحديد ما إذا كان الحساب جذرياً أم فرعياً لتطبيق الـ CSS
+  const isRoot = depth === 1;
 
   return (
-    <div style={{ marginRight: `${(depth - 1) * 25}px` }}>
+    <div style={{ marginRight: `${(depth - 1) * 30}px` /* 👈 مسافة بادئة أكبر للأبناء */ }}>
       <div 
-        className={`acc-row ${isSelected ? 'selected' : ''}`}
+        className={`acc-row ${isRoot ? 'root-node' : 'child-node'} ${isSelected ? 'selected' : ''}`}
         onClick={() => hasSub && toggleExpand(node.id)} 
-        style={{ borderRight: `${Math.max(2, 8/depth)}px solid ${THEME.goldAccent}` }}
+        style={{ borderRight: `${isRoot ? '5px' : '2px'} solid ${isRoot ? THEME.primary : THEME.goldAccent}` }} /* 👈 الشريط الجانبي بيفرق بينهم */
       >
         <input 
           type="checkbox" className="custom-checkbox" checked={isSelected} 
           onChange={() => toggleSelection(node.id)} onClick={e=>e.stopPropagation()} 
         />
         <div>
-          <span style={{ fontWeight: 900, fontSize: '15px', color: THEME.primary }}>{node.name}</span>
-          <span style={{ fontSize: '12px', color: '#94a3b8', marginRight: '10px' }}>#{node.code}</span>
+          <span style={{ fontWeight: isRoot ? 900 : 700, fontSize: isRoot ? '16px' : '14px', color: THEME.primary }}>
+            {hasSub ? (isExpanded ? '📂 ' : '📁 ') : '📄 '}
+            {node.name}
+          </span>
+          <span style={{ fontSize: '11px', color: '#94a3b8', marginRight: '10px' }}>#{node.code}</span>
         </div>
         <div style={{ fontSize: '12px', color: node.is_transactional ? '#64748b' : THEME.goldAccent, fontWeight: 800 }}>
-          {node.is_transactional ? 'حساب فرعي' : 'حساب رئيسي'}
+          {node.is_transactional ? 'حساب فرعي' : 'تجميعي'}
         </div>
-        <div style={{ textAlign: 'center', color: THEME.success, fontWeight: 900, fontFamily: 'monospace', fontSize: '14px' }}>
+        <div style={{ textAlign: 'center', color: THEME.success, fontWeight: isRoot ? 900 : 700, fontFamily: 'monospace', fontSize: '14px' }}>
           {formatCurrency(node.totalDebit)}
         </div>
-        <div style={{ textAlign: 'center', color: THEME.danger, fontWeight: 900, fontFamily: 'monospace', fontSize: '14px' }}>
+        <div style={{ textAlign: 'center', color: THEME.danger, fontWeight: isRoot ? 900 : 700, fontFamily: 'monospace', fontSize: '14px' }}>
           {formatCurrency(node.totalCredit)}
         </div>
-        <div style={{ textAlign: 'center', fontWeight: 900, color: THEME.primary, fontFamily: 'monospace', fontSize: '15px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+        <div style={{ textAlign: 'center', fontWeight: 900, color: isRoot ? 'white' : THEME.primary, fontFamily: 'monospace', fontSize: '14px', background: isRoot ? THEME.primary : '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
           {formatCurrency(node.balance)}
         </div>
       </div>

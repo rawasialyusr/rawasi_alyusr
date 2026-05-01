@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect, useMemo } from 'react'; 
 import { usePaymentVouchersLogic } from './payment_vouchers_logic';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo'; 
@@ -11,7 +11,7 @@ import MasterPage from '@/components/MasterPage';
 import RawasiSmartTable from '@/components/rawasismarttable';
 
 import PaymentVoucherModal from './PaymentVoucherModal'; 
-import PaymentPrintModal from './PaymentPrintModal'; // مودال الطباعة
+import PaymentPrintModal from './PaymentPrintModal'; 
 
 export default function PaymentVouchersPage() {
   const logic = usePaymentVouchersLogic();
@@ -23,15 +23,42 @@ export default function PaymentVouchersPage() {
 
   useEffect(() => setMounted(true), []);
 
-  const voucherColumns = [
+  // 🚀 استخراج العناصر المعروضة في الصفحة الحالية
+  const currentVisibleIds = useMemo(() => {
+    return logic.filteredVouchers
+      .slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage)
+      .map((v: any) => v.id);
+  }, [logic.filteredVouchers, logic.currentPage, logic.rowsPerPage]);
+
+  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every(id => logic.selectedIds.includes(id));
+
+  // 🚀 مصفوفة الأعمدة للجدول
+  const voucherColumns = useMemo(() => [
     {
-      header: 'تحديد',
+      // 🟢 وضع الـ Checkbox الخاص بتحديد الكل داخل الـ Header مباشرة
+      header: (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox"
+                  checked={isAllVisibleSelected}
+                  title="تحديد كل الصفحة"
+                  onChange={() => {
+                      if (isAllVisibleSelected) {
+                          logic.setSelectedIds(logic.selectedIds.filter(id => !currentVisibleIds.includes(id)));
+                      } else {
+                          logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
+                      }
+                  }}
+              />
+          </div>
+      ), 
       accessor: 'id',
       render: (row: any) => {
-        if (!row) return null;
+        if (!row) return null; // 🛡️ Render Guard (V11 Standard)
         const isSelected = logic.selectedIds.includes(row.id);
         return (
-          <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-block' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
               <input 
                   type="checkbox" 
                   className="custom-checkbox" 
@@ -48,15 +75,36 @@ export default function PaymentVouchersPage() {
     },
     { header: 'رقم السند', accessor: 'voucher_number', render: (row: any) => row ? <b style={{ color: THEME.primary, fontSize: '14px' }}>#{row.voucher_number}</b> : null },
     { header: 'التاريخ', accessor: 'date', render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.date}</span> : null },
-    { header: 'المستفيد', accessor: 'payee_name', render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>{row.payee_name || '---'}</b> : null },
-    { header: 'طريقة الدفع', accessor: 'payment_method', render: (row: any) => row ? <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>{row.payment_method || '---'}</span> : null },
-    { header: 'البيان', accessor: 'description', render: (row: any) => row ? <span style={{ fontSize:'12px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>{row.description}</span> : null },
+    { 
+      header: 'المستفيد', 
+      accessor: 'payee_name', 
+      render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>👤 {row.payee?.name || row.payee_name || '---'}</b> : null 
+    },
+    { 
+      header: 'الحساب الدائن (الخزينة)', 
+      accessor: 'credit_account_id', 
+      render: (row: any) => row ? (
+        <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
+          🏦 {row.credit_account?.name || '---'} 
+        </span>
+      ) : null 
+    },
+    { 
+      header: 'الحساب المدين', 
+      accessor: 'debit_account_id', 
+      render: (row: any) => row ? (
+        <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
+          🧾 {row.debit_account?.name || '---'}
+        </span>
+      ) : null 
+    },
+    { header: 'البيان', accessor: 'description', render: (row: any) => row ? <span style={{ fontSize:'12px', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>{row.description}</span> : null },
     { header: 'المبلغ', accessor: 'amount', render: (row: any) => row ? <span style={{ color: THEME.danger, fontWeight: 900, fontSize: '15px' }}>{formatCurrency(row.amount)}</span> : null },
     {
       header: 'الحالة',
       accessor: 'is_posted',
       render: (row: any) => {
-        if (!row) return null;
+        if (!row) return null; // 🛡️ Render Guard (V11 Standard)
         return row.is_posted ? 
           <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>مُرحل ✅</span> : 
           <span style={{ display: 'inline-block', background: '#fff7ed', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معلق ⏳</span>;
@@ -66,7 +114,7 @@ export default function PaymentVouchersPage() {
       header: 'الإجراءات',
       accessor: 'actions',
       render: (row: any) => {
-        if (!row) return null;
+        if (!row) return null; // 🛡️ Render Guard (V11 Standard)
         return (
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
             <button 
@@ -80,43 +128,53 @@ export default function PaymentVouchersPage() {
         );
       }
     }
-  ];
+  ], [logic.selectedIds, isAllVisibleSelected, currentVisibleIds]); 
 
-  const sidebarActions = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      <SecureAction module="payments" action="create">
-        <button className="btn-main-glass gold" onClick={logic.handleAddNew}>➕ إصدار سند صرف</button>
-      </SecureAction>
+  // 🚀 القائمة الجانبية للأزرار الإجرائية (جسر الترحيل)
+  const sidebarActions = useMemo(() => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <SecureAction module="payments" action="create">
+          <button className="btn-main-glass gold" onClick={logic.handleAddNew}>➕ إصدار سند صرف</button>
+        </SecureAction>
 
-      {logic.selectedIds.length > 0 && (
-        <>
-          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
-          
-          {logic.selectedIds.length === 1 && (
-            <SecureAction module="payments" action="edit">
-              <button className="btn-main-glass white" onClick={logic.handleEditSelected}>✏️ تعديل السجل</button>
+        {logic.selectedIds.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>            
+            <div style={{ textAlign: 'center', marginBottom: '5px' }}>
+              <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 900, margin: 0 }}>
+                تم تحديد ({logic.selectedIds.length}) سجل
+              </p>
+              <button 
+                onClick={() => logic.setSelectedIds([])}
+                style={{ background: 'none', border: 'none', color: THEME.primary, fontSize: '10px', fontWeight: 900, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                إلغاء التحديد
+              </button>
+            </div>
+            
+            {logic.selectedIds.length === 1 && (
+              <SecureAction module="payments" action="edit">
+                <button className="btn-main-glass white" onClick={logic.handleEditSelected}>✏️ تعديل السجل</button>
+              </SecureAction>
+            )}
+            <SecureAction module="payments" action="post">
+              <button className="btn-main-glass green" onClick={logic.handlePostSelected}>🚀 اعتماد وترحيل</button>
             </SecureAction>
-          )}
-
-          <SecureAction module="payments" action="post">
-            <button className="btn-main-glass green" onClick={logic.handlePostSelected}>🚀 اعتماد وترحيل</button>
-          </SecureAction>
-
-          <SecureAction module="payments" action="post">
-            <button className="btn-main-glass yellow" onClick={logic.handleUnpostSelected}>↩️ فك الترحيل</button>
-          </SecureAction>
-
-          <SecureAction module="payments" action="delete">
-            <button className="btn-main-glass red" onClick={logic.handleDeleteSelected}>🗑️ حذف نهائي</button>
-          </SecureAction>
-        </>
-      )}
-    </div>
-  );
+            <SecureAction module="payments" action="post">
+              <button className="btn-main-glass yellow" onClick={logic.handleUnpostSelected}>↩️ فك الترحيل</button>
+            </SecureAction>
+            <SecureAction module="payments" action="delete">
+              <button className="btn-main-glass red" onClick={logic.handleDeleteSelected}>🗑️ حذف نهائي</button>
+            </SecureAction>
+          </div>
+        )}
+      </div>
+    );
+  }, [logic.selectedIds, logic.handleAddNew, logic.handleEditSelected, logic.handlePostSelected, logic.handleUnpostSelected, logic.handleDeleteSelected]);
 
   return (
     <div className="clean-page">
-      <MasterPage title="سندات الصرف" subtitle="إدارة المدفوعات والتحويلات المالية">
+      <MasterPage title="سندات الصرف" subtitle="إدارة المدفوعات والتحويلات المالية والتوجيه المحاسبي الدقيق">
           <RawasiSidebarManager 
             summary={
               <div className="summary-glass-card">
@@ -160,7 +218,6 @@ export default function PaymentVouchersPage() {
                 columns={voucherColumns} 
                 onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
                 
-                // 🚀 تشغيل الـ Pagination السيادي من داخل الجدول
                 enablePagination={true}
                 currentPage={logic.currentPage}
                 totalItems={logic.filteredVouchers.length}
@@ -178,6 +235,8 @@ export default function PaymentVouchersPage() {
                  setRecord={logic.setCurrentVoucher}
                  onSave={logic.handleSaveVoucher}
                  isSaving={logic.isSaving}
+                 partnerBalance={logic.partnerBalance}
+                 isBalanceLoading={logic.isBalanceLoading}
              />
           )}
 

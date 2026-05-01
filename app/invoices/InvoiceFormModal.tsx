@@ -16,7 +16,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         setMounted(true);
     }, []);
 
-    // 🚀 1. سحب البيانات بشكل ذكي ومؤكد (العقارات والعميل)
+    // 🚀 1. سحب البيانات بشكل ذكي ومؤكد (العقارات، العميل، والبنود)
     useEffect(() => {
         if (!isOpen || !record) return;
 
@@ -48,11 +48,17 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
             needsUpdate = true;
         }
 
+        // 💎 د. (التعديل الأهم): سحب البنود التفصيلية في حالة التعديل عشان الجدول ميكونش فاضي
+        if (record.id && !record.lines && (record.lines_data || record.items)) {
+            updates.lines = record.lines_data || record.items || [];
+            needsUpdate = true;
+        }
+
         // لو جمعنا أي داتا ناقصة، بنحدثها فوراً
         if (needsUpdate) {
             setRecord((prev: any) => ({ ...prev, ...updates }));
         }
-    }, [record?.id, projects?.length, isOpen]); 
+    }, [record?.id, projects?.length, isOpen, record?.lines_data, record?.items]); 
 
     // 🚀 2. الحسابات الفورية
     useEffect(() => {
@@ -60,7 +66,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         const qty = Number(record.quantity || 0);
         const price = Number(record.unit_price || 0);
         
-        // 💡 السطر الوحيد اللي اتعدل: بيجمع السعر المكتوب حالياً + البنود المضافة في الجدول
+        // 💡 بيجمع السعر المكتوب حالياً + البنود المضافة في الجدول
         const linesTotal = (record.lines || []).reduce((sum: number, line: any) => sum + (Number(line.quantity) * Number(line.unit_price)), 0);
         const lineTotal = (qty * price) + linesTotal;
         
@@ -69,6 +75,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         const guaranteePercent = Number(record.guarantee_percent || 0);
         const guaranteeAmount = (taxableAmount * guaranteePercent) / 100;
         
+        // 💡 حساب الضريبة (لو متعلم إنها مش خاضعة بيديها 0، لو خاضعة بيحسب 15%)
         const taxAmount = record.skip_zatca ? 0 : (taxableAmount * 0.15); 
         const finalTotal = taxableAmount + taxAmount - guaranteeAmount;
 
@@ -95,9 +102,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                 due_date: dueDateCalculated.toISOString()
             }));
         }
-    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca, record?.lines]); // 👈 ضفنا record.lines في الاعتمادات
-
-    // 👇====== تمت إضافة الدوال هنا بدون حذف أي سطر من الكود ======👇
+    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca, record?.lines]); 
 
     // 🚀 دالة إضافة البيان للجدول
     const handleAddStatement = (e: React.MouseEvent) => {
@@ -136,8 +141,6 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
         const filteredLines = (record.lines || []).filter((_: any, idx: number) => idx !== indexToRemove);
         setRecord({ ...record, lines: filteredLines });
     };
-
-    // 👆============================================================👆
 
     // 🚀 3. دالة التحقق قبل الحفظ
     const handleValidateAndSave = () => {
@@ -249,7 +252,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         </div>
                         
                         <span style={{ fontSize: '13px', fontWeight: 900, color: record?.skip_zatca ? '#dc2626' : THEME.success }}>
-                            {record?.skip_zatca ? '❌ الضريبة: معطلة (0%)' : '✅ الضريبة: مفعلة (15%)'}
+                            {record?.skip_zatca ? '❌ غير خاضعة للضريبة (0%)' : '✅ خاضعة للضريبة (15%)'}
                         </span>
                     </div>
                 </div>
@@ -288,7 +291,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         table="partners" 
                         searchCols="name,code" displayCol="name"
                         initialDisplay={record.client_name || record.partners?.name || ''} 
-                        onSelect={(p: any) => setRecord({...record, partner_id: p.id, client_name: p.name})} 
+                        onSelect={(p: any) => setRecord({...record, partner_id: p?.id || null, client_name: p?.name || ''})} 
                         allowAddNew={true} 
                         enableClear={true}
                     />
@@ -345,10 +348,10 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         initialDisplay={record.description || ''}
                         onSelect={(b: any) => setRecord({
                             ...record, 
-                            boq_id: b.id, 
-                            description: b.item_name, 
-                            unit: b.unit_of_measure || record.unit, 
-                            unit_price: b.price || record.unit_price 
+                            boq_id: b?.id || null, 
+                            description: b?.item_name || '', 
+                            unit: b?.unit_of_measure || record.unit, 
+                            unit_price: b?.price || record.unit_price 
                         })} 
                         enableClear={true}
                     />
@@ -387,6 +390,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         </button>
                     </div>
 
+                    {/* 💎 أمان الدالة (record.lines || []) لضمان عدم حدوث Crash */}
                     {record.lines && record.lines.length > 0 && (
                         <div style={{ gridColumn: 'span 3', background: 'rgba(255,255,255,0.6)', padding: '15px', borderRadius: '16px', border: `1px solid ${THEME.border}` }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
@@ -402,7 +406,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {record.lines.map((line: any, idx: number) => (
+                                    {(record.lines || []).map((line: any, idx: number) => (
                                         <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                                             <td style={{ padding: '10px', fontWeight: 900 }}>{idx + 1}</td>
                                             <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700 }}>{line.description}</td>
@@ -427,7 +431,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         table="accounts" 
                         searchCols="name,code" displayCol="name"
                         initialDisplay={record.debit_account_name || record.debit_account?.name || ''}
-                        onSelect={(a: any) => setRecord({...record, debit_account_id: a.id, debit_account_name: a.name})} 
+                        onSelect={(a: any) => setRecord({...record, debit_account_id: a?.id || null, debit_account_name: a?.name || ''})} 
                     />
                     <SmartCombo 
                         key={`credit-${record.credit_account_id || 'empty'}`}
@@ -436,7 +440,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                         table="accounts" 
                         searchCols="name,code" displayCol="name"
                         initialDisplay={record.credit_account_name || record.credit_account?.name || ''}
-                        onSelect={(a: any) => setRecord({...record, credit_account_id: a.id, credit_account_name: a.name})} 
+                        onSelect={(a: any) => setRecord({...record, credit_account_id: a?.id || null, credit_account_name: a?.name || ''})} 
                     />
                     
                     <div style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)', padding: '15px', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
@@ -459,7 +463,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                                 searchCols="name,code" displayCol="name"
                                 placeholder={record.materials_acc_id === '85e61a6a-8c85-4219-a733-3b2180dfe043' ? '[217] مخزون خامات العميل (افتراضي)' : '🔍 اختر حساب...'}
                                 initialDisplay={record.materials_acc_name || record.materials_account?.name || ''}
-                                onSelect={(a: any) => setRecord({...record, materials_acc_id: a.id, materials_acc_name: a.name})} 
+                                onSelect={(a: any) => setRecord({...record, materials_acc_id: a?.id || null, materials_acc_name: a?.name || ''})} 
                             />
                         )}
                     </div>
@@ -479,7 +483,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                                 searchCols="name,code" displayCol="name"
                                 placeholder={record.guarantee_acc_id === '8bf39cb1-4028-4c9e-817d-27c239873030' ? '[124] تأمينات محتجزة لدى الغير (افتراضي)' : '🔍 اختر حساب...'}
                                 initialDisplay={record.guarantee_acc_name || record.guarantee_account?.name || ''}
-                                onSelect={(a: any) => setRecord({...record, guarantee_acc_id: a.id, guarantee_acc_name: a.name})} 
+                                onSelect={(a: any) => setRecord({...record, guarantee_acc_id: a?.id || null, guarantee_acc_name: a?.name || ''})} 
                             />
                         )}
                     </div>
@@ -494,7 +498,9 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>مبلغ الضريبة (15%)</div>
                         <div style={{ fontSize: '20px', fontWeight: 900 }}>{formatCurrency(record.tax_amount ?? 0)}</div>
-                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', fontWeight: 700 }}>{record.skip_zatca ? 'الدالة معطلة (0)' : 'ترحل لـ [215]'}</div>
+                        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px', fontWeight: 700 }}>
+                            {record.skip_zatca ? 'الفاتورة غير خاضعة للضريبة' : 'ترحل لـ [215]'}
+                        </div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>محتجز ضمان أعمال</div>

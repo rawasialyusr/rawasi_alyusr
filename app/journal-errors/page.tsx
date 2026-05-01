@@ -154,7 +154,10 @@ export default function JournalMaintenancePage() {
 // ==========================================================
 // 🍏 مكون القسم الذكي (نسخة محمية ضد الـ Undefined)
 // ==========================================================
+// 🍏 مكون القسم الذكي (AuditSection) - ميثاق رواسي الماسي V11
+// ==========================================================
 function AuditSection({ logic, data, title, color, icon, actionText, onAction, secondaryAction, secondaryActionText }: any) {
+    // 🛡️ حارس رندر إلزامي: منع معالجة المصفوفات الفارغة أو غير المعرفة
     if (!data || data.length === 0) return null;
 
     const columns = useMemo(() => [
@@ -162,12 +165,13 @@ function AuditSection({ logic, data, title, color, icon, actionText, onAction, s
             key: 'id',
             label: 'رقم القيد',
             render: (item: any) => {
-                // 🛡️ حارس أمن: لو الـ item مش موجود، ارجع فوراً ومترسمش حاجة
+                // 🛡️ الباب الأول بند 3: حارس الرندر الإلزامي لمنع الانهيار
                 if (!item || !item.id) return null; 
 
                 return (
                     <span style={{ fontWeight: 900, fontFamily: 'monospace', color: '#334155' }}>
-                        {item.isGhost ? '👻 GHOST' : `JRN-${item.id.toString().slice(0,8).toUpperCase()}`}
+                        {/* 🛡️ الباب التاسع: صرامة الأنواع (Strict Casting) لضمان توافق الـ UUID */}
+                        {item.isGhost ? '👻 GHOST' : `JRN-${String(item.id).slice(0,8).toUpperCase()}`}
                     </span>
                 );
             }
@@ -176,21 +180,25 @@ function AuditSection({ logic, data, title, color, icon, actionText, onAction, s
             key: 'details',
             label: 'البيان وهوية المستند',
             render: (item: any) => {
-                if (!item) return null; // 🛡️ حماية
+                // 🛡️ حارس رندر إلزامي
+                if (!item) return null; 
 
                 const documentDate = item.entry_date || item.date || item.created_at?.split('T')[0];
-                const documentAmount = item.totalAmount || item.amount || item.diffAmount || 0;
+                const documentAmount = item.totalAmount || item.amount || Math.abs(item.diffAmount || 0);
                 const refId = item.reference_id || item.reference_number;
 
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         <div style={{ fontSize: '12px', fontWeight: 'bold' }}>{item.description || 'لا يوجد بيان'}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                            <span style={{ background: `${color}15`, color: color, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 900 }}>💰 {formatCurrency(documentAmount)}</span>
+                            <span style={{ background: `${color}15`, color: color, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 900 }}>
+                                💰 {formatCurrency(documentAmount)}
+                            </span>
                             {documentDate && <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>📅 {documentDate}</span>}
                             {refId && (
                                 <span style={{ background: 'rgba(255, 247, 237, 0.8)', color: '#d97706', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', border: '1px dashed #fcd34d' }}>
-                                    🔗 {refId.toString().slice(0, 8)}
+                                    {/* 🛡️ الباب التاسع: إجبار المعرفات المحاسبية باستخدام String(id) */}
+                                    🔗 {String(refId).slice(0, 8)}
                                 </span>
                             )}
                         </div>
@@ -202,7 +210,8 @@ function AuditSection({ logic, data, title, color, icon, actionText, onAction, s
             key: 'diagnosis',
             label: 'التشخيص والحل',
             render: (item: any) => {
-                if (!item) return null; // 🛡️ حماية
+                // 🛡️ حارس رندر إلزامي[cite: 22]
+                if (!item) return null; 
                 return (
                     <div style={{ fontSize: '11px', lineHeight: '1.4' }}>
                         <div style={{ color: color, fontWeight: 'bold' }}>⚠️ {item.diagnosis}</div>
@@ -215,15 +224,28 @@ function AuditSection({ logic, data, title, color, icon, actionText, onAction, s
             key: 'actions',
             label: 'إجراء سريع',
             render: (item: any) => {
-                if (!item || !item.id) return null; // 🛡️ حماية
+                // 🛡️ حارس رندر إلزامي[cite: 22]
+                if (!item || !item.id) return null; 
+
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        {/* 🛡️ الأمان المجهري: فحص الصلاحية بـ SecureAction[cite: 22] */}
                         <SecureAction module="journal_audit" action="edit">
-                            <button onClick={() => onAction(item.id, item)} style={{ padding: '6px 12px', background: color, color: 'white', border: 'none', borderRadius: '6px', fontWeight: 900, cursor: 'pointer', fontSize: '11px' }}>{actionText}</button>
+                            <button 
+                                onClick={() => onAction(String(item.id), item)} 
+                                style={{ padding: '6px 12px', background: color, color: 'white', border: 'none', borderRadius: '6px', fontWeight: 900, cursor: 'pointer', fontSize: '11px' }}
+                            >
+                                {actionText}
+                            </button>
                         </SecureAction>
                         {secondaryAction && (
                             <SecureAction module="journal_audit" action="delete">
-                                <button onClick={() => secondaryAction(item.id)} style={{ background: 'none', border: 'none', color: '#e11d48', fontSize: '10px', cursor: 'pointer', textDecoration: 'underline' }}>{secondaryActionText}</button>
+                                <button 
+                                    onClick={() => secondaryAction(String(item.id))} 
+                                    style={{ background: 'none', border: 'none', color: '#e11d48', fontSize: '10px', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                    {secondaryActionText}
+                                </button>
                             </SecureAction>
                         )}
                     </div>
@@ -234,9 +256,21 @@ function AuditSection({ logic, data, title, color, icon, actionText, onAction, s
 
     return (
         <GlassContainer>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', padding: '10px 15px', background: `${color}10`, borderRadius: '10px', borderRight: `5px solid ${color}` }}>
-                <h3 style={{ margin: 0, color: color, fontWeight: 900, fontSize: '15px' }}>{icon} {title} ({data.length})</h3>
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '15px', 
+                padding: '10px 15px', 
+                background: `${color}10`, 
+                borderRadius: '10px', 
+                borderRight: `5px solid ${color}` 
+            }}>
+                <h3 style={{ margin: 0, color: color, fontWeight: 900, fontSize: '15px' }}>
+                    {icon} {title} ({data.length})
+                </h3>
             </div>
+
+            {/* 🏗️ استخدام المحرك الذكي السيادي (RawasiSmartTable)[cite: 22] */}
             <RawasiSmartTable 
                 columns={columns} 
                 data={data} 

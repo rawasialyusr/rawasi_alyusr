@@ -2,6 +2,7 @@
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { fetchAllSupabaseData } from '@/lib/helpers';
+import { useToast } from '@/lib/toast-context'; // 🛡️ نظام التنبيهات السيادي
 
 // 🗺️ خريطة حقول الجداول (عشان لو الجدول فاضي، السيستم يعرف يبني النموذج)
 export const TABLE_SCHEMAS: Record<string, string[]> = {
@@ -29,13 +30,18 @@ export const TABLE_SCHEMAS: Record<string, string[]> = {
 };
 
 export const useBackupLogic = () => {
+    const { showToast } = useToast();
     
     // 🟢 تصدير لإكسيل (بيانات حقيقية)
     const backupToExcel = async (selectedTables: string[]) => {
         try {
+            showToast('⏳ جاري تجميع البيانات وتحضير ملف الإكسل...', 'loading');
             const workbook = XLSX.utils.book_new();
+            
             for (const table of selectedTables) {
+                // استخدام دالة الجلب الضخمة لحماية المتصفح من الانهيار
                 const data = await fetchAllSupabaseData(supabase, table);
+                
                 if (data && data.length > 0) {
                     const worksheet = XLSX.utils.json_to_sheet(data);
                     XLSX.utils.book_append_sheet(workbook, worksheet, table);
@@ -46,10 +52,13 @@ export const useBackupLogic = () => {
                     XLSX.utils.book_append_sheet(workbook, worksheet, table);
                 }
             }
+            
             XLSX.writeFile(workbook, `Rawasi_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('✅ تم تصدير نسخة الإكسل بنجاح', 'success');
             return { success: true };
-        } catch (error) {
+        } catch (error: any) {
             console.error("Excel Backup Error:", error);
+            showToast(`❌ فشل تصدير الإكسل: ${error.message}`, 'error');
             return { success: false };
         }
     };
@@ -57,11 +66,14 @@ export const useBackupLogic = () => {
     // 🔵 تصدير لـ JSON
     const backupToJSON = async (selectedTables: string[]) => {
         try {
+            showToast('⏳ جاري تحضير ملف JSON...', 'loading');
             const fullSnapshot: any = { metadata: { date: new Date().toISOString() }, data: {} };
+            
             for (const table of selectedTables) {
                 const data = await fetchAllSupabaseData(supabase, table);
                 fullSnapshot.data[table] = data;
             }
+            
             const blob = new Blob([JSON.stringify(fullSnapshot, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -69,28 +81,72 @@ export const useBackupLogic = () => {
             link.download = `Rawasi_Snapshot_${new Date().toISOString().split('T')[0]}.json`;
             link.click();
             URL.revokeObjectURL(url);
+            
+            showToast('✅ تم تصدير نسخة JSON بنجاح', 'success');
             return { success: true };
-        } catch (error) {
+        } catch (error: any) {
             console.error("JSON Backup Error:", error);
+            showToast(`❌ فشل تصدير JSON: ${error.message}`, 'error');
             return { success: false };
         }
     };
 
-    // 📄 تحميل نموذج فارغ (Template) لجدول معين
+    // 📄 تحميل نموذج فارغ (Template) لجدول معين - يدعم القوالب الذكية
     const downloadTemplate = (tableName: string, displayName: string) => {
-        const headers = TABLE_SCHEMAS[tableName];
-        if (!headers) {
-            alert("❌ لم يتم العثور على خريطة حقول لهذا الجدول.");
-            return;
+        try {
+            showToast(`⏳ جاري تحضير قالب ${displayName}...`, 'loading');
+            let templateData: any[] = [];
+            let wscols: any[] = [];
+
+            // 🌟 1. القوالب المخصصة والمعربة لتسهيل الإدخال
+            if (tableName === 'payment_vouchers') {
+                templateData = [{
+                    'التاريخ': new Date().toISOString().split('T')[0],
+                    'اسم المستفيد': 'اكتب اسم العامل أو المورد هنا',
+                    'المبلغ': '5000',
+                    'البيان': 'وصف السند أو الدفعة',
+                    'طريقة الدفع': 'تحويل بنكي',
+                    'الحساب المدين': 'ذمم عمال (اختياري)',
+                    'الحساب الدائن': 'البنك الأهلي (اختياري)'
+                }];
+                wscols = [{ wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 40 }, { wch: 20 }, { wch: 25 }, { wch: 25 }];
+            } 
+            else if (tableName === 'labor_daily_logs') {
+                 templateData = [{
+                    'تاريخ': new Date().toISOString().split('T')[0],
+                    'اسم العامل': 'اكتب اسم العامل هنا',
+                    'المشروع': 'اسم الموقع أو العقار',
+                    'البند': 'اسم بند الأعمال',
+                    'يومية': '100',
+                    'حضور': '1',
+                    'نسبة الإنجاز': '100',
+                    'البيان': 'ملاحظات'
+                 }];
+                 wscols = [{ wch: 15 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 40 }];
+            } 
+            // 🌟 2. القوالب الافتراضية لباقي الجداول
+            else {
+                const headers = TABLE_SCHEMAS[tableName];
+                if (!headers) throw new Error("لم يتم العثور على خريطة حقول لهذا الجدول.");
+                
+                // تفريغ البيانات مع الاحتفاظ بالهيكل
+                const emptyObj: any = {};
+                headers.forEach(key => emptyObj[key] = '');
+                templateData = [emptyObj];
+            }
+
+            // إنشاء ملف الإكسل وتصديره
+            const worksheet = XLSX.utils.json_to_sheet(templateData);
+            if (wscols.length > 0) worksheet['!cols'] = wscols;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, tableName); // الاسم الانجليزي ضروري للـ Restore
+            XLSX.writeFile(workbook, `Template_${tableName}.xlsx`);
+            
+            showToast(`✅ تم تحميل قالب ${displayName}`, 'success');
+        } catch (error: any) {
+            showToast(`❌ فشل تحميل القالب: ${error.message}`, 'error');
         }
-        
-        // إنشاء شيت فيها صف واحد (أسماء الأعمدة فقط)
-        const worksheet = XLSX.utils.aoa_to_sheet([headers]);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, tableName); // اسم الشيت لازم يكون اسم الجدول
-        
-        // تحميل الملف
-        XLSX.writeFile(workbook, `Template_${tableName}.xlsx`);
     };
 
     return { backupToExcel, backupToJSON, downloadTemplate };

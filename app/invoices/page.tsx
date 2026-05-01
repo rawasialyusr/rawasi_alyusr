@@ -41,8 +41,14 @@ export default function InvoicesPage() {
     setMounted(true);
   }, []);
 
-  const dataToProcess = useMemo(() => (allFiltered?.length > 0 ? allFiltered : invoices), [allFiltered, invoices]);
-  const result = useMemo(() => getInvoiceSummaryAndAging(dataToProcess.filter((i:any)=> i.status !== 'مسودة')), [dataToProcess]);
+  // 💎 تأمين البيانات بالكامل داخل useMemo حسب معايير الميثاق الماسي
+  const dataToProcess = useMemo(() => {
+      return (allFiltered?.length > 0 ? allFiltered : invoices) || [];
+  }, [allFiltered, invoices]);
+
+  const result = useMemo(() => {
+      return getInvoiceSummaryAndAging(dataToProcess.filter((i:any)=> i?.status !== 'مسودة'));
+  }, [dataToProcess]);
 
   // =========================================================================
   // 💎 أعمدة الجدول
@@ -52,7 +58,7 @@ export default function InvoicesPage() {
       header: 'تحديد',
       accessor: 'id',
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر (Render Guard)
         return (
           // 🚀 السر هنا: onClick مع stopPropagation يمنع البابلينج تماماً
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-block' }}>
@@ -70,7 +76,7 @@ export default function InvoicesPage() {
       header: 'رقم الفاتورة', 
       accessor: 'invoice_number', 
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         return <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px', letterSpacing: '0.5px' }}>#{row.invoice_number}</b>;
       } 
     },
@@ -78,7 +84,7 @@ export default function InvoicesPage() {
       header: 'تاريخ الفاتورة', 
       accessor: 'date', 
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         return (
           <span style={{ fontSize: '12px', fontWeight: 900, color: '#0284c7', background: 'rgba(2, 132, 199, 0.1)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
             {row.date ? new Date(row.date).toLocaleDateString('ar-EG') : '---'}
@@ -90,7 +96,7 @@ export default function InvoicesPage() {
       header: 'العميل', 
       accessor: 'client_name', 
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         return <span style={{fontWeight: 800, color: '#1e293b'}}>{row.client_name || '---'}</span>;
       } 
     },
@@ -98,7 +104,7 @@ export default function InvoicesPage() {
       header: 'حالة الاعتماد',
       accessor: 'status',
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         const isApproved = row.status === 'مُعتمد';
         return (
           <div className={`approval-glass-badge ${isApproved ? 'approved' : 'pending'}`}>
@@ -112,17 +118,19 @@ export default function InvoicesPage() {
       header: 'مهلة السداد',
       accessor: 'due_date',
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         if (paid >= total && total > 0) return <span className="deadline-badge paid">✅ مكتمل</span>;
         if (!row.due_date) return <span style={{color:'#94a3b8', fontWeight: 'bold'}}>---</span>;
+        
         const today = new Date();
         const due = new Date(row.due_date);
         today.setHours(0, 0, 0, 0);
         due.setHours(0, 0, 0, 0);
         const diffTime = due.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
         if (diffDays < 0) return <div className="deadline-badge overdue">⚠️ متأخر ({Math.abs(diffDays)} يوم)</div>;
         if (diffDays === 0) return <div className="deadline-badge today">🚨 السداد اليوم</div>;
         return <div className="deadline-badge active">⏳ متبقي {diffDays} يوم</div>;
@@ -132,9 +140,10 @@ export default function InvoicesPage() {
       header: 'حالة السداد',
       accessor: 'paid_amount',
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
+        
         if (paid <= 0) return <span className="glass-badge red">🔴 مستحقة</span>;
         if (paid < total) return <span className="glass-badge orange">⏳ جزئي</span>;
         return <span className="glass-badge green">✅ مسددة</span>;
@@ -144,12 +153,14 @@ export default function InvoicesPage() {
       header: 'الصافي', 
       accessor: 'total_amount', 
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         let textColor = '#dc2626'; 
+        
         if (paid >= total && total > 0) textColor = '#16a34a'; 
         else if (paid > 0 && paid < total) textColor = '#d97706'; 
+        
         return <span style={{ fontWeight: 900, color: textColor, fontSize: '14px', textShadow: `0 0 10px ${textColor}40` }}>{formatCurrency(total)}</span>;
       } 
     },
@@ -157,11 +168,12 @@ export default function InvoicesPage() {
       header: 'الإجراءات',
       accessor: 'id',
       render: (row: any) => {
-        if (!row) return null; 
+        if (!row) return null; // 🛡️ حارس الرندر
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         const balance = total - paid;
         const needsPayment = balance > 0.01; 
+        
         return (
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
             <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print">🖨️</button>
@@ -202,7 +214,7 @@ export default function InvoicesPage() {
           </SecureAction>
           {selectedIds.length === 1 && (
             <SecureAction module="invoices" action="edit">
-              <button className="btn-main-glass white" onClick={() => handleEdit(dataToProcess.find(i => i.id === selectedIds[0]))}>📝 تعديل البيانات</button>
+              <button className="btn-main-glass white" onClick={() => handleEdit(dataToProcess.find((i:any) => i.id === selectedIds[0]))}>📝 تعديل البيانات</button>
             </SecureAction>
           )}
           <SecureAction module="invoices" action="delete">
@@ -236,7 +248,7 @@ export default function InvoicesPage() {
                     displayCol="name"
                     placeholder="ابحث عن عميل محدد..."
                     enableClear={true}
-                    onSelect={(item) => setGlobalSearch(item?.name || '')}
+                    onSelect={(item:any) => setGlobalSearch(item?.name || '')}
                 />
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
                 <InvoiceAgingDashboard aging={result.aging} />
@@ -255,7 +267,7 @@ export default function InvoicesPage() {
               data={dataToProcess.slice((currentPage-1)*rowsPerPage, currentPage*rowsPerPage)} 
               columns={invoiceColumns} 
               title="" 
-              onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
+              onRowClick={(row:any) => { setPrintData(row); setIsPrintModalOpen(true); }}
           />
           <div style={{ padding: '20px', display: 'flex', justifyContent: 'center' }}>
             <PaginationPanel totalItems={dataToProcess.length} currentPage={currentPage} rowsPerPage={rowsPerPage} onPageChange={setCurrentPage} onRowsChange={setRowsPerPage} />
