@@ -190,7 +190,7 @@ export default function PaymentVoucherModal({
                 <div style={{ display: 'flex', gap: '15px', marginTop: '30px', borderTop: '1px solid #f1f5f9', paddingTop: '25px' }}>
                     <button onClick={onClose} style={{ flex: 1, padding: '18px', borderRadius: '16px', border: '2px solid #e2e8f0', background: 'white', color: '#64748b', fontWeight: 900, cursor: 'pointer', fontSize: '15px', transition: '0.2s' }}>إلغاء</button>
                     <button onClick={onSave} disabled={isSaving || amountToPay <= 0} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: amountToPay > 0 ? THEME.danger : '#cbd5e1', color: 'white', fontWeight: 900, border: 'none', cursor: amountToPay > 0 ? 'pointer' : 'not-allowed', fontSize: '16px', boxShadow: amountToPay > 0 ? `0 10px 25px ${THEME.danger}40` : 'none', transition: '0.2s' }}>
-                        {isSaving ? '⏳ جاري التنفيذ...' : '✅ حفظ وإصدار السند'}
+                        {isSaving ? '⏳ جاري التنفيذ...' : '📝 حفظ كمسودة (معلق)'}
                     </button>
                 </div>
             </div>

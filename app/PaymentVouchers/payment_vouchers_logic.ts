@@ -20,7 +20,7 @@ export function usePaymentVouchersLogic() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [currentVoucher, setCurrentVoucher] = useState<any>({});
 
-    // 📥 1. جلب السندات عبر React Query
+    // 📥 1. جلب السندات عبر React Query (معايير الباب الأول)
     const { data: vouchers = [], isLoading } = useQuery({
         queryKey: ['payment_vouchers'],
         queryFn: async () => {
@@ -39,12 +39,12 @@ export function usePaymentVouchersLogic() {
             // 🟢 ربط الاسم القادم من الداتابيز بالاسم المستخدم في الواجهة
             return (data || []).map(v => ({
                 ...v,
-                payee_id: v.partner_id // 👈 تحويل partner_id إلى payee_id ليعمل بسلاسة مع الواجهة
+                payee_id: v.partner_id 
             }));
         }
     });
 
-    // 📊 2. جلب رصيد العامل/المستفيد اللحظي (Defensive Call)
+    // 📊 2. جلب رصيد العامل/المستفيد اللحظي
     const { data: partnerBalance = 0, isLoading: isBalanceLoading } = useQuery({
         queryKey: ['partner_balance', currentVoucher.payee_id],
         queryFn: async () => {
@@ -52,8 +52,8 @@ export function usePaymentVouchersLogic() {
             try {
                 const { data, error } = await supabase.rpc('get_partner_balance', { p_id: currentVoucher.payee_id });
                 if (error) {
-                    console.warn("⚠️ RPC 'get_partner_balance' failed or not found. Defaulting to 0.", error.message);
-                    return 0; // Fallback to 0 if RPC is missing
+                    console.warn("⚠️ RPC 'get_partner_balance' failed. Defaulting to 0.", error.message);
+                    return 0; 
                 }
                 return data || 0;
             } catch (err) {
@@ -64,7 +64,7 @@ export function usePaymentVouchersLogic() {
         enabled: !!currentVoucher.payee_id 
     });
 
-    // 🔍 الفلترة الذكية
+    // 🔍 الفلترة والحسابات (Logic Filtering) - إلزامي بـ useMemo
     const filteredVouchers = useMemo(() => {
         if (!globalSearch) return vouchers;
         const lowerSearch = globalSearch.toLowerCase();
@@ -77,7 +77,7 @@ export function usePaymentVouchersLogic() {
 
     const totalAmount = useMemo(() => filteredVouchers.reduce((sum, v) => sum + Number(v.amount || 0), 0), [filteredVouchers]);
 
-    // 🛠️ الإجراءات الأساسية
+    // 🛠️ الإجراءات الأساسية للواجهة
     const handleAddNew = () => {
         setCurrentVoucher({ 
             date: new Date().toISOString().split('T')[0],
@@ -101,113 +101,54 @@ export function usePaymentVouchersLogic() {
         }
     };
 
-    // 💾 3. حفظ السند والترحيل المحاسبي اللحظي (القيد المزدوج الماسي)
+    // 💾 3. حفظ السند (كمسودة فقط) - بدون ترحيل بناءً على طلبك
     const saveMutation = useMutation({
         mutationFn: async (voucherData: any) => {
-            // 🛑 حماية محاسبية: التأكد من وجود أطراف القيد الثلاثة
-            if (!voucherData.debit_account_id) throw new Error("يرجى تحديد الحساب المدين (مثال: التزام عمال).");
-            if (!voucherData.credit_account_id) throw new Error("يرجى تحديد الحساب الدائن (مثال: الخزينة/البنك).");
-            if (!voucherData.payee_id) throw new Error("يرجى تحديد المستفيد المباشر لتحديث كشف حسابه.");
+            if (!voucherData.debit_account_id) throw new Error("يرجى تحديد الحساب المدين.");
+            if (!voucherData.credit_account_id) throw new Error("يرجى تحديد الحساب الدائن.");
+            if (!voucherData.payee_id) throw new Error("يرجى تحديد المستفيد المباشر.");
             if (!voucherData.amount || voucherData.amount <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر.");
 
             let payload = { ...voucherData };
             
-            // 🟢 تحويل payee_id إلى الاسم الصحيح في الداتابيز partner_id قبل الحفظ
+            // تحويل المعرف ليتوافق مع قاعدة البيانات
             if (payload.payee_id) {
                 payload.partner_id = payload.payee_id;
             }
             
-            // تنظيف الكائن من الحقول الوهمية لكي يقبله Supabase
-            delete payload.payee_id;
-            delete payload.payee_name;
-            delete payload.debit_account_name;
-            delete payload.credit_account_name;
-            delete payload.payee;
-            delete payload.credit_account;
-            delete payload.debit_account;
+            // تنظيف الكائن من الحقول الوهمية
+            delete payload.payee_id; delete payload.payee_name; delete payload.debit_account_name;
+            delete payload.credit_account_name; delete payload.payee; delete payload.credit_account; delete payload.debit_account;
 
             if (!payload.voucher_number) {
                 payload.voucher_number = `PV-${Date.now().toString().slice(-6)}`;
             }
 
-            let currentVoucherId = payload.id;
+            // 🟢 إجبار السند أن يكون معلقاً
+            payload.is_posted = false;
+            payload.status = 'مسودة';
 
-            // 1️⃣ إدراج أو تحديث سند الصرف في قاعدة البيانات
             if (payload.id) {
                 const { error } = await supabase.from('payment_vouchers').update(payload).eq('id', payload.id);
                 if (error) throw new Error("خطأ في تحديث السند: " + error.message);
                 
-                // مسح القيد القديم (إن وُجد) لإعادة إنشائه بالبيانات الجديدة
+                // مسح القيد القديم (إن وُجد) لأن السند رجع لحالة معلق
                 await supabase.from('journal_headers').delete().eq('reference_id', String(payload.id));
             } else {
                 const { data: { session } } = await supabase.auth.getSession();
                 payload.created_by = session?.user?.id;
-                payload.is_posted = true; // نعتبره مرحل تلقائياً
                 
-                const { data: newVoucher, error } = await supabase.from('payment_vouchers').insert([payload]).select('id').single();
+                const { error } = await supabase.from('payment_vouchers').insert([payload]);
                 if (error) throw new Error("خطأ في إنشاء السند: " + error.message);
-                currentVoucherId = newVoucher.id;
             }
-
-            // 🛡️ الباب التاسع: الفحص الاستباقي لمنع التكرار (Idempotency Check)
-            const { data: existingHeader } = await supabase
-                .from('journal_headers')
-                .select('id')
-                .eq('reference_id', String(currentVoucherId))
-                .maybeSingle();
-
-            if (existingHeader) {
-                // التعافي الذاتي: القيد موجود مسبقاً، لا داعي لإنشائه مرة أخرى
-                return currentVoucherId;
-            }
-
-            // ⚖️ 2️⃣ إنشاء القيد المزدوج ⚖️
-            const { data: header, error: hError } = await supabase.from('journal_headers').insert([{
-                entry_date: payload.date,
-                description: `سداد منصرف للمستفيد: ${voucherData.payee_name || voucherData.payee?.name || ''} - ${payload.description || ''}`,
-                reference_id: String(currentVoucherId), // صرامة الأنواع
-                v_type: 'سند صرف',
-                status: 'posted'
-            }]).select('id').single();
-
-            if (hError) throw new Error("خطأ في إنشاء رأس القيد: " + hError.message);
-
-            // 🛡️ الباب الثامن: التوجيه الذكي للذمم الفرعية
-            const safeDebitPartnerId = resolvePartnerId(payload.debit_account_id, payload.partner_id);
-            const safeCreditPartnerId = resolvePartnerId(payload.credit_account_id, payload.partner_id);
-
-            const lines = [
-                {   
-                    // 🔴 الطرف المدين (Debit): حساب الأستاذ (يقلل الالتزام على الشركة)
-                    header_id: header.id,
-                    account_id: payload.debit_account_id, 
-                    partner_id: safeDebitPartnerId, // توجيه ذكي
-                    debit: payload.amount, 
-                    credit: 0, 
-                    notes: `سداد مستحقات للمستفيد: ${voucherData.payee_name || voucherData.payee?.name || ''}`
-                },
-                {   
-                    // 🟢 الطرف الدائن (Credit): حساب الخزينة/البنك (الفلوس خرجت)
-                    header_id: header.id,
-                    account_id: payload.credit_account_id, 
-                    partner_id: safeCreditPartnerId, // توجيه ذكي (غالباً null للبنك)
-                    debit: 0, 
-                    credit: payload.amount, 
-                    notes: `سحب من حساب: ${voucherData.credit_account_name || voucherData.credit_account?.name || ''}`
-                }
-            ];
-
-            const { error: lError } = await supabase.from('journal_lines').insert(lines);
-            if (lError) throw new Error("خطأ في إنشاء أطراف القيد: " + lError.message);
             
-            return currentVoucherId;
+            return true;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
-            queryClient.invalidateQueries({ queryKey: ['partner_balance'] });
             setIsEditModalOpen(false);
             setSelectedIds([]);
-            showToast('تم حفظ السند وإنشاء القيد المزدوج بنجاح ⚖️✅', 'success');
+            showToast('تم حفظ السند بنجاح وهو الآن (معلق) ⏳', 'success');
         },
         onError: (error: any) => showToast(error.message, 'error')
     });
@@ -232,7 +173,7 @@ export function usePaymentVouchersLogic() {
         }
     };
 
-    // 🏦 4. محرك الاعتماد والترحيل (للسندات المعلقة)
+    // 🏦 4. محرك الاعتماد والترحيل (إنشاء القيود يتم هنا فقط)
     const handlePostSelected = async () => {
         if (!confirm('هل أنت متأكد من اعتماد وترحيل السندات المحددة؟')) return;
         
@@ -240,14 +181,13 @@ export function usePaymentVouchersLogic() {
             const vouchersToPost = vouchers.filter(v => selectedIds.includes(v.id) && !v.is_posted);
             
             for (const v of vouchersToPost) {
-                // 🟢 قراءة الهوية الموحدة للمستفيد بعد توحيدها في الـ Query
                 const currentPartnerId = v.partner_id || v.payee_id;
 
                 if (!v.debit_account_id || !v.credit_account_id || !currentPartnerId) {
                     throw new Error(`السند رقم ${v.voucher_number} ينقصه بعض حسابات التوجيه المالي.`);
                 }
 
-                // 🛡️ الباب التاسع: الفحص الاستباقي
+                // 🛡️ الباب التاسع: درع الحماية من التكرار (Idempotency)
                 const { data: existingHeader } = await supabase
                     .from('journal_headers')
                     .select('id')
@@ -255,11 +195,11 @@ export function usePaymentVouchersLogic() {
                     .maybeSingle();
 
                 if (existingHeader) {
-                    // القيد موجود، فقط نحدث حالة المستند
-                    await supabase.from('payment_vouchers').update({ is_posted: true }).eq('id', v.id);
+                    await supabase.from('payment_vouchers').update({ is_posted: true, status: 'مرحل' }).eq('id', v.id);
                     continue;
                 }
 
+                // ⚖️ إنشاء رأس القيد (خالي من v_type لتجنب الكاش إيرور)
                 const { data: header, error: hError } = await supabase.from('journal_headers').insert([{
                     entry_date: v.date,
                     description: `سداد منصرف للمستفيد: ${v.payee?.name || ''} - ${v.description || ''}`,
@@ -269,7 +209,7 @@ export function usePaymentVouchersLogic() {
 
                 if (hError) throw hError;
 
-                // 🛡️ الباب الثامن: التوجيه الذكي
+                // 🛡️ الباب الثامن: التوجيه الذكي للذمم
                 const safeDebitPartnerId = resolvePartnerId(v.debit_account_id, currentPartnerId);
                 const safeCreditPartnerId = resolvePartnerId(v.credit_account_id, currentPartnerId);
 
@@ -281,10 +221,10 @@ export function usePaymentVouchersLogic() {
                 const { error: lError } = await supabase.from('journal_lines').insert(lines);
                 if (lError) throw lError;
 
-                await supabase.from('payment_vouchers').update({ is_posted: true }).eq('id', v.id);
+                await supabase.from('payment_vouchers').update({ is_posted: true, status: 'مرحل' }).eq('id', v.id);
             }
 
-            showToast('تم ترحيل السندات المعلقة وإنشاء القيود بنجاح 🚀', 'success');
+            showToast('تم ترحيل السندات وإنشاء القيود بنجاح 🚀', 'success');
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
             queryClient.invalidateQueries({ queryKey: ['partner_balance'] }); 
@@ -293,7 +233,7 @@ export function usePaymentVouchersLogic() {
         }
     };
 
-    // ⏪ 5. الإلغاء المتسلسل
+    // ⏪ 5. الإلغاء المتسلسل (الباب الثاني)
     const handleUnpostSelected = async () => {
         if (!confirm('فك الترحيل سيقوم بمسح القيود المحاسبية المتعلقة ورفع مديونية المستفيد مجدداً. هل أنت متأكد؟')) return;
         
@@ -301,9 +241,9 @@ export function usePaymentVouchersLogic() {
             const vouchersToUnpost = vouchers.filter(v => selectedIds.includes(v.id) && v.is_posted);
             
             for (const v of vouchersToUnpost) {
-                // استخدام String() للصرامة
+                // الباب الثاني: مسح القيد كلياً
                 await supabase.from('journal_headers').delete().eq('reference_id', String(v.id));
-                await supabase.from('payment_vouchers').update({ is_posted: false }).eq('id', v.id);
+                await supabase.from('payment_vouchers').update({ is_posted: false, status: 'مسودة' }).eq('id', v.id);
             }
 
             showToast('تم فك الترحيل ومسح القيود بنجاح ⏪', 'success');
@@ -316,7 +256,7 @@ export function usePaymentVouchersLogic() {
     };
 
     const exportToExcel = () => {
-        // اللوجيك للجدول الذكي
+        // يمكن دمج محرك التصدير لاحقاً
     };
 
     return {
