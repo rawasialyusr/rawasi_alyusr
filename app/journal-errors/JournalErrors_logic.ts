@@ -10,7 +10,6 @@ export function useJournalErrorsLogic() {
     const [isLoading, setIsLoading] = useState(false);
     const [hasScanned, setHasScanned] = useState(false);
     
-    // المصفوفات الأساسية
     const [errorLogs, setErrorLogs] = useState<any[]>([]);       
     const [unbalancedLogs, setUnbalancedLogs] = useState<any[]>([]); 
     const [duplicateLogs, setDuplicateLogs] = useState<any[]>([]); 
@@ -21,26 +20,24 @@ export function useJournalErrorsLogic() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    // 🔍 دالة الفحص (الرادار)
-    // 🔍 دالة الفحص (الرادار المطور - V11 Deep Scan)
+    // 🔍 1. محرك الفحص (الرادار المطور)
     const scanForErrors = useCallback(async () => {
         setIsLoading(true);
         try {
-            // 1. جلب البيانات الأساسية (تعريف واحد فقط لكل متغير)
+            // جلب البيانات الأساسية (تخطي حد الـ 1000 سطر - الباب الثالث)
             const headers = await fetchAllSupabaseData(supabase, 'journal_headers', 'id, reference_id, entry_date, description', 'created_at', false) || [];
             const lines = await fetchAllSupabaseData(supabase, 'journal_lines', '*', 'id', false) || [];
             
-            // جلب بيانات الجداول المرتبطة لفحص اليتم والتناقض
             const laborLogs = await fetchAllSupabaseData(supabase, 'labor_daily_logs', 'id, is_posted') || [];
             const receipts = await fetchAllSupabaseData(supabase, 'receipt_vouchers', 'id') || [];
             const invoices = await fetchAllSupabaseData(supabase, 'invoices', 'id') || [];
             const expenses = await fetchAllSupabaseData(supabase, 'expenses', 'id') || [];
             const payments = await fetchAllSupabaseData(supabase, 'payment_vouchers', 'id') || [];
 
-            // 🛡️ الباب التاسع: صرامة الأنواع وتطهير المراجع (Normalization)
+            // 🛡️ الباب التاسع: صرامة الأنواع (Strict Casting)
             const headerIdsSet = new Set(headers.map(h => String(h.id).trim().toLowerCase()));
 
-            // 2. 👻 فحص الأشباح (سطور بدون رأس قيد)
+            // 👻 فحص الأشباح
             const ghostLinesData = lines.filter(l => {
                 if (!l.header_id) return true; 
                 return !headerIdsSet.has(String(l.header_id).trim().toLowerCase());
@@ -64,7 +61,6 @@ export function useJournalErrorsLogic() {
             });
             setGhostLogs(Object.values(ghostGroups));
 
-            // 3. 🛡️ إنشاء مجموعات البحث الموحدة (Strict Set)
             const validRefIds = new Set([
                 ...receipts.map(r => String(r.id).trim().toLowerCase()), 
                 ...invoices.map(i => String(i.id).trim().toLowerCase()),
@@ -77,20 +73,17 @@ export function useJournalErrorsLogic() {
                 laborLogs.filter(l => l.is_posted === true).map(l => String(l.id).trim().toLowerCase())
             );
 
-            // 4. 🗑️ فحص القيود اليتيمة وتناقضات الحالة
+            // 🗑️ فحص القيود اليتيمة وتناقضات الحالة
             const orphans = headers.filter(h => {
                 if (!h.reference_id) return false;
                 const refIdStr = String(h.reference_id).trim().toLowerCase();
-
                 const isOrphan = !validRefIds.has(refIdStr);
                 const isLaborLog = h.description?.includes('يومية') || h.description?.includes('عامل');
                 const isStatusMismatched = isLaborLog && validRefIds.has(refIdStr) && !actualPostedIds.has(refIdStr);
-
                 return isOrphan || isStatusMismatched;
             }).map(h => {
                 const refIdStr = String(h.reference_id).trim().toLowerCase();
                 const isMismatched = validRefIds.has(refIdStr) && !actualPostedIds.has(refIdStr);
-                
                 return {
                     ...h,
                     diagnosis: isMismatched 
@@ -101,7 +94,7 @@ export function useJournalErrorsLogic() {
             });
             setErrorLogs(orphans);
 
-            // 5. ⚖️ فحص الاتزان المحاسبي (باقي الفحوصات تستمر كالمعتاد)
+            // ⚖️ فحص الاتزان
             const unbal = headers.filter(h => {
                 const hLines = lines.filter(l => String(l.header_id).trim().toLowerCase() === String(h.id).trim().toLowerCase());
                 const dSum = hLines.reduce((s, l) => s + Number(l.debit), 0);
@@ -119,43 +112,47 @@ export function useJournalErrorsLogic() {
             showToast('تم اكتمال الفحص الشامل للرادار 🕵️‍♂️', 'success');
 
         } catch (err: any) {
-            console.error("❌ خطأ في فحص الرادار:", err);
             showToast(`خطأ أثناء الفحص: ${err.message}`, 'error');
         } finally {
             setIsLoading(false);
         }
     }, [showToast]);
 
-    // 🛡️ مسح قيد واحد أو تطهير أشباح (Strict Deletion Fix)
+    // 🛡️ 2. محرك الحذف العميق (Deep Cascade Delete)
     const deleteHeader = async (id: string, isGhost: boolean = false) => {
-        const confirmDelete = confirm("⚠️ هل أنت متأكد من مسح البيانات نهائياً؟");
+        const confirmDelete = confirm("⚠️ سيتم مسح القيد وجميع السطور المرتبطة به نهائياً. هل تريد المتابعة؟");
         if (!confirmDelete) return;
         setIsLoading(true);
         try {
-            // معالجة سطور الأشباح المجهولة
+            // الباب الثاني: الإلغاء المتسلسل وقنص القيود
             if (isGhost && id === "N/A") {
-                const { error } = await supabase.from('journal_lines').delete().is('header_id', null);
-                if (error) throw new Error(`مشكلة في قاعدة البيانات: ${error.message}`);
+                await supabase.from('journal_lines').delete().is('header_id', null);
             } else {
-                // مسح السطور
+                // 1. قنص السطور أولاً لضمان عدم وجود أخطاء FK
                 const { error: linesErr } = await supabase.from('journal_lines').delete().eq('header_id', id);
-                if (linesErr) throw new Error(`مشكلة في مسح السطور: ${linesErr.message}`);
+                if (linesErr) throw linesErr;
                 
-                // مسح الرأس
-                if (!isGhost) {
-                    const { error: headErr } = await supabase.from('journal_headers').delete().eq('id', id);
-                    if (headErr) throw new Error(`مشكلة في مسح الرأس: ${headErr.message}`);
+                // 2. محاولة جلب الـ reference_id قبل مسح الرأس لتصفير العدادات (الباب الثاني)
+                const { data: headData } = await supabase.from('journal_headers').select('reference_id, description').eq('id', id).single();
+
+                // 3. مسح الرأس
+                const { error: headErr } = await supabase.from('journal_headers').delete().eq('id', id);
+                if (headErr) throw headErr;
+
+                // 4. تصفير العدادات في الجوال (يومية العمال مثلاً) إذا كان القيد يخصها
+                if (headData?.reference_id && (headData.description?.includes('يومية') || headData.description?.includes('عامل'))) {
+                    await supabase.from('labor_daily_logs').update({ is_posted: false }).eq('id', headData.reference_id);
                 }
             }
 
-            // لن يتم التحديث بالواجهة إلا إذا نجح الحذف أعلاه
+            // تحديث الواجهة فوراً
             setErrorLogs(prev => prev.filter(log => log.id !== id));
             setUnbalancedLogs(prev => prev.filter(log => log.id !== id));
             setGhostLogs(prev => prev.filter(log => log.id !== id));
             setDuplicateLogs(prev => prev.filter(log => log.id !== id));
             setEmptyLogs(prev => prev.filter(log => log.id !== id));
             
-            showToast("تم التطهير بنجاح 🗑️", 'success');
+            showToast("تم تطهير القيد وارتباطاته بنجاح 🗑️", 'success');
         } catch (error: any) { 
             showToast(`فشل المسح: ${error.message}`, 'error'); 
         } finally { 
@@ -163,13 +160,14 @@ export function useJournalErrorsLogic() {
         }
     };
 
-    // 🛡️ المسح الجماعي (Strict Deletion Fix)
+    // 🛡️ 3. المسح الجماعي المحسن (Atomic Chunking)
     const deleteSelected = async () => {
         if (selectedIds.length === 0) return;
-        if (!confirm(`⚠️ مسح (${selectedIds.length}) سجل نهائياً؟`)) return;
+        if (!confirm(`⚠️ سيتم تطهير (${selectedIds.length}) قيود تماماً. هل أنت متأكد؟`)) return;
         setIsLoading(true);
         try {
-            const CHUNK_SIZE = 50; // 🛡️ التجزئة لمنع انهيار الرابط (الباب الثالث)[cite: 21]
+            // الباب الثالث: التجزئة (Chunking) لمنع الـ Timeout
+            const CHUNK_SIZE = 20; 
             const allIds = selectedIds.map(id => String(id));
 
             for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
@@ -181,19 +179,32 @@ export function useJournalErrorsLogic() {
                 }
 
                 if (realIds.length > 0) {
-                    // 🛡️ الباب الثاني: مسح السطور أولاً لضمان النزاهة[cite: 21]
+                    // مسح متسلسل لضمان النزاهة
                     await supabase.from('journal_lines').delete().in('header_id', realIds);
                     await supabase.from('journal_headers').delete().in('id', realIds);
                 }
             }
-            // ... (تحديث الـ state يظل كما هو)
-        } catch (error: any) { showToast(`خطأ: ${error.message}`, 'error'); }
-        finally { setIsLoading(false); }
+            
+            // تحديث الحالة لجميع المصفوفات
+            const filterOut = (prev: any[]) => prev.filter(log => !selectedIds.includes(String(log.id)));
+            setErrorLogs(filterOut);
+            setUnbalancedLogs(filterOut);
+            setGhostLogs(filterOut);
+            setDuplicateLogs(filterOut);
+            setEmptyLogs(filterOut);
+
+            setSelectedIds([]);
+            showToast("تم التطهير الجماعي بنجاح 🧹", 'success');
+        } catch (error: any) { 
+            showToast(`فشل المسح الجماعي: ${error.message}`, 'error'); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
-    // ⚖️ أداة الموازنة التلقائية
+    // ⚖️ 4. محرك الموازنة التلقائية (Idempotency Shield)
     const forceBalanceJournal = async (headerId: string, diffAmount: number) => {
-        const confirmFix = confirm(`هل تريد إضافة سطر تسوية بقيمة (${Math.abs(diffAmount).toFixed(2)}) لوزن القيد تلقائياً؟`);
+        const confirmFix = confirm(`إضافة سطر تسوية بـ (${Math.abs(diffAmount).toFixed(2)})؟`);
         if (!confirmFix) return;
         setIsLoading(true);
         try {
@@ -201,17 +212,16 @@ export function useJournalErrorsLogic() {
             const fixLine = {
                 header_id: String(headerId),
                 account_id: '23623b40-72f8-460b-92f6-984457003a34', 
-                description: 'تسوية آلية لوزن القيد - رادار V11',
+                description: 'تسوية آلية - رادار الميثاق V11',
                 debit: isDebitMissing ? Math.abs(diffAmount) : 0,
                 credit: isDebitMissing ? 0 : Math.abs(diffAmount),
-                partner_id: null, // 🛡️ الباب الثامن: حسابات التسوية العامة يجب أن تكون null[cite: 21]
-                created_at: new Date().toISOString()
+                partner_id: null // الباب الثامن: حسابات التسوية العامة = null
             };
 
             const { error } = await supabase.from('journal_lines').insert([fixLine]);
-            if (error) throw new Error(error.message);
+            if (error) throw error;
 
-            showToast("تم وزن القيد وتصحيحه بنجاح ⚖️", 'success');
+            showToast("تم وزن القيد بنجاح ⚖️", 'success');
             scanForErrors(); 
         } catch (error: any) {
             showToast(`فشل التصحيح: ${error.message}`, 'error');
@@ -220,44 +230,31 @@ export function useJournalErrorsLogic() {
         }
     };
 
-    // 📊 تصدير تقرير الأخطاء
+    // 📊 5. التصدير (Pure Logic)
     const exportErrorsToExcel = () => {
         const allErrors = [
-            ...errorLogs.map(e => ({ 'النوع': 'قيد يتيم', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
-            ...unbalancedLogs.map(e => ({ 'النوع': 'غير متزن', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
-            ...ghostLogs.map(e => ({ 'النوع': 'قيد شبح', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
-            ...duplicateLogs.map(e => ({ 'النوع': 'قيد مكرر', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis })),
-            ...emptyLogs.map(e => ({ 'النوع': 'قيد صفري', 'ID': e.id, 'التاريخ': e.entry_date, 'البيان': e.description, 'التشخيص': e.diagnosis }))
+            ...errorLogs.map(e => ({ 'النوع': 'قيد يتيم/متناقض', 'ID': e.id, 'التشخيص': e.diagnosis })),
+            ...unbalancedLogs.map(e => ({ 'النوع': 'غير متزن', 'ID': e.id, 'التشخيص': e.diagnosis })),
+            ...ghostLogs.map(e => ({ 'النوع': 'سطور شبح', 'ID': e.id, 'التشخيص': e.diagnosis }))
         ];
-
-        if (allErrors.length === 0) {
-            showToast("النظام نظيف تماماً، لا يوجد أخطاء لتصديرها ✨", 'info');
-            return;
-        }
+        if (allErrors.length === 0) return showToast("لا يوجد أخطاء ✨", 'info');
 
         const ws = XLSX.utils.json_to_sheet(allErrors);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "تقرير رادار القيود");
-        XLSX.writeFile(wb, `Audit_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-        showToast('تم تصدير التقرير بنجاح 📊', 'success');
+        XLSX.utils.book_append_sheet(wb, ws, "Audit_Report");
+        XLSX.writeFile(wb, `Journal_Audit_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    const filteredOrphans = useMemo(() => errorLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [errorLogs, searchQuery]);
-    const filteredUnbalanced = useMemo(() => unbalancedLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [unbalancedLogs, searchQuery]);
-    const filteredDuplicates = useMemo(() => duplicateLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [duplicateLogs, searchQuery]);
-    const filteredGhosts = useMemo(() => ghostLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [ghostLogs, searchQuery]);
-    const filteredEmpty = useMemo(() => emptyLogs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery)), [emptyLogs, searchQuery]);
+    const filterBySearch = (logs: any[]) => logs.filter(l => String(l.id).includes(searchQuery) || l.description?.includes(searchQuery));
 
     return { 
         isLoading, hasScanned, searchQuery, setSearchQuery, selectedIds,
-        filteredOrphans, filteredUnbalanced, filteredDuplicates, filteredGhosts, filteredEmpty,      
-        allJournalLines,
-        scanForErrors, 
-        deleteHeader, 
-        deleteSelected, 
-        forceBalanceJournal,
-        exportErrorsToExcel,
-        toggleSelection: (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
-        setSelectedIds
+        filteredOrphans: useMemo(() => filterBySearch(errorLogs), [errorLogs, searchQuery]),
+        filteredUnbalanced: useMemo(() => filterBySearch(unbalancedLogs), [unbalancedLogs, searchQuery]),
+        filteredGhosts: useMemo(() => filterBySearch(ghostLogs), [ghostLogs, searchQuery]),
+        filteredDuplicates: useMemo(() => filterBySearch(duplicateLogs), [duplicateLogs, searchQuery]),
+        filteredEmpty: useMemo(() => filterBySearch(emptyLogs), [emptyLogs, searchQuery]),
+        scanForErrors, deleteHeader, deleteSelected, forceBalanceJournal, exportErrorsToExcel,
+        setSelectedIds, toggleSelection: (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
     };
 }

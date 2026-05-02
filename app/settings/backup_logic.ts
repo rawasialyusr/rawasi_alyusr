@@ -1,151 +1,180 @@
 "use client";
-import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/lib/supabase';
+import { fetchAllSupabaseData } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context'; 
 
-export function useBackupLogic() {
-  const { showToast } = useToast();
+// 🗺️ خريطة حقول الجداول (الأسماء الإنجليزية المطابقة للداتابيز بالضبط)
+export const TABLE_SCHEMAS: Record<string, string[]> = {
+  "partners": ["id", "code", "name", "partner_type", "identity_number", "identity_expiry_date", "identity_image_url", "phone", "address", "vat_number", "created_at", "job_role"],
+  "projects": ["id", "project_code", "Property", "client_name", "contract_value", "estimated_budget", "down_payment", "start_date", "end_date", "actual_completion_date", "location_address", "location_url", "project_manager", "status", "notes", "created_at", "project_name", "client_id"],
+  "labor_daily_logs": [
+  "work_date", "worker_name", "site_ref", "work_item", "production_desc", 
+  "unit", "productivity", "tareeha", "completion_percentage", 
+  "daily_wage", "attendance_value", "sub_contractor", "notes"],
+  "emp_adv": ["id", "date", "emp_name", "amount", "Desc", "notes", "partner_id", "is_posted", "created_by", "target_month", "account_id", "is_deleted"],
+  "emp_ded": ["id", "date", "emp_name", "amount", "reason", "notes", "partner_id", "is_posted", "created_by", "target_month", "is_deleted"],
+  "payroll_slips": ["id", "emp_id", "month", "basic_salary", "total_advances", "total_deductions", "net_salary", "is_posted", "created_at"],
+  "all_emp": ["emp_id", "emp_name", "job_title", "iqama_num", "Salary", "phone_number", "work_days", "housing", "deductions", "expire_date", "earnings", "net_earnings", "received"],
+  "housing_services": ["id", "date", "emp_name", "amount", "reason", "description", "notes", "created_at"],
+  "accounts": ["id", "code", "name", "account_type", "parent_id", "is_transactional"],
+  "expenses": ["id", "exp_date", "sub_contractor", "payee_id", "creditor_account", "description", "quantity", "unit_price", "total_price", "vat_amount", "payment_method", "notes", "is_posted", "created_at", "payment_account", "site_ref", "payee_name", "project_id", "discount_account", "discount_amount", "employee_name", "invoice_image"],
+  "invoices": ["id", "invoice_number", "date", "partner_id", "client_name", "project_ids", "boq_id", "description", "quantity", "unit", "unit_price", "line_total", "materials_discount", "taxable_amount", "tax_amount", "guarantee_percent", "guarantee_amount", "total_amount", "debit_account_id", "credit_account_id", "materials_acc_id", "guarantee_acc_id", "tax_acc_id", "skip_zatca", "status", "created_at", "due_in_days", "due_date", "paid_amount"],
+  "invoice_lines": ["id", "invoice_id", "item_id", "description", "unit", "quantity", "unit_price", "total_price", "created_at"],
+  "payment_vouchers": ["id", "voucher_number", "date", "amount", "partner_id", "account_id", "payment_method", "reference_no", "description", "notes", "status", "is_posted", "created_at", "updated_at", "created_by"],
+  "receipt_vouchers": ["id", "date", "amount", "payment_method", "notes", "partner_id", "invoice_id", "created_at", "updated_at", "receipt_number", "status", "safe_bank_acc_id", "partner_acc_id", "project_ids", "reference_number", "attachment_url"],
+  "journal_headers": ["id", "entry_date", "description", "created_at", "status", "reference_id"],
+  "journal_lines": ["id", "header_id", "account_id", "partner_id", "item_name", "quantity", "unit_price", "debit", "credit", "notes", "project_id", "debit_account_id", "tax_amount", "tax_rate", "created_at"],
+  "boq_items": ["id", "item_code", "main_category", "sub_category", "item_name", "unit_of_measure", "created_at"],
+  "boq_budget": ["id", "work_item", "contract_quantity", "unit", "unit_contract_price", "estimated_labor_cost", "project_id"],
+  "project_stages": ["id", "project_id", "stage_name", "progress_percentage", "status", "created_at"],
+  "project_work_structure": ["id", "project_id", "technical_item", "stage_name", "status", "created_at"],
+  "inventory": ["id", "item_name", "unit", "current_stock", "avg_price"],
+  // 🟢 تم ضبط اسم الجدول ليكون متوافق تماماً مع الداتابيز (violations) بدلاً من labor_violations
+  "violations": ["id", "date", "partner_id", "emp_name", "profession", "project_id", "site_name", "reason", "amount", "image_url", "is_posted", "created_at"]
+};
 
-  const backupToExcel = async (selectedTables: string[]) => {
-    try {
-      showToast('⏳ جاري تجميع البيانات وتحضير ملف الإكسل...', 'loading');
-      const workbook = XLSX.utils.book_new();
-
-      // جلب البيانات لكل جدول محدد
-      for (const table of selectedTables) {
-        let allData: any[] = [];
-        let from = 0;
-        const limit = 1000; // 🛡️ الباب الثالث: التجزئة لمنع انهيار الذاكرة
-
-        while (true) {
-          const { data, error } = await supabase
-            .from(table)
-            .select('*')
-            .range(from, from + limit - 1);
-
-          if (error) {
-            console.error(`Error fetching table ${table}:`, error);
-            showToast(`فشل في جلب بيانات جدول ${table}`, 'error');
-            return;
-          }
-
-          if (data && data.length > 0) {
-            allData = [...allData, ...data];
-          }
-
-          if (!data || data.length < limit) break;
-          from += limit;
+export const useBackupLogic = () => {
+    const { showToast } = useToast();
+    
+    // 🟢 تصدير لإكسيل (بيانات حقيقية)
+    const backupToExcel = async (selectedTables: string[]) => {
+        try {
+            showToast('⏳ جاري تجميع البيانات وتحضير ملف الإكسل...', 'loading');
+            const workbook = XLSX.utils.book_new();
+            
+            for (const table of selectedTables) {
+                const data = await fetchAllSupabaseData(supabase, table);
+                
+                if (data && data.length > 0) {
+                    const worksheet = XLSX.utils.json_to_sheet(data);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, table);
+                } else {
+                    const headers = TABLE_SCHEMAS[table] || ['id'];
+                    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, table);
+                }
+            }
+            
+            XLSX.writeFile(workbook, `Rawasi_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('✅ تم تصدير نسخة الإكسل بنجاح', 'success');
+            return { success: true };
+        } catch (error: any) {
+            console.error("Excel Backup Error:", error);
+            showToast(`❌ فشل تصدير الإكسل: ${error.message}`, 'error');
+            return { success: false };
         }
+    };
 
-        if (allData.length > 0) {
-          const worksheet = XLSX.utils.json_to_sheet(allData);
-          XLSX.utils.book_append_sheet(workbook, worksheet, table);
-        } else {
-            // إنشاء شيت فارغ لو الجدول معلهوش داتا عشان يفضل الهيكل موجود
-            const emptyWorksheet = XLSX.utils.json_to_sheet([{}]);
-            XLSX.utils.book_append_sheet(workbook, emptyWorksheet, table);
+    // 🔵 تصدير لـ JSON
+    const backupToJSON = async (selectedTables: string[]) => {
+        try {
+            showToast('⏳ جاري تحضير ملف JSON...', 'loading');
+            const fullSnapshot: any = { metadata: { date: new Date().toISOString() }, data: {} };
+            
+            for (const table of selectedTables) {
+                const data = await fetchAllSupabaseData(supabase, table);
+                fullSnapshot.data[table] = data;
+            }
+            
+            const blob = new Blob([JSON.stringify(fullSnapshot, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Rawasi_Snapshot_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            showToast('✅ تم تصدير نسخة JSON بنجاح', 'success');
+            return { success: true };
+        } catch (error: any) {
+            console.error("JSON Backup Error:", error);
+            showToast(`❌ فشل تصدير JSON: ${error.message}`, 'error');
+            return { success: false };
         }
-      }
+    };
 
-      XLSX.writeFile(workbook, `Rawasi_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
-      showToast('✅ تم تصدير نسخة الإكسل بنجاح', 'success');
+    // 📄 تحميل نموذج فارغ (Template) - يدعم الإدخال الذكي والتطابق مع الداتابيز
+    const downloadTemplate = (tableName: string, displayName: string) => {
+        try {
+            showToast(`⏳ جاري تحضير قالب ${displayName}...`, 'loading');
+            let templateData: any[] = [];
+            let wscols: any[] = [];
 
-    } catch (error: any) {
-      showToast(`❌ فشل التصدير: ${error.message}`, 'error');
-    }
-  };
-
-  const backupToJSON = async (selectedTables: string[]) => {
-    try {
-      showToast('⏳ جاري تحضير ملف JSON...', 'loading');
-      const backupData: any = {};
-
-      for (const table of selectedTables) {
-         let allData: any[] = [];
-         let from = 0;
-         const limit = 1000;
-
-         while (true) {
-             const { data, error } = await supabase.from(table).select('*').range(from, from + limit - 1);
-             if (error) throw error;
-             
-             if (data && data.length > 0) allData = [...allData, ...data];
-             if (!data || data.length < limit) break;
-             from += limit;
-         }
-         backupData[table] = allData;
-      }
-
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
-      const downloadAnchorNode = document.createElement('a');
-      downloadAnchorNode.setAttribute("href", dataStr);
-      downloadAnchorNode.setAttribute("download", `Rawasi_System_Snapshot_${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchorNode);
-      downloadAnchorNode.click();
-      downloadAnchorNode.remove();
-
-      showToast('✅ تم تصدير نسخة JSON بنجاح', 'success');
-
-    } catch (error: any) {
-      showToast(`❌ فشل التصدير: ${error.message}`, 'error');
-    }
-  };
-
-  // 📥 دالة تحميل قالب فارغ للجدول المحدد (تدعم القوالب المعربة)
-  const downloadTemplate = async (tableName: string, displayName: string) => {
-    try {
-        showToast('⏳ جاري تحضير القالب...', 'loading');
-        let templateData: any[] = [{}];
-        let wscols: any[] = [];
-
-        // 🌟 قوالب مخصصة ومعربة لتسهيل الإدخال على المستخدم
-        if (tableName === 'payment_vouchers') {
-            templateData = [{
-                'التاريخ': '2024-05-01',
-                'اسم المستفيد': 'اكتب اسم العامل أو المورد هنا',
-                'المبلغ': '5000',
-                'البيان': 'وصف السند أو الدفعة',
-                'طريقة الدفع': 'تحويل بنكي',
-                'الحساب المدين': 'ذمم عمال (اختياري)',
-                'الحساب الدائن': 'البنك الأهلي (اختياري)'
-            }];
-            wscols = [{ wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 40 }, { wch: 20 }, { wch: 25 }, { wch: 25 }];
-        } 
-        else if (tableName === 'labor_daily_logs') {
-             templateData = [{
-                'تاريخ': '2024-05-01',
-                'اسم العامل': 'اكتب اسم العامل هنا',
-                'المشروع': 'اسم الموقع أو العقار',
-                'البند': 'اسم بند الأعمال',
-                'يومية': '100',
-                'حضور': '1',
-                'نسبة الإنجاز': '100',
-                'البيان': 'ملاحظات'
-             }];
-        }
-        else {
-            // القالب الافتراضي: يجلب الحقول الإنجليزية من الداتابيز
-            const { data, error } = await supabase.from(tableName).select('*').limit(1);
-            if (error) throw error;
-            if (data && data.length > 0) {
+            // 🌟 1. القوالب المخصصة (أسماء العواميد بالإنجليزي، والشرح بالعربي لتسهيل الرفع)
+            // 🌟 داخل دالة downloadTemplate في ملف backup_logic.ts
+            if (tableName === 'payment_vouchers') {
+                templateData = [{
+                    'date': new Date().toISOString().split('T')[0],
+                    'amount': 5000,
+                    'payment_method': 'تحويل بنكي',
+                    'description': 'اكتب وصف السند هنا',
+                    'notes': 'أي ملاحظات إضافية (اختياري)',
+                    // 👇 حولنا الـ ID لـ Name
+                    'payee_name': 'اكتب اسم المستفيد (يجب أن يكون مطابقاً لدليل الشركاء)',
+                    'account_name': 'اكتب اسم حساب الخزينة/البنك (مطابق لشجرة الحسابات)'
+                }];
+                wscols = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 40 }, { wch: 30 }, { wch: 40 }, { wch: 40 }];
+            }
+            else if (tableName === 'labor_daily_logs') {
+     templateData = [{
+        'work_date': new Date().toISOString().split('T')[0], // التاريخ
+        'worker_name': 'اكتب اسم العامل هنا (مطابق لدليل الشركاء)',
+        'site_ref': 'اسم العقار أو المشروع الحالي',
+        'work_item': 'بند الأعمال (مثل: لياسة / حدادة)',
+        'production_desc': 'وصف العمل المنجز تفصيلياً',
+        'unit': 'م2', // الوحدة المفقودة
+        'productivity': '25.5', // الإنتاجية المفقودة
+        'tareeha': 'طريحة اليوم', // الطريحة المفقودة
+        'completion_percentage': 100, // نسبة الإنجاز
+        'daily_wage': 150, // اليومية
+        'attendance_value': 1, // الحضور (1 = يوم كامل)
+        'sub_contractor': 'اكتب اسم المقاول أو "المركز الرئيسي"',
+        'notes': 'أي ملاحظات فنية'
+     }];
+     // ضبط عرض الأعمدة ليكون مريحاً للعين في الإكسيل
+     wscols = [
+       { wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 25 }, { wch: 40 }, 
+       { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, 
+       { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 30 }
+     ];
+}
+            // 🟢 تغيير اسم الجدول هنا ليكون violations
+            else if (tableName === 'violations') {
+                 templateData = [{
+                    'date': new Date().toISOString().split('T')[0],
+                    'emp_name': 'اكتب اسم العامل المخالف',
+                    'profession': 'مثال: نجار / حداد',
+                    'site_name': 'موقع العمل',
+                    'reason': 'عدم ارتداء معدات السلامة',
+                    'amount': 500,
+                    'partner_id': 'يرجى وضع معرف الـ UUID للعامل هنا'
+                 }];
+                 wscols = [{ wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 40 }, { wch: 15 }, { wch: 40 }];
+            } 
+            // 🌟 2. القوالب الافتراضية لباقي الجداول (مجهزة بأعمدة الداتابيز مباشرة)
+            else {
+                const headers = TABLE_SCHEMAS[tableName];
+                if (!headers) throw new Error("لم يتم العثور على خريطة حقول لهذا الجدول.");
+                
                 const emptyObj: any = {};
-                Object.keys(data[0]).forEach(key => emptyObj[key] = '');
+                headers.forEach(key => emptyObj[key] = '');
                 templateData = [emptyObj];
             }
+
+            // إنشاء ملف الإكسل وتصديره
+            const worksheet = XLSX.utils.json_to_sheet(templateData);
+            if (wscols.length > 0) worksheet['!cols'] = wscols;
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, tableName); 
+            XLSX.writeFile(workbook, `Template_${tableName}.xlsx`);
+            
+            showToast(`✅ تم تحميل قالب ${displayName} بنجاح`, 'success');
+        } catch (error: any) {
+            showToast(`❌ فشل تحميل القالب: ${error.message}`, 'error');
         }
+    };
 
-        const worksheet = XLSX.utils.json_to_sheet(templateData);
-        if (wscols.length > 0) worksheet['!cols'] = wscols;
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, tableName); // الاسم الانجليزي مهم هنا للربط في السيرفر
-        XLSX.writeFile(workbook, `Template_${tableName}.xlsx`);
-        
-        showToast('✅ تم تحميل القالب', 'success');
-    } catch (error: any) {
-        showToast('❌ فشل تحميل القالب', 'error');
-    }
-  };
-
-  return { backupToExcel, backupToJSON, downloadTemplate };
-}
+    return { backupToExcel, backupToJSON, downloadTemplate };
+};

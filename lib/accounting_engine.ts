@@ -1,56 +1,89 @@
-"use server";
-import { supabase } from '../lib/supabase'; // يفضل استخدام Supabase Admin Client في السيرفر
+"use client"; // 🟢 تم التغيير لـ Client لأننا سنستخدم Hooks (React Query) والعمليات الثقيلة أصبحت في الداتابيز (RPC)
 
-// 🟢 1. دالة ذكية لتخطي ليميت الـ 1000 صف (لجمع المبالغ الضخمة)
-export async function calculateMassiveTotals(tableName: string, amountColumn: string) {
-  try {
-    let total = 0;
-    let keepFetching = true;
-    let offset = 0;
-    const limit = 1000;
+import { supabase } from './supabase';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from './toast-context';
 
-    // بنعمل Loop في الباك إند يسحب الداتا صفحات لحد ما يخلصها كلها ويجمعها
-    while (keepFetching) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .select(amountColumn)
-        .range(offset, offset + limit - 1);
+// ============================================================================
+// 🚀 المحرك الموحد للترحيل وفك الترحيل (الباب العاشر - ميثاق رواسي V11)
+// ============================================================================
+export function useUniversalPosting(queryKey: string, tableName: string, postRpcName: string) {
+    const queryClient = useQueryClient();
+    const { showToast } = useToast();
 
-      if (error) throw error;
+    // 🟢 1. دالة الترحيل المخصصة (تستدعي دالة SQL الخاصة بكل موديول)
+    const postMutation = useMutation({
+        mutationFn: async (selectedIds: string[]) => {
+            if (!selectedIds || selectedIds.length === 0) throw new Error("لم يتم تحديد أي سجلات للترحيل.");
+            
+            // الاعتماد حصراً على السيرفر (Edge Functions) لمنع التهنيج
+            const { error } = await supabase.rpc(postRpcName, { p_ids: selectedIds });
+            if (error) throw new Error(error.message);
+        },
+        onSuccess: () => {
+            showToast('تم الترحيل وإصدار القيود بنجاح 🚀', 'success');
+            queryClient.invalidateQueries({ queryKey: [queryKey] });
+        },
+        onError: (err: any) => showToast(`فشل الترحيل: ${err.message}`, 'error')
+    });
 
-      if (data && data.length > 0) {
-        total += data.reduce((sum, row) => sum + Number(row[amountColumn] || 0), 0);
-        offset += limit;
-      } else {
-        keepFetching = false;
-      }
-    }
-    
-    return { success: true, total };
-  } catch (error: any) {
-    console.error("Calculation Error:", error);
-    return { success: false, error: error.message };
-  }
+    // ⏪ 2. دالة فك الترحيل الموحدة (Universal Unpost)
+    const unpostMutation = useMutation({
+        mutationFn: async (selectedIds: string[]) => {
+            if (!selectedIds || selectedIds.length === 0) throw new Error("لم يتم تحديد أي سجلات لفك الترحيل.");
+            
+            // استدعاء الدالة المركزية في الداتابيز بخطوة واحدة
+            const { error } = await supabase.rpc('unpost_universal_bulk', { 
+                p_ids: selectedIds,
+                p_table_name: tableName 
+            });
+            if (error) throw new Error(error.message);
+        },
+        onSuccess: () => {
+            showToast('تم فك الترحيل ومسح القيود بنجاح ⏪', 'success');
+            queryClient.invalidateQueries({ queryKey: [queryKey] });
+        },
+        onError: (err: any) => showToast(`فشل فك الترحيل: ${err.message}`, 'error')
+    });
+
+    return {
+        postRecords: (ids: string[]) => postMutation.mutate(ids),
+        unpostRecords: (ids: string[]) => unpostMutation.mutate(ids),
+        isProcessing: postMutation.isPending || unpostMutation.isPending
+    };
 }
 
-// 🚀 2. دالة الترحيل المركزية (Posting Engine)
-export async function postDocument(docId: string, docType: 'invoice' | 'receipt' | 'journal') {
-  try {
-    // هنا بيتم إنشاء القيد المحاسبي في الباك إند بشكل آمن جداً
-    // الخطوة 1: التأكد إن المستند مش مرحل قبل كده
-    // الخطوة 2: إنشاء رأس القيد (Journal Header)
-    // الخطوة 3: إنشاء أسطر القيد (Journal Lines)
-    // الخطوة 4: تغيير حالة المستند إلى "مُعتمد"
-    
-    const { error } = await supabase
-      .from('invoices') // كمثال
-      .update({ status: 'مُعتمد', is_posted: true })
-      .eq('id', docId);
+// ============================================================================
+// 📊 دالة سحب وتجميع البيانات الضخمة (تخطي حاجز الـ 1000 سطر - الباب الثالث)
+// ============================================================================
+export async function calculateMassiveTotals(tableName: string, amountColumn: string) {
+    try {
+        let total = 0;
+        let keepFetching = true;
+        let offset = 0;
+        const limit = 1000;
 
-    if (error) throw error;
+        // التجزئة الذرية (Atomic Chunking) لجمع المبالغ
+        while (keepFetching) {
+            const { data, error } = await supabase
+                .from(tableName)
+                .select(amountColumn)
+                .range(offset, offset + limit - 1);
 
-    return { success: true, message: "تم ترحيل المستند وإنشاء القيود بنجاح!" };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                total += data.reduce((sum, row) => sum + Number(row[amountColumn] || 0), 0);
+                offset += limit;
+                if (data.length < limit) keepFetching = false;
+            } else {
+                keepFetching = false;
+            }
+        }
+        
+        return { success: true, total };
+    } catch (error: any) {
+        console.error("Calculation Error:", error);
+        return { success: false, error: error.message };
+    }
 }

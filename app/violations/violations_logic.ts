@@ -1,139 +1,175 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo, useCallback, useDeferredValue } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/lib/toast-context';
+import { resolvePartnerId } from '@/lib/accounting';
 
 export function useViolationsLogic() {
-  const [violations, setViolations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalSumFromDB, setTotalSumFromDB] = useState(0); 
+    const queryClient = useQueryClient();
+    const { showToast } = useToast();
 
-  const [searchName, setSearchName] = useState("");
-  const [startDate, setStartDate] = useState(""); 
-  const [endDate, setEndDate] = useState("");
+    const [globalSearch, setGlobalSearch] = useState('');
+    const deferredSearch = useDeferredValue(globalSearch); 
+    const [filterStatus, setFilterStatus] = useState('الكل');
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingRecord, setEditingRecord] = useState<any>(null);
 
-  const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize, setPageSize] = useState(100);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    // 📥 1. جلب المخالفات
+    const { data: violations = [], isLoading } = useQuery({
+        queryKey: ['violations'], 
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('violations') 
+                .select(`
+                    *,
+                    partner:partners!partner_id(partner_type, name),
+                    project:projects!project_id(Property)
+                `)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        }
+    });
 
-  // حالة المودال والكاميرا
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<any>(null);
+    // 🔍 2. التصفية والحسابات
+    const { displayedViolations, totalSum, totalCount } = useMemo(() => {
+        let result = violations;
+        if (filterStatus !== 'الكل') {
+            result = result.filter(v => v.is_posted === (filterStatus === 'مرحل'));
+        }
+        if (deferredSearch) {
+            const lower = deferredSearch.toLowerCase();
+            result = result.filter(v => 
+                (v.emp_name?.toLowerCase().includes(lower)) ||
+                (v.partner?.name?.toLowerCase().includes(lower)) ||
+                (v.reason?.toLowerCase().includes(lower))
+            );
+        }
+        const sum = result.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        return { displayedViolations: result, totalSum: sum, totalCount: result.length };
+    }, [violations, deferredSearch, filterStatus]);
 
-  const fetchViolations = useCallback(async () => {
-    setLoading(true);
-    try {
-      // 💡 تنبيه: غير 'violations' لاسم الجدول بتاعك في الداتابيز
-      let query = supabase.from('violations').select('*').order('date', { ascending: false });
+    // 🚀 3. محرك الترحيل المحاسبي الذكي (البحث بالكود المحاسبي)
+    const postMutation = useMutation({
+        mutationFn: async () => {
+            // جلب الـ UUID الخاص بالحسابات المطلوبة باستخدام الكود المحاسبي
+            const { data: accounts, error: accError } = await supabase
+                .from('accounts')
+                .select('id, code')
+                .in('code', ['216', '46']);
 
-      if (searchName) query = query.ilike('emp_name', `%${searchName}%`);
-      if (startDate) query = query.gte('date', startDate);
-      if (endDate) query = query.lte('date', endDate);
+            if (accError || !accounts || accounts.length < 2) {
+                throw new Error('لم يتم العثور على الحسابات #216 أو #46 في شجرة الحسابات. تأكد من وجود الأكواد.');
+            }
 
-      const { data, error } = await query;
-      
-      // 🛡️ طباعة الخطأ بالتفصيل عشان نعرف المشكلة منين
-      if (error) {
-        console.error("❌ تفاصيل خطأ الداتابيز:", error.message);
-        return;
-      }
+            const DEBIT_ACC = accounts.find(a => a.code === '216')?.id;
+            const CREDIT_ACC = accounts.find(a => a.code === '46')?.id;
 
-      if (data) {
-        setViolations(data);
-        setTotalSumFromDB(data.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0));
-      }
-    } catch (error: any) {
-      console.error("❌ خطأ غير متوقع في جلب المخالفات:", error.message || error);
-    } finally {
-      setLoading(false);
-    }
-  }, [searchName, startDate, endDate]);
+            const toPost = violations.filter(v => selectedIds.includes(String(v.id)) && !v.is_posted);
 
-  useEffect(() => { fetchViolations(); }, [fetchViolations]);
+            for (const v of toPost) {
+                // درع حماية التكرار[cite: 8]
+                const { data: existing } = await supabase.from('journal_headers').select('id').eq('reference_id', String(v.id)).maybeSingle();
+                if (existing) continue;
 
-  // 🧠 الدالة السحرية لسحب المهنة والموقع أوتوماتيك
-  const handleEmployeeSelect = async (emp: any) => {
-    if (!emp) return;
+                // إنشاء القيد
+                const { data: header, error: hError } = await supabase.from('journal_headers').insert([{
+                    entry_date: v.date,
+                    description: `قيد غرامة: ${v.emp_name} - ${v.reason}`,
+                    reference_id: String(v.id), 
+                    status: 'posted'
+                }]).select('id').single();
 
-    try {
-      // 1. جلب المهنة من جدول الشركاء (تأكد إن العمود اسمه job_title أو غيره حسب تصميمك)
-      const { data: partnerData } = await supabase
-        .from('partners')
-        .select('job_title') 
-        .eq('id', emp.id)
-        .single();
+                if (hError) throw hError;
 
-      // 2. جلب آخر موقع مسجل للعامل في "اليومية" بتاريخ اليوم
-      const today = new Date().toISOString().split('T')[0];
-      const { data: logData } = await supabase
-        .from('labor_logs') // 👈 تأكد إن ده اسم جدول يومية العمالة عندك
-        .select('site_ref')
-        .eq('emp_id', emp.id)
-        .eq('date', today)
-        .limit(1)
-        .maybeSingle();
+                // توجيه الذمم[cite: 8]
+                const lines = [
+                    { 
+                        header_id: header.id, 
+                        account_id: DEBIT_ACC, 
+                        partner_id: resolvePartnerId(DEBIT_ACC, v.partner_id),
+                        debit: v.amount, credit: 0, notes: v.reason 
+                    },
+                    { 
+                        header_id: header.id, 
+                        account_id: CREDIT_ACC, 
+                        partner_id: resolvePartnerId(CREDIT_ACC, null), 
+                        debit: 0, credit: v.amount, notes: v.reason 
+                    }
+                ];
 
-      // 3. دمج البيانات الجديدة جوه المودال
-      setEditingRecord((prev: any) => ({
-        ...prev,
-        emp_id: emp.id,
-        emp_name: emp.name,
-        profession: partnerData?.job_title || 'غير محدد',
-        site_name: logData?.site_ref || 'لم يسجل في يومية اليوم'
-      }));
-    } catch (err) {
-      console.error("❌ خطأ أثناء سحب بيانات العامل:", err);
-    }
-  };
+                await supabase.from('journal_lines').insert(lines);
+                await supabase.from('violations').update({ is_posted: true }).eq('id', v.id);
+            }
+        },
+        onSuccess: () => {
+            showToast('تم الترحيل المحاسبي بنجاح ✅', 'success');
+            setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['violations'] });
+        },
+        onError: (err: any) => showToast(err.message, 'error')
+    });
 
-  const totalCount = violations.length;
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
-  const displayedViolations = useMemo(() => violations.slice(currentPage * pageSize, (currentPage + 1) * pageSize), [violations, currentPage, pageSize]);
+    // ⏪ 4. فك الترحيل
+    const unpostMutation = useMutation({
+        mutationFn: async () => {
+            const toUnpost = violations.filter(v => selectedIds.includes(String(v.id)) && v.is_posted);
+            for (const v of toUnpost) {
+                await supabase.from('journal_headers').delete().eq('reference_id', String(v.id));
+                await supabase.from('violations').update({ is_posted: false }).eq('id', v.id);
+            }
+        },
+        onSuccess: () => {
+            showToast('تم فك الترحيل بنجاح ⏪', 'success');
+            setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['violations'] });
+        }
+    });
 
-  const handleDelete = async () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`هل أنت متأكد من حذف ${selectedIds.length} مخالفة؟`)) return;
-    try {
-      const { error } = await supabase.from('violations').delete().in('id', selectedIds);
-      if (error) throw error;
-      await fetchViolations(); 
-      setSelectedIds([]);
-    } catch (err: any) { alert("❌ خطأ: " + err.message); }
-  };
+    // CRUD
+    const saveMutation = useMutation({
+        mutationFn: async (payload: any) => {
+            const { partner, project, ...cleanPayload } = payload;
+            if (cleanPayload.id) {
+                await supabase.from('violations').update(cleanPayload).eq('id', cleanPayload.id);
+            } else {
+                await supabase.from('violations').insert([cleanPayload]);
+            }
+        },
+        onSuccess: () => {
+            showToast('تم الحفظ بنجاح 📝', 'success');
+            setIsEditModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['violations'] });
+        }
+    });
 
-  const handleEdit = (record?: any) => {
-    setEditingRecord(record ? { ...record } : { date: new Date().toISOString().split('T')[0], amount: 0, reason: '', image_url: null, profession: '', site_name: '' });
-    setIsEditModalOpen(true);
-  };
-
-  const handleSaveUpdate = async () => {
-    if (!editingRecord) return;
-    try {
-      if (editingRecord.id) {
-        // تحديث
-        const { error } = await supabase.from('violations').update(editingRecord).eq('id', editingRecord.id);
-        if (error) throw error;
-      } else {
-        // إضافة جديدة
-        const { error } = await supabase.from('violations').insert([editingRecord]);
-        if (error) throw error;
-      }
-      await fetchViolations();
-      setIsEditModalOpen(false);
-      setSelectedIds([]);
-    } catch (err: any) { alert("❌ خطأ في الحفظ: " + err.message); }
-  };
-
-  const handlePostSelected = async () => { /* لوجيك الترحيل */ };
-  const handleUnpostSelected = async () => { /* لوجيك فك الترحيل */ };
-
-  return {
-    loading, displayedViolations, 
-    searchName, setSearchName, startDate, setStartDate, endDate, setEndDate,
-    totalCount, totalPages, totalSumFromDB,
-    selectedIds, setSelectedIds, currentPage, setCurrentPage, pageSize, setPageSize,
-    handleDelete, handleEdit, isEditModalOpen, setIsEditModalOpen,
-    editingRecord, setEditingRecord, handleSaveUpdate,
-    handleEmployeeSelect, // 👈 تم تصدير الدالة الجديدة للواجهة
-    handlePostSelected, handleUnpostSelected, refresh: fetchViolations
-  };
+    return {
+        data: displayedViolations,
+        isLoading,
+        totals: { totalSum, totalCount },
+        actions: {
+            setGlobalSearch,
+            setFilterStatus,
+            setSelectedIds,
+            handleEdit: (record: any = null) => {
+                if (record) setEditingRecord(record);
+                else setEditingRecord({ date: new Date().toISOString().split('T')[0], emp_name: '', amount: 0 });
+                setIsEditModalOpen(true);
+            },
+            handleSave: () => saveMutation.mutate(editingRecord),
+            handlePost: () => postMutation.mutate(),
+            handleUnpost: () => unpostMutation.mutate(),
+            handleDelete: async () => {
+                if (confirm('حذف؟')) {
+                    await supabase.from('violations').delete().in('id', selectedIds);
+                    queryClient.invalidateQueries({ queryKey: ['violations'] });
+                    setSelectedIds([]);
+                }
+            },
+            handleEmployeeSelect: (v: any) => setEditingRecord({ ...editingRecord, emp_name: v?.name || v, partner_id: v?.id || null, profession: v?.partner_type || '' })
+        },
+        state: { selectedIds, filterStatus, isEditModalOpen, editingRecord, setIsEditModalOpen, setEditingRecord }
+    };
 }
