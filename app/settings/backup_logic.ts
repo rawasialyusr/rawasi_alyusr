@@ -21,7 +21,7 @@ export const TABLE_SCHEMAS: Record<string, string[]> = {
   "expenses": ["id", "exp_date", "sub_contractor", "payee_id", "creditor_account", "description", "quantity", "unit_price", "total_price", "vat_amount", "payment_method", "notes", "is_posted", "created_at", "payment_account", "site_ref", "payee_name", "project_id", "discount_account", "discount_amount", "employee_name", "invoice_image"],
   "invoices": ["id", "invoice_number", "date", "partner_id", "client_name", "project_ids", "boq_id", "description", "quantity", "unit", "unit_price", "line_total", "materials_discount", "taxable_amount", "tax_amount", "guarantee_percent", "guarantee_amount", "total_amount", "debit_account_id", "credit_account_id", "materials_acc_id", "guarantee_acc_id", "tax_acc_id", "skip_zatca", "status", "created_at", "due_in_days", "due_date", "paid_amount"],
   "invoice_lines": ["id", "invoice_id", "item_id", "description", "unit", "quantity", "unit_price", "total_price", "created_at"],
-  "payment_vouchers": ["id", "voucher_number", "date", "amount", "partner_id", "account_id", "payment_method", "reference_no", "description", "notes", "status", "is_posted", "created_at", "updated_at", "created_by"],
+  "payment_vouchers": ["id", "voucher_number", "date", "amount", "partner_id", "credit_account_id", "debit_account_id", "payment_method", "reference_no", "description", "notes", "status", "is_posted", "created_at", "updated_at", "created_by"],
   "receipt_vouchers": ["id", "date", "amount", "payment_method", "notes", "partner_id", "invoice_id", "created_at", "updated_at", "receipt_number", "status", "safe_bank_acc_id", "partner_acc_id", "project_ids", "reference_number", "attachment_url"],
   "journal_headers": ["id", "entry_date", "description", "created_at", "status", "reference_id"],
   "journal_lines": ["id", "header_id", "account_id", "partner_id", "item_name", "quantity", "unit_price", "debit", "credit", "notes", "project_id", "debit_account_id", "tax_amount", "tax_rate", "created_at"],
@@ -105,16 +105,26 @@ export const useBackupLogic = () => {
             // 🌟 داخل دالة downloadTemplate في ملف backup_logic.ts
             if (tableName === 'payment_vouchers') {
                 templateData = [{
-                    'date': new Date().toISOString().split('T')[0],
-                    'amount': 5000,
-                    'payment_method': 'تحويل بنكي',
-                    'description': 'اكتب وصف السند هنا',
-                    'notes': 'أي ملاحظات إضافية (اختياري)',
-                    // 👇 حولنا الـ ID لـ Name
-                    'payee_name': 'اكتب اسم المستفيد (يجب أن يكون مطابقاً لدليل الشركاء)',
-                    'account_name': 'اكتب اسم حساب الخزينة/البنك (مطابق لشجرة الحسابات)'
+                    'التاريخ': new Date().toISOString().split('T')[0],
+                    'المبلغ': 5000,
+                    'طريقة الدفع': 'تحويل بنكي',
+                    'البيان': 'اكتب وصف السند هنا',
+                    'ملاحظات': 'أي ملاحظات إضافية (اختياري)',
+                    'حساب المدين (debit_account_id)': 'ضع معرف UUID لحساب المصروف/المورد',
+                    'حساب الدائن (credit_account_id)': 'ضع معرف UUID لحساب الخزينة/البنك',
+                    // 👇 التعديل هنا: طلبنا الاسم صراحة بدل الـ ID
+                    'اسم المستفيد': 'اكتب اسم العامل أو المورد هنا (مطابق لدليل الشركاء)'
                 }];
-                wscols = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 40 }, { wch: 30 }, { wch: 40 }, { wch: 40 }];
+                wscols = [
+                    { wch: 15 }, // التاريخ
+                    { wch: 15 }, // المبلغ
+                    { wch: 15 }, // طريقة الدفع
+                    { wch: 40 }, // البيان
+                    { wch: 30 }, // ملاحظات
+                    { wch: 40 }, // حساب المدين
+                    { wch: 40 }, // حساب الدائن
+                    { wch: 40 }  // المستفيد
+                ];
             }
             else if (tableName === 'labor_daily_logs') {
      templateData = [{

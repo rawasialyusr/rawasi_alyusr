@@ -25,18 +25,24 @@ const mapHeaderToSchema = (sheetName: string, header: string) => {
   
   if (h.includes('تاريخ') || h.includes('date')) return sheetName === 'labor_daily_logs' ? 'work_date' : (sheetName === 'expenses' ? 'exp_date' : 'date');
   
-  // 🟢 تعديل جديد: التقاط اسم الشريك/المستفيد بأي صيغة لسندات الصرف والقبض وغيرها
+  // 🟢 التعديل الجديد: التقاط الـ 3 معرفات مباشرة وبدقة متناهية
+  if (h.includes('partner_id')) return 'partner_id';
+  if (h.includes('debit_account_id') || (h.includes('مدين') && h.includes('id'))) return 'debit_account_id';
+  if (h.includes('credit_account_id') || (h.includes('دائن') && h.includes('id'))) return 'credit_account_id';
+  if (h.includes('account_id') && !h.includes('debit') && !h.includes('credit')) return 'account_id'; // لباقي الجداول القديمة
+
+  // 🟢 التقاط اسم الشريك/المستفيد لو المستخدم كتب الاسم بدل الـ ID
   if (h.includes('موظف') || h.includes('عامل') || h.includes('اسم') || h.includes('emp') || h.includes('worker') || h.includes('مستفيد') || h.includes('payee') || h.includes('شريك')) {
       if (sheetName === 'labor_daily_logs') return 'worker_name';
       if (sheetName === 'payment_vouchers' || sheetName === 'receipt_vouchers') return 'payee_name';
       return 'emp_name';
   }
 
-  // 🟢 تعديل جديد: التقاط اسم الحساب المالي (خزينة/بنك)
+  // 🟢 التقاط اسم الحساب المالي
   if (h.includes('حساب') || h.includes('صندوق') || h.includes('بنك') || h.includes('account')) {
       if (h.includes('مدين')) return 'debit_account_name';
       if (h.includes('دائن')) return 'credit_account_name';
-      return 'account_name'; // للحسابات الفردية زي سندات الصرف
+      return 'account_name'; 
   }
 
   if (h.includes('مبلغ') || h.includes('قيمه') || h.includes('amount')) return 'amount';
@@ -201,15 +207,15 @@ export async function processExcelInBackend(formData: FormData) {
             }
             
             // 🟢 تعديل جديد: ترجمة اسم الحساب إلى ID
+            // 🟢 ترجمة اسم الحساب إلى ID وتوجيهه صح
             if (dbColumnName === 'credit_account_name' || dbColumnName === 'debit_account_name' || dbColumnName === 'account_name') {
               const matchedId = accountMap.get(searchVal);
               if (matchedId) {
-                  if (dbColumnName === 'credit_account_name') {
-                      newRow['credit_account_id'] = matchedId;
-                  } else if (dbColumnName === 'debit_account_name') {
+                  if (dbColumnName === 'debit_account_name') {
                       newRow['debit_account_id'] = matchedId;
                   } else {
-                      newRow['account_id'] = matchedId; // هنا بينزل الـ ID لحساب البنك في سندات الصرف
+                      // لو المستخدم كتب "اسم حساب الخزينة" هينزل دايركت في الدائن
+                      newRow['credit_account_id'] = matchedId; 
                   }
               }
             }

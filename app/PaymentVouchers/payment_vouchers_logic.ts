@@ -1,26 +1,50 @@
 "use client";
-import { useState, useMemo, useDeferredValue } from 'react';
+import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
-import { useUniversalPosting } from '@/lib/accounting_engine'; // 🚀 استدعاء المحرك الموحد (الباب العاشر)
+import { useUniversalPosting } from '@/lib/accounting_engine'; 
 
 export function usePaymentVouchersLogic() {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
 
-    // 1. إدارة الحالة (State) - الباب الأول
+    // 1. إدارة الحالة (State)
     const [globalSearch, setGlobalSearch] = useState('');
     const deferredSearch = useDeferredValue(globalSearch);
     const [filterStatus, setFilterStatus] = useState('الكل'); 
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     
+    // 🌟 State لتواريخ الفلترة (من - إلى)
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [currentVoucher, setCurrentVoucher] = useState<any>({});
 
-    // 📥 2. جلب البيانات (الباب الثالث: دالة البلدوزر)
+    // 🌟 2. استماع دائم (Listen) لحدث التواريخ والبحث القادم من السايد بار
+    useEffect(() => {
+        const handleDateChange = (e: any) => {
+            setDateRange({ start: e.detail.start, end: e.detail.end });
+            setCurrentPage(1); 
+        };
+
+        const handleSearchChange = (e: any) => {
+            setGlobalSearch(e.detail || '');
+            setCurrentPage(1);
+        };
+        
+        window.addEventListener('globalDateFilter', handleDateChange as EventListener);
+        window.addEventListener('globalSearch', handleSearchChange as EventListener);
+
+        return () => {
+            window.removeEventListener('globalDateFilter', handleDateChange as EventListener);
+            window.removeEventListener('globalSearch', handleSearchChange as EventListener);
+        };
+    }, []);
+
+    // 📥 3. جلب البيانات
     const { data: vouchers = [], isLoading: isFetching } = useQuery({
         queryKey: ['payment_vouchers'],
         queryFn: async () => {
@@ -30,7 +54,6 @@ export function usePaymentVouchersLogic() {
             let to = step - 1;
             let hasMore = true;
 
-            // هذه حلقة تكرارية مشروعة (للقراءة فقط) لتخطي حاجز الـ 1000 سطر الخاص بـ Supabase
             while (hasMore) {
                 const { data, error } = await supabase
                     .from('payment_vouchers')
@@ -59,7 +82,7 @@ export function usePaymentVouchersLogic() {
         }
     });
 
-    // 📊 3. جلب رصيد المستفيد (يعمل فقط عند تحديد مستفيد)
+    // 📊 4. جلب رصيد المستفيد
     const { data: partnerBalance = 0, isLoading: isBalanceLoading } = useQuery({
         queryKey: ['partner_balance', currentVoucher.payee_id],
         queryFn: async () => {
@@ -71,53 +94,67 @@ export function usePaymentVouchersLogic() {
         enabled: !!currentVoucher.payee_id 
     });
 
-    // 🔍 4. التصفية المتقدمة (Logic Filtering) - إلزامي داخل useMemo
+    // 🔍 5. التصفية المتقدمة (السر كله هنا)
+    // 🔍 4. التصفية المتقدمة (Logic Filtering)
     const displayedVouchers = useMemo(() => {
         let result = vouchers;
 
+        // فلترة التاريخ
+        if (dateRange.start) {
+            result = result.filter(v => new Date(v.date) >= new Date(dateRange.start));
+        }
+        if (dateRange.end) {
+            result = result.filter(v => new Date(v.date) <= new Date(dateRange.end));
+        }
+
+        // فلترة الحالة
         if (filterStatus !== 'الكل') {
             const isPostedTarget = filterStatus === 'مرحل';
             result = result.filter(v => v.is_posted === isPostedTarget);
         }
 
+        // 🚀 التعديل هنا: إضافة حساب المدين والدائن لمحرك البحث
         if (deferredSearch) {
-            const lower = deferredSearch.toLowerCase();
+            const lower = deferredSearch.toLowerCase().trim();
             result = result.filter(v => 
-                (v.payee?.name && v.payee.name.toLowerCase().includes(lower)) ||
                 (v.voucher_number && String(v.voucher_number).toLowerCase().includes(lower)) ||
-                (v.description && v.description.toLowerCase().includes(lower))
+                (v.description && String(v.description).toLowerCase().includes(lower)) ||
+                (v.payee?.name && String(v.payee.name).toLowerCase().includes(lower)) ||
+                
+                // 👇 السطرين السحريين للبحث بأسماء الحسابات
+                (v.credit_account?.name && String(v.credit_account.name).toLowerCase().includes(lower)) ||
+                (v.debit_account?.name && String(v.debit_account.name).toLowerCase().includes(lower)) ||
+                
+                (v.amount && String(v.amount).includes(lower))
             );
         }
 
         return result;
-    }, [vouchers, deferredSearch, filterStatus]); 
+    }, [vouchers, deferredSearch, filterStatus, dateRange]);
 
-    // 🧮 5. الحسابات الإجمالية
+    // 🧮 6. الحسابات الإجمالية
     const totals = useMemo(() => {
         const totalAmount = displayedVouchers.reduce((sum, v) => sum + Number(v.amount || 0), 0);
         return { totalAmount, count: displayedVouchers.length };
     }, [displayedVouchers]);
 
-    // 🚀 6. الترحيل المركزي والعمليات الديناميكية (الباب العاشر)
-    // لا يوجد أي Loop هنا. نستدعي المحرك الموحد الذي يتخاطب مباشرة مع RPC
+    // 🚀 7. الترحيل المركزي
     const { postRecords, unpostRecords, isProcessing } = useUniversalPosting(
-        'payment_vouchers',              // مفتاح التحديث لـ React Query
-        'payment_vouchers',              // اسم الجدول لعملية الإلغاء המوحد (Universal Unpost)
-        'post_payment_vouchers_bulk'     // دالة الـ SQL المخصصة لترحيل السندات
+        'payment_vouchers',
+        'payment_vouchers',
+        'post_payment_vouchers_bulk'
     );
 
-    // 📝 7. عمليات الحفظ والحذف الأساسية (CRUD)
+    // 📝 8. عمليات الحفظ والحذف
     const saveMutation = useMutation({
         mutationFn: async (voucherData: any) => {
             if (!voucherData.debit_account_id) throw new Error("يرجى تحديد الحساب المدين.");
             if (!voucherData.credit_account_id) throw new Error("يرجى تحديد الحساب الدائن.");
-            if (!voucherData.payee_id) throw new Error("يرجى تحديد المستفيد المباشر.");
             if (!voucherData.amount || voucherData.amount <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر.");
 
             let payload = { ...voucherData };
             payload.partner_id = payload.payee_id;
             
-            // تنظيف الحقول غير الموجودة في الداتابيز
             delete payload.payee_id; delete payload.payee_name; delete payload.debit_account_name;
             delete payload.credit_account_name; delete payload.payee; delete payload.credit_account; delete payload.debit_account;
 
@@ -159,7 +196,7 @@ export function usePaymentVouchersLogic() {
         onError: (err: any) => showToast(err.message, 'error')
     });
 
-    // 💎 8. تجريد المخرجات (Pure Return - الباب الأول)
+    // 💎 9. المخرجات
     return {
         data: displayedVouchers,
         isLoading: isFetching || isProcessing || saveMutation.isPending, 
@@ -167,6 +204,7 @@ export function usePaymentVouchersLogic() {
         state: {
             globalSearch,
             filterStatus,
+            dateRange,
             selectedIds,
             currentPage,
             rowsPerPage,
@@ -202,8 +240,6 @@ export function usePaymentVouchersLogic() {
                 if (confirm('تأكيد الحذف النهائي للسندات المحددة؟')) deleteMutation.mutate();
             },
             handleSaveVoucher: () => saveMutation.mutate(currentVoucher),
-            
-            // ⚡ تنفيذ الترحيل السريع عبر المحرك المركزي (يُمرر المصفوفة مباشرة)
             handlePostSelected: () => postRecords(selectedIds),
             handleUnpostSelected: () => unpostRecords(selectedIds),
             exportToExcel: () => {}

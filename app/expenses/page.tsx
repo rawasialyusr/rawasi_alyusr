@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from 'react'; 
+import React, { useState, useEffect } from 'react'; 
 import { createPortal } from 'react-dom'; 
 import { useExpensesLogic } from './expenses_logic';
 import { THEME } from '@/lib/theme';
@@ -9,7 +9,6 @@ import { usePermissions } from '@/lib/PermissionsContext';
 import SecureAction from '@/components/SecureAction';      
 import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
-import PaginationPanel from '@/components/PaginationPanel'; 
 import RawasiSmartTable from '@/components/rawasismarttable';
 
 // 🎬 المودالز
@@ -23,12 +22,6 @@ export default function ExpensesPage() {
   
   const { can, loading: permsLoading } = usePermissions();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -37,32 +30,6 @@ export default function ExpensesPage() {
   useEffect(() => {
       setMounted(true);
   }, []);
-
-  const startCamera = async () => {
-    setIsCameraOpen(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch (err) { alert("خطأ في تشغيل الكاميرا"); setIsCameraOpen(false); }
-  };
-
-  const takePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      canvasRef.current.width = videoRef.current.videoWidth;
-      canvasRef.current.height = videoRef.current.videoHeight;
-      context?.drawImage(videoRef.current, 0, 0);
-      const imageDataUrl = canvasRef.current.toDataURL('image/jpeg');
-      setImagePreview(imageDataUrl);
-      logic.setCurrentExpense({ ...logic.currentExpense, invoice_image: imageDataUrl });
-      stopCamera();
-    }
-  };
-
-  const stopCamera = () => {
-    if (videoRef.current?.srcObject) { (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop()); }
-    setIsCameraOpen(false);
-  };
 
   // =========================================================================
   // 💎 أعمدة الجدول
@@ -90,53 +57,23 @@ export default function ExpensesPage() {
         );
       }
     },
-    { 
-      header: 'التاريخ', 
-      accessor: 'exp_date', 
-      render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.exp_date}</span> : null 
-    },
-    { 
-      header: 'المقاول/المستفيد', 
-      accessor: 'sub_contractor', 
-      render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>{row.sub_contractor || row.payee_name || '---'}</b> : null 
-    },
-    { 
-      header: 'المشروع', 
-      accessor: 'site_ref', 
-      render: (row: any) => row ? <span style={{ fontSize:'11px', background: '#f1f5f9', padding: '4px 10px', borderRadius: '8px', color: THEME.brand.coffee, fontWeight: 900 }}>{row.site_ref || 'عام'}</span> : null 
-    },
+    { header: 'التاريخ', accessor: 'exp_date', render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.exp_date}</span> : null },
+    { header: 'المقاول/المستفيد', accessor: 'sub_contractor', render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>{row.sub_contractor || row.payee_name || '---'}</b> : null },
+    { header: 'المشروع', accessor: 'site_ref', render: (row: any) => row ? <span style={{ fontSize:'11px', background: '#f1f5f9', padding: '4px 10px', borderRadius: '8px', color: THEME.brand.coffee, fontWeight: 900 }}>{row.site_ref || 'عام'}</span> : null },
     { 
       header: 'البيان التفصيلي', 
       accessor: 'description', 
       render: (row: any) => {
         if (!row) return null;
-
-        // 🚀 السحر هنا: لو البيان العام فاضي، بنستخرج البيانات أوتوماتيك من الأصناف المضافة في الجدول
         let displayDesc = row.description;
         if ((!displayDesc || displayDesc.trim() === '') && row.lines_data && Array.isArray(row.lines_data) && row.lines_data.length > 0) {
             displayDesc = row.lines_data.map((l: any) => l.description).filter(Boolean).join(' + ');
         }
-
-        return (
-            <span 
-                style={{ fontSize:'12px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }} 
-                title={displayDesc || '---'}
-            >
-                {displayDesc || '---'}
-            </span>
-        );
+        return <span style={{ fontSize:'12px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }} title={displayDesc || '---'}>{displayDesc || '---'}</span>;
       } 
     },
-    { 
-      header: 'الضريبة', 
-      accessor: 'vat_amount', 
-      render: (row: any) => row ? <span style={{fontWeight: 700}}>{Number(row.vat_amount || 0).toLocaleString()}</span> : null 
-    },
-    { 
-      header: 'الخصم', 
-      accessor: 'discount_amount', 
-      render: (row: any) => row ? <span style={{ color: THEME.ruby, fontWeight: 700 }}>{Number(row.discount_amount || 0).toLocaleString()}</span> : null 
-    },
+    { header: 'الضريبة', accessor: 'vat_amount', render: (row: any) => row ? <span style={{fontWeight: 700}}>{Number(row.vat_amount || 0).toLocaleString()}</span> : null },
+    { header: 'الخصم', accessor: 'discount_amount', render: (row: any) => row ? <span style={{ color: THEME.ruby, fontWeight: 700 }}>{Number(row.discount_amount || 0).toLocaleString()}</span> : null },
     { 
       header: 'الإجمالي', 
       accessor: 'total', 
@@ -175,7 +112,6 @@ export default function ExpensesPage() {
             >
               🖨️
             </button>
-            
             {needsPayment && (
               <button 
                 onClick={(e) => {
@@ -195,27 +131,26 @@ export default function ExpensesPage() {
     }
   ];
 
+  // 🚀 القائمة الجانبية للأزرار الإجرائية (جسر الترحيل)
   const sidebarActions = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="expenses" action="create">
-        <button className="btn-main-glass gold" onClick={logic.handleAddNew}>
-          ➕ إضافة مصروف جديد
-        </button>
+        <button className="btn-main-glass gold" onClick={logic.handleAddNew}>➕ إضافة مصروف جديد</button>
       </SecureAction>
 
       {logic.selectedIds.length > 0 && (
-        <>
-          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '5px' }}>
+             <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 900, margin: 0 }}>الإجراءات على ({logic.selectedIds.length})</p>
+             <button onClick={() => logic.setSelectedIds([])} style={{ background: 'none', border: 'none', color: THEME.primary, fontSize: '10px', fontWeight: 900, cursor: 'pointer', textDecoration: 'underline' }}>إلغاء التحديد</button>
+          </div>
+
           <SecureAction module="expenses" action="edit">
-            <button className="btn-main-glass blue" onClick={() => logic.setIsBulkFixModalOpen(true)}>
-              🛠️ تصحيح مجمع
-            </button>
+            <button className="btn-main-glass blue" onClick={() => logic.setIsBulkFixModalOpen(true)}>🛠️ تصحيح مجمع</button>
           </SecureAction>
           {logic.selectedIds.length === 1 && (
             <SecureAction module="expenses" action="edit">
-              <button className="btn-main-glass white" onClick={logic.handleEditSelected}>
-                ✏️ تعديل السجل
-              </button>
+              <button className="btn-main-glass white" onClick={logic.handleEditSelected}>✏️ تعديل السجل</button>
             </SecureAction>
           )}
           <SecureAction module="expenses" action="post">
@@ -227,12 +162,10 @@ export default function ExpensesPage() {
           <SecureAction module="expenses" action="delete">
             <button className="btn-main-glass red" onClick={logic.handleDeleteSelected}>🗑️ حذف نهائي</button>
           </SecureAction>
-        </>
+        </div>
       )}
 
-      <button className="btn-main-glass white" onClick={logic.exportToExcel}>
-        📊 تصدير Excel
-      </button>
+      <button className="btn-main-glass white" onClick={logic.exportToExcel}>📊 تصدير Excel</button>
     </div>
   );
 
@@ -249,31 +182,37 @@ export default function ExpensesPage() {
             }
             actions={sidebarActions}
             customFilters={
-              <div style={{marginTop: '10px'}}>
-                <label style={{color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>عرض السجلات</label>
-                <select 
-                    style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 800, outline: 'none', cursor: 'pointer' }} 
-                    value={logic.rowsPerPage} 
-                    onChange={e => { logic.setRowsPerPage(Number(e.target.value)); logic.setCurrentPage(1); }}
-                >
-                  <option value="50" style={{color:'#000'}}>50 سجل</option>
-                  <option value="100" style={{color:'#000'}}>100 سجل</option>
-                  <option value="500" style={{color:'#000'}}>500 سجل</option>
-                </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
+                <div>
+                  <label style={{color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>عرض السجلات:</label>
+                  <select 
+                      style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 800, outline: 'none', cursor: 'pointer', fontSize: '12px' }} 
+                      value={logic.rowsPerPage} 
+                      onChange={e => { logic.setRowsPerPage(Number(e.target.value)); logic.setCurrentPage(1); }}
+                  >
+                    <option value="50" style={{color:'#000'}}>50 سجل</option>
+                    <option value="100" style={{color:'#000'}}>100 سجل</option>
+                    <option value="500" style={{color:'#000'}}>500 سجل</option>
+                  </select>
+                </div>
                 
-                <div style={{ marginTop: '20px' }}>
-                    <SmartCombo 
-                        placeholder="🔍 بحث سريع في المصروفات..."
-                        initialDisplay={logic.globalSearch}
-                        onSelect={(val: any) => logic.setGlobalSearch(typeof val === 'object' ? val.name : val)}
-                        enableClear={true}
-                        freeText={true}
-                    />
+                <div>
+                  <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>تصفية حسب الحالة:</label>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    {['الكل', 'مرحل', 'معلق'].map(type => (
+                      <button 
+                        key={type} 
+                        onClick={() => logic.setFilterStatus(type)} 
+                        className={`filter-btn ${logic.filterStatus === type ? 'active' : ''}`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             }
-            onSearch={() => {}} 
-            watchDeps={[logic.selectedIds, logic.totalAmount, logic.rowsPerPage, logic.filteredExpenses.length, logic.globalSearch]}
+            watchDeps={[logic.selectedIds, logic.totalAmount, logic.rowsPerPage, logic.filteredExpenses.length, logic.filterStatus]}
           />
 
           <style>{`
@@ -287,6 +226,8 @@ export default function ExpensesPage() {
             .btn-main-glass.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
             .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); }
             .summary-glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2); margin-bottom: 25px; }
+            .filter-btn { flex: 1; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: none; font-weight: 900; cursor: pointer; font-size: 11px; transition: 0.3s; }
+            .filter-btn.active { background: ${THEME.goldAccent}; color: #1e293b; }
             .custom-checkbox { width: 20px; height: 20px; accent-color: ${THEME.goldAccent}; cursor: pointer; transition: 0.1s; }
             @keyframes modalEntrance { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
           `}</style>
@@ -306,9 +247,6 @@ export default function ExpensesPage() {
                 onPageChange={logic.setCurrentPage}
                 onRowsChange={logic.setRowsPerPage}
               />
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', paddingBottom: '10px' }}>
-                <PaginationPanel totalItems={logic.filteredExpenses.length} currentPage={logic.currentPage} rowsPerPage={logic.rowsPerPage} onPageChange={logic.setCurrentPage} onRowsChange={logic.setRowsPerPage} />
-              </div>
             </div>
           )}
 
@@ -329,7 +267,7 @@ export default function ExpensesPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '15px', marginTop: '40px' }}>
-                  <button onClick={logic.handleBulkFixSave} disabled={logic.isSaving} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: THEME.info, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px', boxShadow: `0 10px 25px ${THEME.info}40` }}>{logic.isSaving ? '⏳ جاري الحفظ...' : '✅ تطبيق التعديلات'}</button>
+                  <button onClick={logic.handleBulkFixSave} disabled={logic.isLoading} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: THEME.info, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px', boxShadow: `0 10px 25px ${THEME.info}40` }}>{logic.isLoading ? '⏳ جاري الحفظ...' : '✅ تطبيق التعديلات'}</button>
                   <button onClick={()=>logic.setIsBulkFixModalOpen(false)} style={{ flex: 1, padding: '18px', borderRadius: '16px', border: '2px solid #e2e8f0', background: 'white', color: '#64748b', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إلغاء</button>
                 </div>
               </div>
@@ -352,7 +290,7 @@ export default function ExpensesPage() {
                     ))}
                 </div>
                 <div style={{ display: 'flex', gap: '15px', marginTop: '35px', borderTop: '1px solid #f1f5f9', paddingTop: '25px' }}>
-                  <button onClick={logic.confirmDistribution} disabled={logic.isSaving} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: THEME.purple, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px', boxShadow: `0 10px 25px ${THEME.purple}40` }}>{logic.isSaving ? '⏳ جاري الحفظ...' : '✅ تأكيد وحفظ التقسيم'}</button>
+                  <button onClick={logic.confirmDistribution} disabled={logic.isLoading} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: THEME.purple, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px', boxShadow: `0 10px 25px ${THEME.purple}40` }}>{logic.isLoading ? '⏳ جاري الحفظ...' : '✅ تأكيد وحفظ التقسيم'}</button>
                   <button onClick={()=>logic.setDistributionPreview(null)} style={{ flex: 1, padding: '18px', borderRadius: '16px', border: '2px solid #e2e8f0', background: 'white', color: '#64748b', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إلغاء</button>
                 </div>
               </div>
@@ -389,7 +327,7 @@ export default function ExpensesPage() {
                isDistributionEnabled={logic.isDistributionEnabled}
                setIsDistributionEnabled={logic.setIsDistributionEnabled}
                calculateDistribution={logic.calculateDistribution}
-               isSaving={logic.isSaving}
+               isSaving={logic.isLoading}
              />
           )}
 

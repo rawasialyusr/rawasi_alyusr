@@ -54,7 +54,7 @@ export default function PaymentVouchersPage() {
       ), 
       accessor: 'id',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ Render Guard (V11 Standard)
+        if (!row) return null;
         const isSelected = logic.state.selectedIds.includes(row.id);
         return (
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
@@ -103,7 +103,7 @@ export default function PaymentVouchersPage() {
       header: 'الحالة',
       accessor: 'is_posted',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ Render Guard (V11 Standard)
+        if (!row) return null;
         return row.is_posted ? 
           <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>مُرحل ✅</span> : 
           <span style={{ display: 'inline-block', background: '#fff7ed', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معلق ⏳</span>;
@@ -113,7 +113,7 @@ export default function PaymentVouchersPage() {
       header: 'الإجراءات',
       accessor: 'actions',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ Render Guard (V11 Standard)
+        if (!row) return null;
         return (
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
             <button 
@@ -183,17 +183,10 @@ export default function PaymentVouchersPage() {
                 </div>
               }
               actions={sidebarActions}
+              
+              // 🌟 الفلاتر الإضافية أصبحت أبسط بكثير بفضل المحرك المركزي!
               customFilters={
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
-                  <div>
-                    <SmartCombo 
-                        placeholder="🔍 بحث برقم السند أو المستفيد..."
-                        initialDisplay={logic.state.globalSearch}
-                        onSelect={(val: any) => logic.actions.setGlobalSearch(typeof val === 'object' ? val.name : val)}
-                        enableClear={true}
-                        freeText={true}
-                    />
-                  </div>
                   <div>
                     <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>تصفية حسب الحالة:</label>
                     <div style={{ display: 'flex', gap: '5px' }}>
@@ -210,8 +203,8 @@ export default function PaymentVouchersPage() {
                   </div>
                 </div>
               }
-              onSearch={() => {}} 
-              watchDeps={[logic.state.selectedIds, logic.totals.totalAmount, logic.state.rowsPerPage, logic.data.length, logic.state.globalSearch, logic.state.filterStatus]}
+              // تمت إزالة globalSearch من هنا لأن السايد بار الجديد يرسل CustomEvent للوجيك مباشرة!
+              watchDeps={[logic.state.selectedIds, logic.totals.totalAmount, logic.state.rowsPerPage, logic.data.length, logic.state.filterStatus]}
             />
 
             <style>{`
