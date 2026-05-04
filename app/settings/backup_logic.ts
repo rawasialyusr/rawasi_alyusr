@@ -18,7 +18,7 @@ export const TABLE_SCHEMAS: Record<string, string[]> = {
   "all_emp": ["emp_id", "emp_name", "job_title", "iqama_num", "Salary", "phone_number", "work_days", "housing", "deductions", "expire_date", "earnings", "net_earnings", "received"],
   "housing_services": ["id", "date", "emp_name", "amount", "reason", "description", "notes", "created_at"],
   "accounts": ["id", "code", "name", "account_type", "parent_id", "is_transactional"],
-  "expenses": ["id", "exp_date", "sub_contractor", "payee_id", "creditor_account", "description", "quantity", "unit_price", "total_price", "vat_amount", "payment_method", "notes", "is_posted", "created_at", "payment_account", "site_ref", "payee_name", "project_id", "discount_account", "discount_amount", "employee_name", "invoice_image"],
+  "expenses": ["id", "exp_date", "main_category", "sub_contractor", "payee_id", "creditor_account", "description", "quantity", "unit_price", "vat_amount", "discount_amount", "discount_account", "payment_method", "site_ref", "notes", "employee_name", "invoice_image", "is_auto_distributed"],
   "invoices": ["id", "invoice_number", "date", "partner_id", "client_name", "project_ids", "boq_id", "description", "quantity", "unit", "unit_price", "line_total", "materials_discount", "taxable_amount", "tax_amount", "guarantee_percent", "guarantee_amount", "total_amount", "debit_account_id", "credit_account_id", "materials_acc_id", "guarantee_acc_id", "tax_acc_id", "skip_zatca", "status", "created_at", "due_in_days", "due_date", "paid_amount"],
   "invoice_lines": ["id", "invoice_id", "item_id", "description", "unit", "quantity", "unit_price", "total_price", "created_at"],
   "payment_vouchers": ["id", "voucher_number", "date", "amount", "partner_id", "credit_account_id", "debit_account_id", "payment_method", "reference_no", "description", "notes", "status", "is_posted", "created_at", "updated_at", "created_by"],
@@ -149,6 +149,44 @@ export const useBackupLogic = () => {
        { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 30 }
      ];
 }
+else if (tableName === 'expenses') {
+    templateData = [{
+        'التصنيف الرئيسي': 'إعاشة وتغذية', // الخانة الجديدة 📁
+        'تاريخ المصروف': new Date().toISOString().split('T')[0],
+        'المقاول / المورد': 'اكتب اسم المقاول هنا',
+        'اسم المستفيد': 'اكتب اسم المستفيد النهائي',
+        'حساب المصروف (المدين)': 'مثال: 3101 - أدوات مكتبية',
+        'حساب السداد (الدائن)': 'مثال: 1101 - الصندوق الرئيسي',
+        'البيان': 'وصف المصروف بالتفصيل',
+        'الكمية': 1,
+        'سعر الوحدة': 100,
+        'ضريبة القيمة المضافة': 15,
+        'مبلغ الخصم': 0,
+        'طريقة الدفع': 'كاش',
+        'الموقع / المشروع': 'اسم العقار أو المشروع',
+        'اسم الموظف': 'الموظف المسؤول',
+        'ملاحظات': 'أي ملاحظات إضافية'
+    }];
+    
+    // تم تحديث عرض الأعمدة ليتناسب مع الإضافة الجديدة
+    wscols = [
+        { wch: 20 }, // التصنيف الرئيسي
+        { wch: 15 }, // تاريخ المصروف
+        { wch: 25 }, // المقاول / المورد
+        { wch: 25 }, // اسم المستفيد
+        { wch: 30 }, // حساب المصروف
+        { wch: 30 }, // حساب السداد
+        { wch: 40 }, // البيان
+        { wch: 10 }, // الكمية
+        { wch: 12 }, // سعر الوحدة
+        { wch: 15 }, // الضريبة
+        { wch: 12 }, // الخصم
+        { wch: 15 }, // طريقة الدفع
+        { wch: 25 }, // الموقع / المشروع
+        { wch: 20 }, // اسم الموظف
+        { wch: 30 }  // ملاحظات
+    ];
+}
             // 🟢 تغيير اسم الجدول هنا ليكون violations
             else if (tableName === 'violations') {
                  templateData = [{
@@ -185,6 +223,8 @@ export const useBackupLogic = () => {
             showToast(`❌ فشل تحميل القالب: ${error.message}`, 'error');
         }
     };
+    
+    
 
     return { backupToExcel, backupToJSON, downloadTemplate };
 };

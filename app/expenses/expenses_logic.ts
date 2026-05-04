@@ -23,19 +23,18 @@ export function useExpensesLogic() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isBulkFixModalOpen, setIsBulkFixModalOpen] = useState(false);
     const [bulkFixAccounts, setBulkFixAccounts] = useState({ creditor_account: '', payment_account: '' });
-    
-    const [distributionPreview, setDistributionPreview] = useState<any[] | null>(null);
-    const [isDistributionEnabled, setIsDistributionEnabled] = useState(false);
 
+    // 🚀 تحديث القيم الافتراضية وإضافة main_category
     const defaultExp = { 
-        exp_date: new Date().toISOString().split('T')[0], sub_contractor: '', site_ref: '',       
+        exp_date: new Date().toISOString().split('T')[0], main_category: '', sub_contractor: '', site_ref: '',       
         creditor_account: '', description: '', payee_name: '', payment_method: 'كاش', payment_account: '', 
         employee_name: '', quantity: 1, unit_price: 0, vat_amount: 0, discount_amount: 0, discount_account: '', 
-        notes: '', invoice_image: null  
+        notes: '', invoice_image: null,
+        is_auto_distributed: false 
     };
     const [currentExpense, setCurrentExpense] = useState<any>(defaultExp);
 
-    // 📥 2. جلب البيانات الأساسية (البلدوزر)
+    // 📥 2. جلب البيانات الأساسية
     const { data: expenses = [], isLoading: isFetching } = useQuery({
         queryKey: ['expenses'],
         queryFn: async () => {
@@ -44,9 +43,22 @@ export function useExpensesLogic() {
             while (hasMore) {
                 const { data, error } = await supabase.from('expenses').select('*').order('exp_date', { ascending: false }).range(from, from + step - 1);
                 if (error) throw error;
-                if (data && data.length > 0) { allData = [...allData, ...data]; from += step; if (data.length < step) hasMore = false; } else hasMore = false;
+                if (data && data.length > 0) { 
+                    allData = [...allData, ...data]; 
+                    from += step; 
+                    if (data.length < step) hasMore = false; 
+                } else hasMore = false;
             }
-            return allData;
+
+            return allData.map(exp => {
+                let parsedLines = [];
+                if (typeof exp.lines_data === 'string') {
+                    try { parsedLines = JSON.parse(exp.lines_data); } catch (e) {}
+                } else if (Array.isArray(exp.lines_data)) {
+                    parsedLines = exp.lines_data;
+                }
+                return { ...exp, lines_data: parsedLines };
+            });
         }
     });
 
@@ -84,16 +96,17 @@ export function useExpensesLogic() {
         fetchPerms();
     }, []);
 
-    // 🚀 3. الفلترة الذكية المركزية (المحرك الجديد)
+    // 🚀 3. الفلترة الذكية (تم إضافة التصنيف الرئيسي ليكون قابلاً للبحث)
     const { filteredData: allFiltered, setFilter, customFilters, globalSearch, setGlobalSearch } = useSmartFilter(
         expenses, 
-        ['payee_name', 'sub_contractor', 'description', 'notes', 'site_ref', 'creditor_account'], 
+        ['payee_name', 'sub_contractor', 'description', 'notes', 'site_ref', 'creditor_account', 'main_category'], 
         'exp_date' 
     );
 
     const totalAmount = useMemo(() => allFiltered.reduce((sum, exp) => sum + ((Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0)), 0), [allFiltered]);
     const totalPages = Math.ceil(allFiltered.length / rowsPerPage) || 1;
-    // 🕰️ القوائم التاريخية الذكية (تم إعادتها)
+    
+    // 🕰️ القوائم التاريخية
     const historicalData = useMemo(() => {
         const sites = new Set<string>();
         const contractors = new Set<string>();
@@ -118,29 +131,42 @@ export function useExpensesLogic() {
         };
     }, [expenses]);
 
-    // 🚀 4. الترحيل المركزي (الباب العاشر)
+    // 🚀 4. الترحيل المركزي
     const { postRecords, unpostRecords, isProcessing } = useUniversalPosting(
         'expenses',              // Query Key
         'expenses',              // Table name for Unpost
         'post_expenses_bulk'     // The SQL RPC function
     );
 
-    // 💾 5. الحفظ باستخدام Mutations
+    // 💾 5. الحفظ
     const saveMutation = useMutation({
-        mutationFn: async (passedRecord?: any) => {
-            const finalRecord = passedRecord || currentExpense;
+        mutationFn: async (passedRecord: any) => {
+            if (!passedRecord || !passedRecord.exp_date) {
+                throw new Error("حدث خطأ في استلام البيانات من النافذة، يرجى المحاولة مرة أخرى.");
+            }
+
             const payload = {
-                exp_date: finalRecord.exp_date, sub_contractor: finalRecord.sub_contractor, site_ref: finalRecord.site_ref,             
-                creditor_account: finalRecord.creditor_account, description: finalRecord.description, payee_name: finalRecord.payee_name, 
-                payment_method: finalRecord.payment_method || finalRecord.method || 'كاش', payment_account: finalRecord.payment_account,
-                employee_name: finalRecord.employee_name,
-                quantity: Number(finalRecord.quantity) > 0 ? Number(finalRecord.quantity) : 1,
-                unit_price: Number(finalRecord.unit_price) || 0,
-                vat_amount: Number(finalRecord.vat_amount || 0),
-                discount_amount: Number(finalRecord.discount_amount || 0),
-                discount_account: finalRecord.discount_account || null,
-                notes: finalRecord.notes, invoice_image: finalRecord.invoice_image,
-                lines_data: finalRecord.lines_data || []
+                exp_date: passedRecord.exp_date, 
+                main_category: passedRecord.main_category, // 🚀 حفظ التصنيف
+                sub_contractor: passedRecord.sub_contractor, 
+                site_ref: passedRecord.site_ref,             
+                creditor_account: passedRecord.creditor_account, 
+                description: passedRecord.description || 'مصروف عام', 
+                payee_name: passedRecord.payee_name, 
+                payment_method: passedRecord.payment_method || passedRecord.method || 'كاش', 
+                payment_account: passedRecord.payment_account,
+                employee_name: passedRecord.employee_name,
+                
+                quantity: 1,
+                unit_price: Number(passedRecord.unit_price) || 0,
+                vat_amount: Number(passedRecord.vat_amount) || 0,
+                discount_amount: Number(passedRecord.discount_amount) || 0,
+                
+                discount_account: passedRecord.discount_account || null,
+                notes: passedRecord.notes, 
+                invoice_image: passedRecord.invoice_image,
+                lines_data: passedRecord.lines_data || [],
+                is_auto_distributed: passedRecord.is_auto_distributed || false 
             };
 
             if (editingId) {
@@ -217,51 +243,6 @@ export function useExpensesLogic() {
         }
     };
 
-    // 🧠 توزيع التكلفة الذكي
-    const calculateDistribution = async () => {
-        if (!currentExpense.exp_date || !currentExpense.unit_price || !currentExpense.creditor_account) {
-            return alert("يرجى إدخال التاريخ، الحساب المدين، وقيمة المصروف أولاً.");
-        }
-        const { data, error } = await supabase.from('daily_attendance').select('site_ref, workers_count').eq('date', currentExpense.exp_date);
-        if (error || !data || data.length === 0) return alert(`لا يوجد تقرير عمال مسجل ليوم ${currentExpense.exp_date} لتوزيع التكلفة عليه.`);
-
-        const totalWorkers = data.reduce((sum, row) => sum + (Number(row.workers_count) || 0), 0);
-        if (totalWorkers === 0) return alert("إجمالي عدد العمال في هذا اليوم يساوي صفر!");
-
-        const subtotal = Number(currentExpense.quantity) * Number(currentExpense.unit_price);
-        const vat = Number(currentExpense.vat_amount || 0);
-        const discount = Number(currentExpense.discount_amount || 0);
-
-        const preview = data.map((row: any) => {
-            const ratio = Number(row.workers_count) / totalWorkers;
-            return {
-                ...currentExpense, site_ref: row.site_ref, quantity: 1, 
-                unit_price: Number((subtotal * ratio).toFixed(2)),
-                vat_amount: Number((vat * ratio).toFixed(2)),
-                discount_amount: Number((discount * ratio).toFixed(2)),
-                workers_count: row.workers_count, ratio_percent: (ratio * 100).toFixed(1),
-                notes: (currentExpense.notes ? currentExpense.notes + ' | ' : '') + `(توزيع تلقائي: ${row.workers_count} من ${totalWorkers})`
-            };
-        });
-        setDistributionPreview(preview);
-    };
-
-    const confirmDistribution = async () => {
-        if (!distributionPreview || distributionPreview.length === 0) return;
-        const payload = distributionPreview.map(item => {
-            const { workers_count, ratio_percent, id, ...cleanItem } = item;
-            return cleanItem;
-        });
-        const { error } = await supabase.from('expenses').insert(payload);
-        if (error) alert("خطأ أثناء التوزيع والحفظ: " + error.message);
-        else {
-            queryClient.invalidateQueries({ queryKey: ['expenses'] });
-            setDistributionPreview(null); setIsEditModalOpen(false);
-            setCurrentExpense(defaultExp); setIsDistributionEnabled(false); 
-            toast.success(`✅ تم توزيع المصروف على ${payload.length} مشروع بنجاح!`);
-        }
-    };
-
     // 🔧 التصحيح المجمع
     const handleBulkFixSave = async () => {
         if (selectedIds.length === 0) return;
@@ -282,21 +263,23 @@ export function useExpensesLogic() {
         }
     };
 
-    // 📝 الإجراءات البسيطة
-    const handleAddNew = () => { setCurrentExpense(defaultExp); setEditingId(null); setIsDistributionEnabled(false); setIsEditModalOpen(true); };
-    const handleEditSelected = () => {
-        if (selectedIds.length !== 1) return alert("اختر سجلاً واحداً للتعديل");
-        const exp = expenses.find(e => e.id === selectedIds[0]);
-        setCurrentExpense({...exp}); setEditingId(exp.id); setIsDistributionEnabled(false); setIsEditModalOpen(true);
-    };
-
     const exportToExcel = () => {
         const exportData = allFiltered.map(exp => {
             const total = (Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0);
             return {
-                'التاريخ': exp.exp_date, 'المقاول': exp.sub_contractor || '---', 'المشروع': exp.site_ref || '---', 'المستفيد': exp.payee_name || '---',
-                'حساب المصروف': exp.creditor_account, 'حساب السداد': exp.payment_account, 'البيان': exp.description, 'العدد': exp.quantity,
-                'السعر': exp.unit_price, 'الضريبة': exp.vat_amount || 0, 'الخصم': exp.discount_amount || 0, 'الصافي': -Math.abs(total), 
+                'التاريخ': exp.exp_date, 
+                'التصنيف': exp.main_category || '---', // 🚀 تصدير التصنيف في الإكسيل
+                'المقاول': exp.sub_contractor || '---', 
+                'المشروع': exp.site_ref || '---', 
+                'المستفيد': exp.payee_name || '---',
+                'حساب المصروف': exp.creditor_account, 
+                'حساب السداد': exp.payment_account, 
+                'البيان': exp.description, 
+                'العدد': exp.quantity,
+                'السعر': exp.unit_price, 
+                'الضريبة': exp.vat_amount || 0, 
+                'الخصم': exp.discount_amount || 0, 
+                'الصافي': -Math.abs(total), 
                 'الحالة': exp.is_posted ? '✅ مرحل' : '⏳ غير مرحل'
             };
         });
@@ -319,19 +302,13 @@ export function useExpensesLogic() {
         currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, totalResults: allFiltered.length,
         isEditModalOpen, setIsEditModalOpen, currentExpense, setCurrentExpense, editingId,
         
-        // Custom Data
         projects: supportData?.projects || [], contractors: supportData?.contractors || [], 
         payees: supportData?.payees || [], accounts: supportData?.accounts || [], boqItems: supportData?.boqItems || [],
         
-        // Distribution & Bulk Fix
         isBulkFixModalOpen, setIsBulkFixModalOpen, bulkFixAccounts, setBulkFixAccounts, handleBulkFixSave,
-        distributionPreview, setDistributionPreview, calculateDistribution, confirmDistribution,
-        isDistributionEnabled, setIsDistributionEnabled, 
         
-        // Permissions
         canAdd, canEdit, canDelete, canPost, canView, canExport, userRole,
         
-        // Filter actions
         setFilterStatus: (val: string) => {
             if (val === 'الكل') setFilter('is_posted', null);
             else setFilter('is_posted', val === 'مرحل');
@@ -340,9 +317,21 @@ export function useExpensesLogic() {
         filterAccount: customFilters['creditor_account'] || 'الكل',
         filterStatus: customFilters['is_posted'] === undefined ? 'الكل' : (customFilters['is_posted'] ? 'مرحل' : 'معلق'),
         
-        // CRUD Actions
-        handleSaveExpense: () => saveMutation.mutate(),
-        handleSavePayment, handleAddNew, handleEditSelected, exportToExcel,
+        handleSaveExpense: (data: any) => {
+            if (!data) {
+                toast.error("لم يتم استلام البيانات من المودال!");
+                return;
+            }
+            saveMutation.mutate(data);
+        },
+        handleSavePayment, 
+        handleAddNew: () => { setCurrentExpense(defaultExp); setEditingId(null); setIsEditModalOpen(true); }, 
+        handleEditSelected: () => {
+            if (selectedIds.length !== 1) return alert("اختر سجلاً واحداً للتعديل");
+            const exp = expenses.find(e => e.id === selectedIds[0]);
+            setCurrentExpense({...exp}); setEditingId(exp.id); setIsEditModalOpen(true);
+        }, 
+        exportToExcel,
         handleDeleteSelected: () => deleteMutation.mutate(),
         handlePostSelected: () => postRecords(selectedIds),
         handleUnpostSelected: () => unpostRecords(selectedIds),

@@ -25,6 +25,19 @@ const mapHeaderToSchema = (sheetName: string, header: string) => {
   
   if (h.includes('تاريخ') || h.includes('date')) return sheetName === 'labor_daily_logs' ? 'work_date' : (sheetName === 'expenses' ? 'exp_date' : 'date');
   
+  // 🚀 التعديل: نقلنا شروط المصروفات هنا فوق عشان تتنفذ الأول ومتتضربش بالشروط العامة
+  if (sheetName === 'expenses') {
+    if (h.includes('تاريخ')) return 'exp_date';
+    if (h.includes('مقاول') || h.includes('مورد')) return 'sub_contractor';
+    if (h.includes('مستفيد')) return 'payee_name';
+    if (h.includes('حساب') && (h.includes('مصروف') || h.includes('مدين'))) return 'creditor_account';
+    if (h.includes('حساب') && (h.includes('سداد') || h.includes('دائن'))) return 'payment_account';
+    if (h.includes('بيان') || h.includes('وصف')) return 'description';
+    if (h.includes('تصنيف') || h.includes('فئة') || h.includes('category')) return 'main_category';
+    if (h.includes('خصم')) return h.includes('حساب') ? 'discount_account' : 'discount_amount';
+    if (h.includes('ضريبه') || h.includes('vat')) return 'vat_amount';
+  }
+
   // 🟢 التعديل الجديد: التقاط الـ 3 معرفات مباشرة وبدقة متناهية
   if (h.includes('partner_id')) return 'partner_id';
   if (h.includes('debit_account_id') || (h.includes('مدين') && h.includes('id'))) return 'debit_account_id';
@@ -64,13 +77,58 @@ const mapHeaderToSchema = (sheetName: string, header: string) => {
   }
   
   if (h.includes('طريقه') || h.includes('طريقة') || h.includes('دفع')) return 'payment_method';
+  
+  // 🚀 التعديل الجذري: "سعر" لازم يجي قبل "وحده" عشان كلمة "سعر الوحدة" تترجم صح
+  if (h.includes('سعر') || h.includes('price')) return 'unit_price';
   if (h.includes('وحده') || h.includes('وحدة') || h.includes('unit')) return 'unit';
   if (h.includes('كميه') || h.includes('كمية') || h.includes('qty') || h.includes('quantity')) return 'quantity';
-  if (h.includes('سعر') || h.includes('price')) return 'unit_price';
   if (h.includes('طريحه') || h.includes('tareeha')) return 'tareeha';
   if (h.includes('انتاجيه') || h.includes('productivity')) return 'productivity';
+
+  // ... باقي التعريفات العامة الموجودة مسبقاً (متروكة كما هي بدون تغيير لحفظ التوافقية)
+  if (h.includes('كميه') || h.includes('quantity')) return 'quantity';
+  if (h.includes('سعر') || h.includes('price')) return 'unit_price';
+  if (h.includes('مشروع') || h.includes('موقع')) return 'site_ref';
   
   return header; 
+};
+
+// 🚀 دالة التصنيف التلقائي الشاملة (مخصصة حسب مصطلحات عملك)
+const autoCategorizeExpense = (description: string): string => {
+    if (!description) return 'غير مصنف';
+    const text = description.toLowerCase();
+
+    // 1. الإعاشة والتغذية
+    if (/فطار|غداء|عشا|بيبسي|بيسي|مياه|عيش|وجب|ماء|طعام|غدا|عدا|وجبات/i.test(text)) return 'إعاشة وتغذية';
+    
+    // 2. المحروقات والانتقالات
+    if (/وقود|بنزين|ديزل|سولار|مواصلات|نقل|سيارة|سيار|مشوار|عربية|باص|توصيل/i.test(text)) return 'محروقات وانتقالات';
+    
+    // 3. عدد ومعدات
+    if (/عدة|صاروخ|ساروخ|هيلتي|دريل|ماكينة|ماكينه|دسك|ليزر|مكسر|كشاف|مكنة|كوريك|زاوية|زاويه|متر|مفتاح|زرادية|زراديه|شنيور|بطاريه|بطاريات|عدد/i.test(text)) return 'عدد ومعدات';
+    
+    // 4. مستهلكات ومواد تشغيل
+    if (/بونط|بنط|اسطوانة|اسطوانات|اسطوان|خيط|خيوط|سلك|صنفرة|سبراي|اسبري|تلوينة|فوم|غاز|شعلة|أمير|سيليكون|صلايب|ريش|كولة|قطر|كتر|مفك|تخشينه|قلم|خرطوم|شاحن|دواية|فراطيس/i.test(text)) return 'مستهلكات ومواد تشغيل';
+    
+    // 5. صيانة وإصلاحات
+    if (/تصليح|صيانة|صيانه|غيار زيت|زيت|غسيل|لحام|كوتش|تيل|تربيط|زجاج|مكيف|عربه|عربانة/i.test(text)) return 'صيانة وإصلاحات';
+    
+    // 6. مصاريف إدارية (تم إضافة المصروفات الشخصية والتصفيات ونقاط البيع)
+    if (/تصوير|أوراق|مكتب|ختم|تصديق|نت|باقة|إقامة|اقامة|مقيم|تأشير|رسوم|تحويل|تامينات|ايجار|طابعة|بادة|مصاريف|مصروفات|فاتورة|فاتوره|تجديد|خصم|نقاط|مؤسسة|نثريات|تصفية/i.test(text)) return 'مصاريف إدارية';
+    
+    // 7. عمولات وبقشيش ومقطوعيات
+    if (/بقشيش|بقشييش|نسبة|عمولة|مقطوعية|شغل/i.test(text)) return 'عمولات وبقشيش';
+    
+    // 8. سكن وأثاث
+    if (/إيجار|استراحة|سكن|سرير|مرتبة|مراتب|مخدة|طاولة|طاولات|كرسي|كراسي|شباك|شبابيك|باب|ابواب|كرفان/i.test(text)) return 'سكن وأثاث';
+    
+    // 9. أدوات نظافة
+    if (/مقشة|مقشه|مكنسة|مكنسه|مساحة|مساحه|نظافة|فرشة/i.test(text)) return 'أدوات نظافة';
+    
+    // 10. مواد إنشائية
+    if (/جالون|زيتي|دهان|تنر|رول|حديد|كوع|شطاف|مفصلة|قفل|لون|صنفره|عقد|سكاكين|قدة|براويطة|فيستات/i.test(text)) return 'مواد إنشائية';
+
+    return 'غير مصنف'; // في حالة ظهور صنف جديد تماماً
 };
 
 // 🟢 تم الحفاظ على كل الحقول
@@ -226,8 +284,20 @@ export async function processExcelInBackend(formData: FormData) {
           }
         }
         
-        const finalRow: any = {};
+       const finalRow: any = {};
         Object.keys(newRow).forEach(key => {
+            // تخطي العمود المولد آلياً
+            if (key === 'total_price') return; 
+
+            // 🚀 حجب أي أعمدة وهمية أو IDs لا يدعمها جدول المصروفات
+            if (sheetName === 'expenses' && [
+                'credit_account_name', 'debit_account_name', 'account_name', 
+                'emp_name', 'sub_contractor_id', 'unit',
+                'credit_account_id', 'debit_account_id', 'account_id'
+            ].includes(key)) {
+                return; 
+            }
+
             let value = newRow[key];
             const fakeColumns = ['emp_name', 'worker_name', 'payee_name', 'debit_account_name', 'credit_account_name', 'account_name'];
             
@@ -249,6 +319,35 @@ export async function processExcelInBackend(formData: FormData) {
             
             finalRow[key] = value;
         });
+
+        // ====================================================================
+        // 🚀 معالجة وتأمين بيانات "المصروفات" بعد تجميع finalRow وقبل إرسالها
+        // ====================================================================
+        if (sheetName === 'expenses') {
+            // 1. تأمين مصفوفة البنود
+            if (!finalRow.lines_data) finalRow.lines_data = [];
+            
+            // 2. 💡 حماية الداتابيز من الأخطاء (لو في خانات إجبارية فاضية في الإكسيل)
+            if (!finalRow.sub_contractor) {
+                finalRow.sub_contractor = 'غير محدد'; 
+            }
+            if (!finalRow.creditor_account) {
+                finalRow.creditor_account = 'مصروفات غير مصنفة'; 
+            }
+
+            // 3. 🛡️ حماية الأسعار والكميات (لضمان عدم إرسال NULL للداتابيز)
+            finalRow.quantity = Number(finalRow.quantity) || 1; 
+            finalRow.unit_price = Number(finalRow.unit_price) || 0; 
+            finalRow.vat_amount = Number(finalRow.vat_amount) || 0;
+            finalRow.discount_amount = Number(finalRow.discount_amount) || 0;
+
+            // 4. 🤖 التصنيف التلقائي الذكي بناءً على البيان
+            if (!finalRow.main_category && finalRow.description) {
+                finalRow.main_category = autoCategorizeExpense(finalRow.description);
+            } else if (!finalRow.main_category) {
+                finalRow.main_category = 'غير مصنف';
+            }
+        }
 
         // 🛡️ حماية السندات من السطور الصفرية وتوليد أرقام تلقائية
         if (sheetName === 'payment_vouchers') {

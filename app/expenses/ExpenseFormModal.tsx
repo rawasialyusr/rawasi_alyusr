@@ -6,6 +6,20 @@ import SmartCombo from '@/components/SmartCombo';
 import { formatCurrency } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context'; 
 
+// 🚀 إضافة مصفوفة التصنيفات
+const EXPENSE_CATEGORIES = [
+    "إعاشة وتغذية",
+    "محروقات وانتقالات",
+    "عدد ومعدات",
+    "مستهلكات ومواد تشغيل",
+    "صيانة وإصلاحات",
+    "مصاريف إدارية",
+    "عمولات وبقشيش",
+    "سكن وأثاث",
+    "أدوات نظافة",
+    "مواد إنشائية"
+];
+
 export default function ExpenseFormModal({ 
     isOpen, 
     onClose, 
@@ -14,10 +28,7 @@ export default function ExpenseFormModal({
     onSave, 
     isSaving, 
     projects, 
-    historicalData,
-    isDistributionEnabled,
-    setIsDistributionEnabled,
-    calculateDistribution
+    historicalData
 }: any) {
     const { showToast } = useToast();
     const [mounted, setMounted] = useState(false);
@@ -68,29 +79,34 @@ export default function ExpenseFormModal({
     };
 
     // =========================================================================
-    // 🧮 الحسابات اللحظية (تجمع بين الخانات العلوية + البنود المضافة للجدول)
+    // 🧮 الحسابات اللحظية والمعالجة الآمنة للـ JSON
     // =========================================================================
     
-    // 1. المبالغ المكتوبة حالياً في الخانات
+    let safeAddedLines: any[] = [];
+    if (record?.lines_data) {
+        if (typeof record.lines_data === 'string') {
+            try { safeAddedLines = JSON.parse(record.lines_data); } catch (e) { console.error("JSON Parse Error", e); }
+        } else if (Array.isArray(record.lines_data)) {
+            safeAddedLines = record.lines_data;
+        }
+    }
+
     const currentQty = Number(record?.quantity || 0);
     const currentPrice = Number(record?.unit_price || 0);
     const currentVat = Number(record?.vat_amount || 0);
     const currentDiscount = Number(record?.discount_amount || 0);
 
-    // 2. إجماليات الأصناف الموجودة في الجدول (lines_data)
-    const addedLines = record?.lines_data || [];
-    const linesSubtotal = addedLines.reduce((sum: number, line: any) => sum + (Number(line.quantity) * Number(line.unit_price)), 0);
-    const linesVat = addedLines.reduce((sum: number, line: any) => sum + Number(line.vat_amount || 0), 0);
-    const linesDiscount = addedLines.reduce((sum: number, line: any) => sum + Number(line.discount_amount || 0), 0);
+    const linesSubtotal = safeAddedLines.reduce((sum: number, line: any) => sum + (Number(line.quantity) * Number(line.unit_price)), 0);
+    const linesVat = safeAddedLines.reduce((sum: number, line: any) => sum + Number(line.vat_amount || 0), 0);
+    const linesDiscount = safeAddedLines.reduce((sum: number, line: any) => sum + Number(line.discount_amount || 0), 0);
 
-    // 3. المجاميع النهائية (تحديث لحظي لا يمكن أن يكون 0 إذا كتب المستخدم شيئاً)
     const finalSubtotal = (currentQty * currentPrice) + linesSubtotal;
     const finalVat = currentVat + linesVat;
     const finalDiscount = currentDiscount + linesDiscount;
     const finalTotal = finalSubtotal + finalVat - finalDiscount;
 
     // =========================================================================
-    // 🚀 دوال إضافة وحذف الأصناف من الجدول (نفس ميكانيكية الفواتير)
+    // 🚀 دوال إضافة وحذف الأصناف من الجدول
     // =========================================================================
     const handleAddStatement = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -108,19 +124,14 @@ export default function ExpenseFormModal({
 
         setRecord({
             ...record,
-            lines_data: [...addedLines, newLine],
-            // تصفير الخانات بعد الإضافة للجدول
-            description: '',
-            quantity: '',
-            unit_price: '',
-            vat_amount: '',
-            discount_amount: ''
+            lines_data: [...safeAddedLines, newLine],
+            description: '', quantity: '', unit_price: '', vat_amount: '', discount_amount: ''
         });
         showToast("تمت إضافة الصنف للجدول بنجاح ✅", "success");
     };
 
     const handleRemoveLine = (indexToRemove: number) => {
-        const newLines = addedLines.filter((_: any, idx: number) => idx !== indexToRemove);
+        const newLines = safeAddedLines.filter((_: any, idx: number) => idx !== indexToRemove);
         setRecord({ ...record, lines_data: newLines });
     };
 
@@ -129,11 +140,12 @@ export default function ExpenseFormModal({
     // =========================================================================
     const handleValidateAndSave = () => {
         if (!record.exp_date) return showToast("تاريخ المصروف مطلوب ⚠️", "warning");
+        // 🚀 إضافة شرط التحقق من اختيار التصنيف
+        if (!record.main_category) return showToast("يرجى اختيار التصنيف الرئيسي للمصروف ⚠️", "warning"); 
         if (!record.creditor_account) return showToast("حساب المصروف المدين مطلوب ⚠️", "warning");
         
-        let finalLinesToSave = addedLines;
+        let finalLinesToSave = safeAddedLines;
 
-        // لو اليوزر كتب بيانات فوق ونسي يدوس (إضافة ➕)، بنضيفها أوتوماتيك للحفظ
         if (record.description && currentQty > 0 && currentPrice > 0) {
             finalLinesToSave = [...finalLinesToSave, {
                 description: record.description,
@@ -150,8 +162,7 @@ export default function ExpenseFormModal({
 
         onSave({
             ...record,
-            lines_data: finalLinesToSave,
-            // نرسل الإجماليات الشاملة لتسجيلها في الداتابيز والقيود
+            lines_data: finalLinesToSave, 
             quantity: 1, 
             unit_price: finalSubtotal,
             vat_amount: finalVat,
@@ -164,41 +175,19 @@ export default function ExpenseFormModal({
     return createPortal(
         <div className="warm-portal-overlay-fullscreen" onClick={onClose}>
             <style>{`
-                .warm-portal-overlay-fullscreen {
-                    position: fixed !important; inset: 0 !important;
-                    width: 100vw !important; height: 100vh !important;
-                    background: radial-gradient(circle at center, rgba(40, 24, 10, 0.4) 0%, rgba(15, 7, 0, 0.9) 100%) !important;
-                    backdrop-filter: blur(20px) !important;
-                    display: flex !important; align-items: center !important; justify-content: center !important;
-                    z-index: 999999999 !important;
-                }
-                .glass-input-field {
-                    width: 100%; padding: 12px; border-radius: 12px;
-                    background: rgba(255, 255, 255, 0.65);
-                    border: 1px solid rgba(255, 255, 255, 0.8);
-                    outline: none; transition: 0.2s; font-weight: 700; color: #1e293b;
-                }
+                .warm-portal-overlay-fullscreen { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; background: radial-gradient(circle at center, rgba(40, 24, 10, 0.4) 0%, rgba(15, 7, 0, 0.9) 100%) !important; backdrop-filter: blur(20px) !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 999999999 !important; }
+                .glass-input-field { width: 100%; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.65); border: 1px solid rgba(255, 255, 255, 0.8); outline: none; transition: 0.2s; font-weight: 700; color: #1e293b; }
                 .glass-input-field:focus { background: #fff; border-color: ${THEME.accent}; box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.15); }
-                
                 .btn-glass-save { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4); }
                 .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); }
                 .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
                 .btn-glass-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
-                
-                .lines-table-container {
-                    background: rgba(255, 255, 255, 0.5);
-                    border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.7);
-                    overflow: hidden; margin-top: 15px;
-                }
+                .lines-table-container { background: rgba(255, 255, 255, 0.5); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.7); overflow: hidden; margin-top: 15px; }
                 .item-row { transition: 0.2s; border-bottom: 1px solid rgba(0,0,0,0.05); }
                 .item-row:hover { background: rgba(255, 255, 255, 0.8); }
             `}</style>
 
-            <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ 
-                width: '1000px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.9)', 
-                backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', 
-                boxShadow: '0 40px 80px rgba(0,0,0,0.4)', overflowY: 'auto', direction: 'rtl'
-            }}>
+            <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ width: '1000px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.9)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.4)', overflowY: 'auto', direction: 'rtl' }}>
                 
                 {/* 📝 الهيدر */}
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:`2px solid ${THEME.accent}50`, paddingBottom:'15px'}}>
@@ -209,18 +198,13 @@ export default function ExpenseFormModal({
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: isDistributionEnabled ? '#f3e8ff' : '#f8fafc', padding: '20px', borderRadius: '20px', border: `2px dashed ${isDistributionEnabled ? THEME.purple : '#cbd5e1'}`, marginBottom: '25px', transition: '0.3s' }}>
-                    <input type="checkbox" id="distToggle" checked={isDistributionEnabled} onChange={(e) => setIsDistributionEnabled(e.target.checked)} style={{ width: '25px', height: '25px', accentColor: THEME.purple, cursor: 'pointer' }} />
-                    <label htmlFor="distToggle" style={{ fontWeight: 900, color: isDistributionEnabled ? THEME.purple : '#64748b', cursor: 'pointer', fontSize: '16px' }}>✂️ تفعيل التوزيع التلقائي على مشاريع اليوم (حسب العمالة)</label>
-                </div>
-
                 <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px', marginBottom: '25px' }}>
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>📅 تاريخ المصروف *</label>
                         <input type="date" className="glass-input-field" value={record?.exp_date || ''} onChange={e => setRecord({...record, exp_date: e.target.value})} />
                     </div>
                     <div style={{ gridColumn: 'span 2', zIndex: 90, position: 'relative' }}>
-                        <SmartCombo label="🏢 المشروع / العقار" icon="🏢" table="projects" displayCol="Property" disabled={isDistributionEnabled} initialDisplay={isDistributionEnabled ? "سيتم التوزيع آلياً..." : record?.site_ref} onSelect={(val:any) => setRecord({...record, site_ref: val.Property})} />
+                        <SmartCombo label="🏢 المشروع / العقار" icon="🏢" table="projects" displayCol="Property" initialDisplay={record?.site_ref} onSelect={(val:any) => setRecord({...record, site_ref: val.Property})} />
                     </div>
                 </div>
 
@@ -233,6 +217,18 @@ export default function ExpenseFormModal({
                     </div>
                 </div>
 
+                {/* 🚀 الإضافة الجديدة: خانة التصنيف الرئيسي بقت SmartCombo عشان تدعم البحث والفلترة */}
+                <div style={{ marginBottom: '25px', zIndex: 65, position: 'relative' }}>
+                    <SmartCombo 
+                        label="📁 التصنيف الرئيسي *" 
+                        icon="📁" 
+                        options={EXPENSE_CATEGORIES} 
+                        initialDisplay={record?.main_category} 
+                        onSelect={(val:any) => setRecord({...record, main_category: typeof val === 'object' ? val.name : val})} 
+                        strict={true} 
+                    />
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', background: '#f8fafc', padding: '25px', borderRadius: '20px', marginBottom: '25px', border: '1px solid #e2e8f0' }}>
                     <div style={{ zIndex: 60, position: 'relative' }}>
                         <SmartCombo label="🧾 حساب المصروف (المدين) *" icon="💳" table="accounts" displayCol="name" initialDisplay={record?.creditor_account} onSelect={(val:any) => setRecord({...record, creditor_account: val.name})} strict={true} />
@@ -242,12 +238,9 @@ export default function ExpenseFormModal({
                     </div>
                 </div>
                 
-                {/* 🚀 قسم إدخال الأصناف (مطابق للفواتير تماماً) */}
+                {/* 🛒 قسم بنود الفاتورة */}
                 <div style={{ background: 'rgba(202, 138, 4, 0.05)', padding: '20px', borderRadius: '20px', marginBottom: '25px', border: `1px dashed ${THEME.accent}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: THEME.brand.coffee }}>🛒 إضافة بنود المصروف</h3>
-                    </div>
-                    
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: THEME.brand.coffee, marginBottom: '15px' }}>🛒 إضافة بنود المصروف</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.5fr', gap: '15px', alignItems: 'end' }}>
                         <div style={{ zIndex: 40 }}>
                             <SmartCombo label="البيان / الصنف *" icon="🛠️" freeText={true} initialDisplay={record.description} onSelect={(val: any) => setRecord({...record, description: typeof val === 'object' ? val.name : val})} options={historicalData?.descriptions || []} />
@@ -268,11 +261,9 @@ export default function ExpenseFormModal({
                             <label style={{ fontSize: '11px', fontWeight: 900, color: THEME.ruby }}>الخصم (-)</label>
                             <input type="number" value={record.discount_amount || ''} onChange={e => setRecord({...record, discount_amount: e.target.value})} className="glass-input-field" style={{ border: `1px solid ${THEME.ruby}50`, color: THEME.ruby, textAlign: 'center' }}/>
                         </div>
-                        <button onClick={handleAddStatement} style={{ background: THEME.accent, color: 'white', border: 'none', height: '45px', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, fontSize: '18px' }} title="إدراج في الجدول">➕</button>
-                    </div>
+<button onClick={handleAddStatement} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', height: '45px', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, fontSize: '18px', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)' }}>➕</button>                    </div>
 
-                    {/* 📊 جدول عرض البنود المضافة */}
-                    {addedLines.length > 0 && (
+                    {safeAddedLines.length > 0 && (
                         <div className="lines-table-container">
                             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
                                 <thead style={{ background: THEME.primary, color: 'white' }}>
@@ -287,7 +278,7 @@ export default function ExpenseFormModal({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {addedLines.map((line: any, idx: number) => (
+                                    {safeAddedLines.map((line: any, idx: number) => (
                                         <tr key={idx} className="item-row">
                                             <td style={{ padding: '12px', fontWeight: 700, color: '#1e293b', textAlign: 'right' }}>{line.description}</td>
                                             <td style={{ padding: '12px', fontWeight: 800 }}>{line.quantity}</td>
@@ -295,9 +286,7 @@ export default function ExpenseFormModal({
                                             <td style={{ padding: '12px', fontWeight: 700 }}>{formatCurrency(line.vat_amount)}</td>
                                             <td style={{ padding: '12px', fontWeight: 700, color: THEME.ruby }}>{formatCurrency(line.discount_amount)}</td>
                                             <td style={{ padding: '12px', fontWeight: 900, color: THEME.primary }}>{formatCurrency(line.total_price)}</td>
-                                            <td style={{ padding: '12px' }}>
-                                                <button onClick={() => handleRemoveLine(idx)} style={{ background: 'none', border: 'none', color: THEME.ruby, cursor: 'pointer', fontSize: '16px' }}>🗑️</button>
-                                            </td>
+                                            <td style={{ padding: '12px' }}><button onClick={() => handleRemoveLine(idx)} style={{ background: 'none', border: 'none', color: THEME.ruby, cursor: 'pointer', fontSize: '16px' }}>🗑️</button></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -336,15 +325,9 @@ export default function ExpenseFormModal({
                 </div>
 
                 <div className="responsive-actions" style={{ display: 'flex', gap: '20px', marginTop: '35px' }}>
-                    {isDistributionEnabled ? (
-                        <button onClick={calculateDistribution} disabled={isSaving} className="btn-glass-save" style={{ flex: 2, background: THEME.purple }}>
-                            ✂️ معاينة التوزيع قبل الحفظ
-                        </button>
-                    ) : (
-                        <button onClick={handleValidateAndSave} disabled={isSaving} className="btn-glass-save" style={{ flex: 2 }}>
-                            {isSaving ? '⏳ جاري الحفظ والترحيل...' : '✅ حفظ واعتماد المصروف'}
-                        </button>
-                    )}
+                    <button onClick={handleValidateAndSave} disabled={isSaving} className="btn-glass-save" style={{ flex: 2 }}>
+                        {isSaving ? '⏳ جاري الحفظ...' : '✅ حفظ واعتماد المصروف'}
+                    </button>
                     <button onClick={onClose} className="btn-glass-cancel" style={{ flex: 1 }}>إغلاق وإلغاء</button>
                 </div>
             </div>
