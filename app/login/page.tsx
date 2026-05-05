@@ -2,16 +2,17 @@
 import React from 'react';
 import { useLoginLogic } from './login_logic'; // 👈 استدعاء العقل المدبر
 
+// 🎨 تطبيق ألوان هوية "رواسي اليسر" الدافئة
 const THEME = {
-  primary: '#0f172a',
-  accent: '#ca8a04',
-  accentLight: '#eab308',
+  coffeeDark: '#43342E',
+  coffeeMedium: '#5E4A40',
+  goldAccent: '#C5A059',
+  sandLight: '#F4F1EE',
   white: '#ffffff',
   slate: '#94a3b8'
 };
 
 export default function LoginPage() {
-  // 👈 نقطة الاستدعاء الوحيدة (Single Source)
   const {
     isSignUp, toggleSignUp,
     fullName, setFullName,
@@ -38,7 +39,8 @@ export default function LoginPage() {
           justify-content: center;
           direction: rtl;
           font-family: 'Cairo', sans-serif;
-          background-image: linear-gradient(rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.95)), url('/ryc_login.jpeg');
+          /* 🌅 خلفية دافئة مدمجة مع الصورة */
+          background-image: linear-gradient(rgba(67, 52, 46, 0.85), rgba(94, 74, 64, 0.95)), url('/ryc_login.jpeg');
           background-size: cover;
           background-position: center;
           background-attachment: fixed;
@@ -47,13 +49,14 @@ export default function LoginPage() {
         .glass-card {
           width: 100%;
           max-width: 480px;
-          background: rgba(15, 23, 42, 0.6); 
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(202, 138, 4, 0.3); 
+          /* 🪟 زجاج دافئ يميل للون الرملي */
+          background: rgba(244, 241, 238, 0.15); 
+          backdrop-filter: blur(25px);
+          -webkit-backdrop-filter: blur(25px);
+          border: 1px solid rgba(197, 160, 89, 0.4); /* حواف ذهبية */
           border-radius: 24px;
           padding: 50px 40px;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(202, 138, 4, 0.15); 
+          box-shadow: 0 25px 50px -12px rgba(67, 52, 46, 0.7), 0 0 40px rgba(197, 160, 89, 0.15); 
           animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
           margin: 20px;
         }
@@ -70,7 +73,7 @@ export default function LoginPage() {
 
         .logo-container img {
           height: 110px;
-          filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5));
+          filter: drop-shadow(0px 10px 15px rgba(67,52,46,0.6));
           transition: transform 0.3s ease;
         }
         
@@ -82,10 +85,11 @@ export default function LoginPage() {
           font-size: 32px;
           text-align: center;
           margin-bottom: 8px;
+          text-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
 
         .cinematic-subtitle {
-          color: ${THEME.slate};
+          color: rgba(255, 255, 255, 0.7);
           text-align: center;
           font-size: 15px;
           font-weight: 600;
@@ -100,8 +104,8 @@ export default function LoginPage() {
         .cinematic-input {
           width: 100%;
           padding: 18px 20px;
-          background: rgba(255, 255, 255, 0.05) !important;
-          border: 2px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.1) !important;
+          border: 2px solid rgba(255, 255, 255, 0.2);
           border-radius: 14px;
           color: ${THEME.white} !important;
           font-size: 16px;
@@ -111,12 +115,16 @@ export default function LoginPage() {
           text-align: right;
         }
 
-        .cinematic-input:focus { border-color: ${THEME.accent}; background: rgba(255, 255, 255, 0.1) !important; }
+        .cinematic-input:focus { 
+            border-color: ${THEME.goldAccent}; 
+            background: rgba(255, 255, 255, 0.15) !important; 
+            box-shadow: 0 0 15px rgba(197, 160, 89, 0.2);
+        }
 
         .cinematic-input:-webkit-autofill {
           animation-name: onAutoFillStart;
           -webkit-text-fill-color: #ffffff !important;
-          -webkit-box-shadow: 0 0 0px 1000px #151c2c inset !important;
+          -webkit-box-shadow: 0 0 0px 1000px rgba(94, 74, 64, 1) inset !important;
           transition: background-color 5000s ease-in-out 0s;
         }
 
@@ -125,7 +133,7 @@ export default function LoginPage() {
           right: 20px;
           top: 50%;
           transform: translateY(-50%);
-          color: ${THEME.slate};
+          color: rgba(255, 255, 255, 0.7);
           font-size: 16px;
           font-weight: 700;
           pointer-events: none;
@@ -140,28 +148,29 @@ export default function LoginPage() {
           top: -12px !important;
           right: 15px !important;
           font-size: 13px !important;
-          color: ${THEME.accent} !important;
-          background: #151c2c !important;
-          padding: 0 10px !important;
-          border-radius: 4px !important;
+          color: ${THEME.coffeeDark} !important;
+          background: ${THEME.goldAccent} !important;
+          padding: 2px 10px !important;
+          border-radius: 6px !important;
           transform: translateY(0) !important;
           opacity: 1 !important;
           font-weight: 900 !important;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
 
         .submit-btn {
           width: 100%;
           padding: 18px;
           margin-top: 10px;
-          background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentLight});
-          color: ${THEME.primary};
+          background: linear-gradient(135deg, ${THEME.goldAccent}, #D4AF37);
+          color: ${THEME.coffeeDark};
           border: none;
           border-radius: 14px;
           font-size: 18px;
           font-weight: 900;
           cursor: pointer;
           transition: all 0.3s ease;
-          box-shadow: 0 10px 20px rgba(202, 138, 4, 0.3);
+          box-shadow: 0 10px 20px rgba(197, 160, 89, 0.3);
           display: flex;
           justify-content: center;
           align-items: center;
@@ -169,7 +178,8 @@ export default function LoginPage() {
 
         .submit-btn:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 15px 25px rgba(202, 138, 4, 0.4);
+          box-shadow: 0 15px 25px rgba(197, 160, 89, 0.5);
+          background: linear-gradient(135deg, #D4AF37, ${THEME.goldAccent});
         }
         .submit-btn:disabled {
           opacity: 0.7;
@@ -180,7 +190,7 @@ export default function LoginPage() {
           width: 100%;
           background: none;
           border: none;
-          color: ${THEME.slate};
+          color: rgba(255, 255, 255, 0.7);
           font-family: inherit;
           font-size: 14px;
           font-weight: 700;
@@ -188,8 +198,15 @@ export default function LoginPage() {
           cursor: pointer;
           transition: 0.3s;
         }
-        .toggle-btn span { color: ${THEME.accent}; text-decoration: underline; }
+        .toggle-btn span { color: ${THEME.goldAccent}; text-decoration: underline; }
         .toggle-btn:hover { color: ${THEME.white}; }
+        
+        /* 📱 تعديل صغير للموبايل في اللوجن */
+        @media (max-width: 480px) {
+            .glass-card { padding: 40px 25px; border-radius: 20px; }
+            .cinematic-title { font-size: 28px; }
+            .logo-container img { height: 90px; }
+        }
       `}</style>
 
       <div className="glass-card">
@@ -202,7 +219,6 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit}>
           
-          {/* حقل الاسم (يظهر في حالة التسجيل فقط) */}
           {isSignUp && (
             <div className="input-group" style={{ animation: 'fadeInUp 0.4s forwards' }}>
               <input 
@@ -246,11 +262,10 @@ export default function LoginPage() {
           </div>
 
           <button type="submit" className="submit-btn" disabled={isLoading}>
-            {isLoading ? '⏳ جاري المعالجة...' : (isSignUp ? 'إنشاء الحساب 🚀' : 'تسجيل الدخول 🚀')}
+            {isLoading ? '⏳ جاري المعالجة...' : (isSignUp ? 'إنشاء الحساب 🚀' : 'دخول للنظام 🚀')}
           </button>
         </form>
 
-        {/* 🔄 زر التبديل بين الدخول والتسجيل */}
         <button type="button" className="toggle-btn" onClick={toggleSignUp}>
           {isSignUp ? (
             <>لديك حساب بالفعل؟ <span>سجل دخولك من هنا</span></>
@@ -260,7 +275,7 @@ export default function LoginPage() {
         </button>
 
         <div style={{ textAlign: 'center', marginTop: '25px' }}>
-          <p style={{ color: THEME.slate, fontSize: '13px', fontWeight: 600 }}>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: 600 }}>
             جميع الحقوق محفوظة © {new Date().getFullYear()} <br/> إدارة تقنية المعلومات - رواسي اليسر
           </p>
         </div>

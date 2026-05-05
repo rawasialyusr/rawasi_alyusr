@@ -412,48 +412,44 @@ export const getSingleInvoiceStatus = (invoiceDate: string, isPaid: boolean) => 
 // =========================================================================
 // 🚀 دالة البلدوزر المطورة: سحب تكراري لضمان جلب كل البيانات (بدون سقف الـ 1000)
 // =========================================================================
+// دالة البلدوزر لسحب الجداول الضخمة تلقائياً (تتخطى 1000 سطر)
 export const fetchAllSupabaseData = async (
-  supabaseClient: any, 
-  tableName: string, 
-  selectQuery: string = '*',
-  orderByCol: string = 'created_at',
-  ascending: boolean = false
+  supabase: any,
+  tableName: string,
+  orderByColumn?: string // 🚀 الإضافة هنا: خلينا حقل الترتيب اختياري
 ) => {
   let allData: any[] = [];
-  let fetchMore = true;
-  let from = 0;
-  const step = 1000; 
+  let currentOffset = 0;
+  const limit = 1000;
+  let keepFetching = true;
 
   console.log(`📡 جاري بدء سحب بيانات جدول: [${tableName}]...`);
 
-  while (fetchMore) {
-    const { data, error } = await supabaseClient
-      .from(tableName)
-      .select(selectQuery)
-      .order(orderByCol, { ascending })
-      .range(from, from + step - 1);
+  while (keepFetching) {
+    // 🚀 التعديل هنا: لو بعتوله حقل ترتيب هيرتب بيه، لو لأ هيسحب عادي من غير ترتيب عشان ميضربش Error
+    let query = supabase.from(tableName).select('*').range(currentOffset, currentOffset + limit - 1);
+    
+    if (orderByColumn) {
+      query = query.order(orderByColumn, { ascending: false });
+    }
+
+    const { data, error } = await query;
 
     if (error) {
-      // لو الجدول مش موجود (404) نرجع مصفوفة فاضية بدل null عشان الكود مايوقفش
-      if (error.code === 'PGRST116' || error.message.includes('not found')) {
-        console.warn(`⚠️ تنبيه: جدول [${tableName}] غير موجود في قاعدة البيانات.`);
-        return [];
-      }
       console.error(`❌ خطأ في سحب [${tableName}]:`, error.message);
-      return []; 
+      break; // نوقف السحب للجدول ده لو فيه خطأ ونكمل للي بعده
     }
 
     if (data && data.length > 0) {
       allData = [...allData, ...data];
+      currentOffset += limit;
       console.log(`✅ تم سحب ${allData.length} صف من جدول [${tableName}] حتى الآن...`);
-    }
-
-    // لو الطلب رجع 1000 بالظبط، معناها لسه فيه تاني، نلف لفة كمان
-    if (data && data.length === step) {
-      from += step;
+      
+      if (data.length < limit) {
+        keepFetching = false;
+      }
     } else {
-      // لو رجع أقل من 1000، معناها مفيش بيانات تاني
-      fetchMore = false; 
+      keepFetching = false;
     }
   }
 
@@ -472,3 +468,5 @@ export const canUser = (profile: any, module: string, action: string): boolean =
   // 3. التأكد إن الصلاحية مصفوفة (Array) وبتحتوي على الفعل المطلوب
   return Array.isArray(moduleActions) && moduleActions.includes(action);
 };
+
+

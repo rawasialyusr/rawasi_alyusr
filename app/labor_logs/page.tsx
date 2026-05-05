@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom'; // 🚀 استدعاء بوابة الرسم لرفع المودال أعلى الشاشة
 import { useLaborLogsLogic } from './labor_logs_logic';
 import { THEME } from '@/lib/theme';
 import { usePermissions } from '@/lib/PermissionsContext'; 
@@ -275,8 +276,8 @@ export default function LaborLogsDirectory() {
         </div>
       </MasterPage>
 
-      {/* ➕ المودال خارج الـ MasterPage ليكون متوسطاً 100% بدون سكرول */}
-      {mounted && logic.isAddModalOpen && (
+      {/* 🚀 تغليف المودال بـ createPortal ليكون متوسطاً 100% بدون سكرول */}
+      {mounted && logic.isAddModalOpen && createPortal(
         <div 
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -285,7 +286,8 @@ export default function LaborLogsDirectory() {
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
             zIndex: 999999, 
-            display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+            display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '5vh', paddingBottom: '5vh',
+            overflowY: 'auto'
           }}
           onClick={() => logic.setIsAddModalOpen(false)}
         >
@@ -294,8 +296,9 @@ export default function LaborLogsDirectory() {
             onClick={(e) => e.stopPropagation()} 
             style={{ 
               background: 'white', padding: '35px', borderRadius: '24px', 
-              width: '100%', maxWidth: '750px', maxHeight: '90vh', 
-              overflowY: 'auto', direction: 'rtl', boxShadow: '0 40px 100px rgba(0,0,0,0.5)'
+              width: '100%', maxWidth: '750px',
+              direction: 'rtl', boxShadow: '0 40px 100px rgba(0,0,0,0.5)',
+              margin: 'auto' // لضمان التوسيط الجيد إذا كان المحتوى قصيراً
             }}
           >
             <h2 style={{ fontWeight: 900, color: THEME.coffeeDark, marginBottom: '25px', fontSize: '24px', borderBottom: `2px dashed ${THEME.goldAccent}`, paddingBottom: '15px' }}>
@@ -443,7 +446,8 @@ export default function LaborLogsDirectory() {
                </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

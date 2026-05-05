@@ -21,10 +21,14 @@ const cairo = Cairo({
   variable: '--font-cairo', // تحويله لـ CSS Variable لأفضل أداء
 });
 
+// 📱 التعديل هنا: منع الـ Zoom وتغطية الشاشة بالكامل للموبايل
 export const viewport = {
   themeColor: THEME.coffeeDark,
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, 
+  viewportFit: 'cover',
 };
 
 export const metadata = {

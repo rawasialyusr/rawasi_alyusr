@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // 👈 ضفنا useSearchParams
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/lib/toast-context'; 
 
 export function useLoginLogic() {
   const router = useRouter();
+  const searchParams = useSearchParams(); // 👈 لقراءة مسار التوجيه من الرابط لو موجود
   const { showToast } = useToast();
   
   const [isSignUp, setIsSignUp] = useState(false);
@@ -14,17 +15,19 @@ export function useLoginLogic() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // 🛡️ 1. الحارس الذكي (بديل تنظيف الجلسات المدمر)
+  // 🛡️ 1. الحارس الذكي
   useEffect(() => {
     const checkExistingSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        // لو المستخدم مسجل دخول بالفعل، انقله للداشبورد فوراً ولا تبقيه في صفحة الدخول
-        router.replace('/invoices');
+        // 👈 توجيه ذكي: يقرأ من الرابط، أو من الذاكرة، أو يروح للداشبورد كافتراضي
+        const redirectParam = searchParams?.get('redirect');
+        const lastRoute = localStorage.getItem('last_visited_route');
+        router.replace(redirectParam || lastRoute || '/Dashboard'); 
       }
     };
     checkExistingSession();
-  }, [router]);
+  }, [router, searchParams]);
 
   // 2. مزامنة قيم المتصفح (Autofill)
   useEffect(() => {
@@ -53,7 +56,7 @@ export function useLoginLogic() {
     setPassword('');
   };
 
-  // 🚀 3. دالة التنفيذ (تسجيل دخول أو حساب جديد)
+  // 🚀 3. دالة التنفيذ
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -69,51 +72,37 @@ export function useLoginLogic() {
         if (password.length < 6) throw new Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
 
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName, role: 'client' }
-          }
+          email, password, options: { data: { full_name: fullName, role: 'client' } }
         });
 
         if (error) throw error;
         
         showToast('✅ تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.', 'success');
-        setIsSignUp(false);
-        setPassword(''); 
-        setIsLoading(false);
+        setIsSignUp(false); setPassword(''); setIsLoading(false);
         
       } else {
         // 🔑 تسجيل الدخول
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw new Error('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
         
         showToast('تم تسجيل الدخول بنجاح! 🚀', 'success');
-        
         router.refresh(); 
         
-        // 🚀 توجيه آمن باستخدام replace لمنع الرجوع لصفحة اللوجن بالخطأ
+        // 👈 توجيه ذكي بعد الدخول بنجاح
         setTimeout(() => {
-          router.replace('/invoices'); 
+          const redirectParam = searchParams?.get('redirect');
+          const lastRoute = localStorage.getItem('last_visited_route');
+          router.replace(redirectParam || lastRoute || '/Dashboard'); 
         }, 500);
       }
     } catch (error: any) {
       showToast(error.message, 'error'); 
-      setIsLoading(false); // يتم إيقاف التحميل فقط في حالة الخطأ لكي يستطيع المحاولة مجدداً
+      setIsLoading(false); 
     } 
   };
 
   return {
-    isSignUp, toggleSignUp,
-    fullName, setFullName,
-    email, setEmail,
-    password, setPassword,
-    isLoading,
-    handleAutoFill,
-    handleSubmit
+    isSignUp, toggleSignUp, fullName, setFullName, email, setEmail, password, setPassword,
+    isLoading, handleAutoFill, handleSubmit
   };
 }
