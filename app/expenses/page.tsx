@@ -55,12 +55,13 @@ export default function ExpensesPage() {
   }, [displayedExpenses]);
 
   // =========================================================================
-  // 💎 أعمدة الجدول (كما هي دون أي حذف)
+  // 💎 أعمدة الجدول (كما هي دون أي حذف + إضافة exportValue للتصدير)
   // =========================================================================
   const expenseColumns = [
     {
       header: 'تحديد',
       accessor: 'id',
+      excludeFromExport: true, // 🚀 إخفاء من التصدير
       render: (row: any) => {
         if (!row) return null;
         const isSelected = logic.selectedIds.includes(row.id);
@@ -80,8 +81,18 @@ export default function ExpensesPage() {
         );
       }
     },
-    { header: 'التاريخ', accessor: 'exp_date', render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.exp_date}</span> : null },
-    { header: 'المقاول/المستفيد', accessor: 'sub_contractor', render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>{row.sub_contractor || row.payee_name || '---'}</b> : null },
+    { 
+      header: 'التاريخ', 
+      accessor: 'exp_date', 
+      render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.exp_date}</span> : null,
+      exportValue: (row: any) => row.exp_date || '---' 
+    },
+    { 
+      header: 'المقاول/المستفيد', 
+      accessor: 'sub_contractor', 
+      render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>{row.sub_contractor || row.payee_name || '---'}</b> : null,
+      exportValue: (row: any) => row.sub_contractor || row.payee_name || '---'
+    },
     
     { 
       header: 'التصنيف الرئيسي', 
@@ -99,7 +110,8 @@ export default function ExpensesPage() {
         }}>
           📁 {row.main_category || 'غير مصنف'}
         </span>
-      ) : null 
+      ) : null,
+      exportValue: (row: any) => row.main_category || 'غير مصنف'
     },
 
     { 
@@ -109,7 +121,8 @@ export default function ExpensesPage() {
         <span style={{ fontSize:'11px', background: row.is_auto_distributed ? '#f3e8ff' : '#f1f5f9', padding: '4px 10px', borderRadius: '8px', color: row.is_auto_distributed ? THEME.purple : THEME.brand.coffee, fontWeight: 900 }}>
           {row.is_auto_distributed ? '⚡ توزيع ذكي' : row.site_ref || 'عام'}
         </span>
-      ) : null 
+      ) : null,
+      exportValue: (row: any) => row.is_auto_distributed ? '⚡ توزيع ذكي' : (row.site_ref || 'عام')
     },
     
     { 
@@ -119,7 +132,8 @@ export default function ExpensesPage() {
         <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
           🧾 {row.creditor_account || '---'}
         </span>
-      ) : null 
+      ) : null,
+      exportValue: (row: any) => row.creditor_account || '---'
     },
     { 
       header: 'حساب السداد (دائن)', 
@@ -128,7 +142,8 @@ export default function ExpensesPage() {
         <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
           🏦 {row.payment_account || '---'}
         </span>
-      ) : null 
+      ) : null,
+      exportValue: (row: any) => row.payment_account || '---'
     },
 
     { 
@@ -141,10 +156,27 @@ export default function ExpensesPage() {
             displayDesc = row.lines_data.map((l: any) => l.description).filter(Boolean).join(' + ');
         }
         return <span style={{ fontSize:'12px', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }} title={displayDesc || '---'}>{displayDesc || '---'}</span>;
-      } 
+      },
+      exportValue: (row: any) => {
+        let displayDesc = row.description;
+        if ((!displayDesc || displayDesc.trim() === '') && row.lines_data && Array.isArray(row.lines_data) && row.lines_data.length > 0) {
+            displayDesc = row.lines_data.map((l: any) => l.description).filter(Boolean).join(' + ');
+        }
+        return displayDesc || '---';
+      }
     },
-    { header: 'الضريبة', accessor: 'vat_amount', render: (row: any) => row ? <span style={{fontWeight: 700}}>{Number(row.vat_amount || 0).toLocaleString()}</span> : null },
-    { header: 'الخصم', accessor: 'discount_amount', render: (row: any) => row ? <span style={{ color: THEME.ruby, fontWeight: 700 }}>{Number(row.discount_amount || 0).toLocaleString()}</span> : null },
+    { 
+      header: 'الضريبة', 
+      accessor: 'vat_amount', 
+      render: (row: any) => row ? <span style={{fontWeight: 700}}>{Number(row.vat_amount || 0).toLocaleString()}</span> : null,
+      exportValue: (row: any) => Number(row.vat_amount || 0)
+    },
+    { 
+      header: 'الخصم', 
+      accessor: 'discount_amount', 
+      render: (row: any) => row ? <span style={{ color: THEME.ruby, fontWeight: 700 }}>{Number(row.discount_amount || 0).toLocaleString()}</span> : null,
+      exportValue: (row: any) => Number(row.discount_amount || 0)
+    },
     { 
       header: 'الإجمالي', 
       accessor: 'total', 
@@ -152,7 +184,18 @@ export default function ExpensesPage() {
         if (!row) return null;
         const total = row.total_price || ((Number(row.quantity || 1) * Number(row.unit_price || 0)) + Number(row.vat_amount || 0) - Number(row.discount_amount || 0));
         return <span style={{ color: THEME.success, fontWeight: 900, fontSize: '14px' }}>{total.toLocaleString()}</span>;
-      } 
+      },
+      exportValue: (row: any) => {
+        if (row.total_price) return Number(row.total_price);
+        if (row.lines_data && Array.isArray(row.lines_data) && row.lines_data.length > 0) {
+            const linesTotal = row.lines_data.reduce((sum: number, line: any) => {
+                const lineTotal = line.total_price || (Number(line.quantity || 1) * Number(line.unit_price || 0));
+                return sum + lineTotal;
+            }, 0);
+            return linesTotal + Number(row.vat_amount || 0) - Number(row.discount_amount || 0);
+        }
+        return (Number(row.quantity || 1) * Number(row.unit_price || 0)) + Number(row.vat_amount || 0) - Number(row.discount_amount || 0);
+      }
     },
     
     {
@@ -197,6 +240,13 @@ export default function ExpensesPage() {
             {statusText}
           </span>
         );
+      },
+      exportValue: (row: any) => {
+        const total = row.total_price || (Number(row.quantity || 1) * Number(row.unit_price || 0)) + Number(row.vat_amount || 0) - Number(row.discount_amount || 0);
+        const paid = Number(row.paid_amount || 0);
+        if (paid <= 0) return 'لم يتم الصرف ❌';
+        if (paid > 0 && paid < total) return 'مدفوع جزئي ⏳';
+        return 'مدفوع كلياً ✅';
       }
     },
     {
@@ -207,11 +257,13 @@ export default function ExpensesPage() {
         return row.is_posted ? 
           <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>مُرحل ✅</span> : 
           <span style={{ display: 'inline-block', background: '#fff7ed', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معلق ⏳</span>;
-      }
+      },
+      exportValue: (row: any) => row.is_posted ? 'مُرحل ✅' : 'معلق ⏳'
     },
     {
       header: 'الإجراءات',
       accessor: 'actions',
+      excludeFromExport: true, // 🚀 إخفاء من التصدير
       render: (row: any) => {
         if (!row) return null;
         const total = row.total_price || ((Number(row.quantity || 1) * Number(row.unit_price || 0)) + Number(row.vat_amount || 0) - Number(row.discount_amount || 0));
@@ -373,8 +425,8 @@ export default function ExpensesPage() {
           ) : (
             <div className="table-glass-wrapper cinematic-scroll" style={{ overflowX: 'auto' }}>
               <RawasiSmartTable 
-                /* 🚀 تم تمرير البيانات المفلترة محلياً للجدول */
-                data={displayedExpenses.slice((logic.currentPage-1)*logic.rowsPerPage, logic.currentPage*logic.rowsPerPage)} 
+                /* 🚀 تم تمرير البيانات المفلترة محلياً للجدول بدون تقطيع حتى يعمل الفرز */
+                data={displayedExpenses} 
                 columns={expenseColumns} 
                 onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
                 enablePagination={true}

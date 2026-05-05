@@ -225,17 +225,16 @@ export default function PaymentVouchersPage() {
               <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
             ) : (
               <RawasiSmartTable 
-                  data={logic.data.slice((logic.state.currentPage-1)*logic.state.rowsPerPage, logic.state.currentPage*logic.state.rowsPerPage)} 
-                  columns={voucherColumns} 
-                  onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
-                  
-                  enablePagination={true}
-                  currentPage={logic.state.currentPage}
-                  totalItems={logic.data.length}
-                  rowsPerPage={logic.state.rowsPerPage}
-                  onPageChange={logic.actions.setCurrentPage}
-                  onRowsChange={logic.actions.setRowsPerPage}
-              />
+    data={logic.data}
+    columns={voucherColumns} 
+    onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
+    enablePagination={true}
+    currentPage={logic.state.currentPage}
+    totalItems={logic.data.length}
+    rowsPerPage={logic.state.rowsPerPage}
+    onPageChange={logic.actions.setCurrentPage}
+    onRowsChange={logic.actions.setRowsPerPage}
+/>
             )}
         </MasterPage>
       </div>
