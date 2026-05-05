@@ -56,14 +56,23 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
   return (
     <div className="clean-page">
       <style>{`
-        /* 🛠️ منع السكرول العرضي في كل الشاشات */
-        html, body { overflow-x: hidden !important; margin: 0; padding: 0; }
+        /* 🚀 🛠️ الحل الجذري: منع السكرول العرضي وإلغاء أي مساحات وهمية على اليمين */
+        html, body { 
+            overflow-x: hidden !important; 
+            width: 100vw !important;
+            max-width: 100% !important;
+            margin: 0 !important; 
+            padding: 0 !important; 
+        }
 
         .clean-page { 
             padding: 25px 0px 25px 15px !important; 
-            margin-right: 0px !important;           
+            margin: 0 !important; /* تصفير المارجن تماماً لعدم التداخل مع السايد بار */
             direction: rtl; 
             min-height: 100vh; 
+            width: 100vw !important; 
+            max-width: 100%;
+            overflow-x: hidden !important; /* إجبار المحتوى على البقاء داخل الشاشة */
         }
 
         .master-header {
@@ -125,35 +134,36 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
         /* 📱 🚀 التعديل السحري للموبايل (Fullscreen Edge-to-Edge) */
         @media (max-width: 768px) {
           .clean-page { 
-              padding: 0 !important; /* إلغاء الحواف الخارجية تماماً */
+              padding: 0 !important; 
+              margin: 0 !important;
+              width: 100% !important; /* ضمان عدم تخطي مساحة الشاشة */
           }
           .master-header { 
               flex-direction: row; 
               align-items: center; 
               padding: 15px 15px 10px 15px !important; 
-              margin-bottom: 0 !important; /* إلغاء المسافة بين الهيدر والداشبورد */
+              margin-bottom: 0 !important; 
               background: rgba(255, 255, 255, 0.85);
               backdrop-filter: blur(10px);
               border-bottom: 1px solid rgba(0,0,0,0.05);
-              border-radius: 0 0 15px 15px; /* تدوير خفيف للهيدر من تحت فقط */
-              animation: none; /* إيقاف حركة التعويم في الموبايل لثبات الشاشة */
+              border-radius: 0 0 15px 15px; 
+              animation: none; 
           }
-          .title-area h1 { font-size: 18px !important; } /* تصغير العنوان ليناسب الموبايل */
-          .title-area p { display: none; } /* إخفاء النص الفرعي لتوفير المساحة */
+          .title-area h1 { font-size: 18px !important; } 
+          .title-area p { display: none; } 
           
           .glass-container { 
               padding: 15px 10px !important; 
-              border-radius: 0 !important; /* إلغاء الزوايا الدائرية لتلتحم بالشاشة */
+              border-radius: 0 !important; 
               border: none !important;
               box-shadow: none !important;
-              min-height: calc(100vh - 65px); /* أخذ باقي طول الشاشة بالكامل */
+              min-height: calc(100vh - 65px); 
           }
           
-          /* تبسيط كارت المستخدم في الموبايل */
           .u-info-text { display: none; }
           .imperial-trigger { padding: 0; background: transparent; border: none; box-shadow: none; }
           .imperial-trigger:hover { transform: none; box-shadow: none; border: none; }
-          .avatar-frame { width: 40px; height: 40px; } /* تصغير صورة البروفايل */
+          .avatar-frame { width: 40px; height: 40px; } 
         }
       `}</style>
 

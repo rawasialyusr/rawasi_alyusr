@@ -210,7 +210,7 @@ export default function ExpenseFormModal({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
                     <div style={{ zIndex: 80, position: 'relative' }}>
-                        <SmartCombo label="👷 المقاول / المورد" icon="👤" table="partners" displayCol="name" initialDisplay={record?.sub_contractor} onSelect={(val:any) => setRecord({...record, sub_contractor: val.name})} allowAddNew={true} />
+                        <SmartCombo label="👷 المقاول " icon="👤" table="partners" displayCol="name" initialDisplay={record?.sub_contractor} onSelect={(val:any) => setRecord({...record, sub_contractor: val.name})} allowAddNew={true} />
                     </div>
                     <div style={{ zIndex: 70, position: 'relative' }}>
                         <SmartCombo label="👤 المستفيد المباشر" icon="👤" table="partners" displayCol="name" initialDisplay={record?.payee_name} onSelect={(val:any) => setRecord({...record, payee_name: val.name})} />
