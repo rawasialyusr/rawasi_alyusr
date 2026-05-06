@@ -140,10 +140,10 @@ export function usePaymentVouchersLogic() {
 
     // 🚀 7. الترحيل المركزي
     const { postRecords, unpostRecords, isProcessing } = useUniversalPosting(
-        'payment_vouchers',
-        'payment_vouchers',
-        'post_payment_vouchers_bulk'
-    );
+    'payment_vouchers',             // اسم الجدول
+    'payment_vouchers',             // اسم الموديول (للكاش)
+    'post_payment_vouchers_bulk'    // ✅ اسم الدالة اللي عملناها في SQL
+);
 
     // 📝 8. عمليات الحفظ والحذف
     const saveMutation = useMutation({

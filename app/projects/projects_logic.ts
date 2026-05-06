@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // 🚀 محرك العمليات
-import { useToast } from '@/lib/toast-context'; // 🚀 التنبيهات السيادية
+import { useMutation, useQueryClient } from '@tanstack/react-query'; 
+import { useToast } from '@/lib/toast-context'; 
 
 export function useProjectsLogic() {
   const queryClient = useQueryClient();
@@ -24,18 +24,65 @@ export function useProjectsLogic() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('الكل');
   const [filterClient, setFilterClient] = useState('الكل');
-  const [filterStage, setFilterStage] = useState('الكل'); // 🆕 فلتر المرحلة الحالية
+  const [filterStage, setFilterStage] = useState('الكل'); 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // 🆕 استخراج المراحل المتاحة ديناميكياً لملء قائمة الفلتر
   const availableStages = useMemo(() => {
       const stages = projects.map(p => p.current_stage).filter(Boolean);
       return Array.from(new Set(stages));
   }, [projects]);
 
   // =========================================================================
-  // 🚀 حالات ودوال إدارة المقايسة (WBS)
+  // 🚀 1. إدارة إضافة مشروع جديد (Add Project)
+  // =========================================================================
+  const defaultProjectRecord = {
+      project_code: '', Property: '', client_id: '', contract_value: '', 
+      estimated_budget: '', down_payment: '', start_date: '', end_date: '', 
+      location_address: '', project_manager: '', status: 'قيد الدراسة', 
+      current_stage: 'تجهيز الموقع', notes: ''
+  };
+  const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+  const [currentProjectRecord, setCurrentProjectRecord] = useState<any>(defaultProjectRecord);
+
+  const saveProjectMutation = useMutation({
+      mutationFn: async (payload: any) => {
+          const { error } = await supabase.from('projects').insert([payload]);
+          if (error) throw error;
+      },
+      onSuccess: () => {
+          showToast("تم إنشاء المشروع بنجاح 🚀", "success");
+          setIsAddProjectModalOpen(false);
+          setCurrentProjectRecord(defaultProjectRecord);
+          fetchData(); // تحديث قائمة المشاريع
+      },
+      onError: (err: any) => showToast(`خطأ في إنشاء المشروع: ${err.message}`, "error")
+  });
+
+  const handleSaveProject = () => {
+      if (!currentProjectRecord.Property) return showToast("اسم العقار/المشروع مطلوب!", "error");
+      
+      const payload = {
+          project_code: currentProjectRecord.project_code || null,
+          Property: currentProjectRecord.Property,
+          client_id: currentProjectRecord.client_id || null,
+          contract_value: Number(currentProjectRecord.contract_value) || 0,
+          estimated_budget: Number(currentProjectRecord.estimated_budget) || 0,
+          down_payment: Number(currentProjectRecord.down_payment) || 0,
+          start_date: currentProjectRecord.start_date || null,
+          end_date: currentProjectRecord.end_date || null,
+          location_address: currentProjectRecord.location_address || null,
+          project_manager: currentProjectRecord.project_manager || null,
+          status: currentProjectRecord.status || 'قيد الدراسة',
+          current_stage: currentProjectRecord.current_stage || 'تجهيز الموقع',
+          notes: currentProjectRecord.notes || null
+      };
+
+      saveProjectMutation.mutate(payload);
+  };
+
+  // =========================================================================
+  // 🚀 2. حالات ودوال إدارة المقايسة (WBS)
   // =========================================================================
   const [isBoqModalOpen, setIsBoqModalOpen] = useState(false);
   const [currentBoqRecord, setCurrentBoqRecord] = useState<any>({
@@ -67,7 +114,7 @@ export function useProjectsLogic() {
       },
       onSuccess: () => {
           setIsBoqModalOpen(false);
-          if (selectedProject) loadProjectDetails(selectedProject); // تحديث الداتا محلياً
+          if (selectedProject) loadProjectDetails(selectedProject);
           showToast("تم حفظ البند في المقايسة بنجاح ✅", "success");
       },
       onError: (err: any) => {
@@ -75,7 +122,9 @@ export function useProjectsLogic() {
       }
   });
 
-  // 🔍 دالة الفحص العميق لقاعدة البيانات (Diagnostic Tool)
+  // =========================================================================
+  // 🔍 العمليات العامة
+  // =========================================================================
   const runDiagnostics = async () => {
     if (!selectedProject) {
       alert("يرجى اختيار مشروع أولاً من القائمة الجانبية لتشغيل الفحص عليه.");
@@ -129,7 +178,6 @@ export function useProjectsLogic() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // 🚀 الفلترة الذكية (شملت المرحلة والحالة)
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       const matchSearch = (p.Property || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -157,10 +205,8 @@ export function useProjectsLogic() {
 
       const boqData = boqRes.data || [];
 
-      // 🚀 السحر المعماري: سحب الفاتورة وتوزيعها على مقايسة العمارة (Proration)
       const processedInvoices = (invRes.data || []).map((inv: any) => {
           const matchingBoqItem = boqData.find(b => b.work_item === inv.description);
-          
           let allocatedAmount = Number(inv.net_amount || inv.amount || 0);
           let notes = '';
 
@@ -212,23 +258,18 @@ export function useProjectsLogic() {
     }
   };
 
-  // 🚀 التعديل الماسي: الحل الجذري لمشكلة عدم تحديث الكارت من الخارج (Functional State Update)
   const updateProjectStatus = async (newStatus: string) => {
     if (!selectedProject) return;
     
     const { error } = await supabase.from('projects').update({ status: newStatus }).eq('id', selectedProject.id);
     
     if (!error) {
-      // 1. تحديث المشروع المفتوح في الغرفة حالياً
       setSelectedProject({ ...selectedProject, status: newStatus });
-      
-      // 2. تحديث الكارت اللي بره في مصفوفة المشاريع باستخدام أحدث حالة للمصفوفة (prevProjects)
       setProjects(prevProjects => 
         prevProjects.map(p => 
           p.id === selectedProject.id ? { ...p, status: newStatus } : p
         )
       );
-
       showToast("تم تحديث حالة المشروع بنجاح ✅", "success");
     } else {
       showToast("خطأ في تحديث الحالة: " + error.message, "error");
@@ -365,6 +406,12 @@ export function useProjectsLogic() {
     updateRecommendations, 
     updateProjectStatus,
 
+    // 🚀 الإضافة الجديدة الخاصة بإدارة المشاريع
+    isAddProjectModalOpen, setIsAddProjectModalOpen,
+    currentProjectRecord, setCurrentProjectRecord,
+    handleSaveProject, isSavingProject: saveProjectMutation.isPending,
+
+    // BOQ States
     isBoqModalOpen, 
     setIsBoqModalOpen,
     currentBoqRecord, 

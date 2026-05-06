@@ -1,7 +1,8 @@
 "use client";
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useProjectsLogic } from './projects_logic';
 import BoqFormModal from './BoqFormModal';
+import AddProjectModal from './AddProjectModal'; // 👈 استدعاء مودال إضافة المشروع
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
@@ -10,6 +11,9 @@ import { THEME } from '@/lib/theme';
 
 export default function AdvancedProjectsPage() {
   const logic = useProjectsLogic();
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => { setMounted(true); }, []);
 
   // =========================================================================
   // 🎛️ تجهيز بيانات الجداول للـ RawasiSmartTable (تُعرض داخل تفاصيل المشروع)
@@ -83,6 +87,13 @@ export default function AdvancedProjectsPage() {
   // =========================================================================
   const sidebarActions = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      
+      {!logic.selectedProject && (
+          <button onClick={() => logic.setIsAddProjectModalOpen(true)} className="btn-main-glass gold">
+              ➕ إضافة مشروع جديد
+          </button>
+      )}
+
       {logic.selectedProject && (
           <button onClick={() => logic.setSelectedProject(null)} className="btn-main-glass white">
               🔙 العودة لقائمة المشاريع
@@ -180,6 +191,14 @@ export default function AdvancedProjectsPage() {
           .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed rgba(0,0,0,0.05); fontSize: 12px; font-weight: 800; color: #475569; }
           .stat-row:last-child { border-bottom: none; }
           .stage-badge { position: absolute; top: 20px; left: 20px; background: linear-gradient(135deg, ${THEME.goldAccent}, #d97706); color: white; padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 900; box-shadow: 0 4px 10px rgba(217, 119, 6, 0.3); z-index: 2; }
+          
+          /* أنماط المودال */
+          .modal-label { color: ${THEME.coffeeMain}; fontSize: 12px; fontWeight: 900; display: block; margin-bottom: 8px; }
+          .modal-input { padding: 14px; border-radius: 12px; border: 2px solid #e2e8f0; width: 100%; font-weight: 800; outline: none; background: #f8fafc; transition: 0.3s; }
+          .modal-input:focus { border-color: ${THEME.goldAccent}; background: #fff; }
+          .save-btn { flex: 2; background: ${THEME.coffeeDark}; color: white; padding: 16px; border-radius: 15px; border: none; font-weight: 900; cursor: pointer; font-size: 16px; transition: 0.3s; }
+          .cancel-btn { flex: 1; background: #f1f5f9; color: #64748b; padding: 16px; border-radius: 15px; border: none; font-weight: 900; cursor: pointer; transition: 0.3s; }
+          .save-btn:hover { background: ${THEME.goldAccent}; color: #1e293b; }
         `}</style>
 
         {logic.isLoading ? (
@@ -203,13 +222,13 @@ export default function AdvancedProjectsPage() {
 
                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
                                  <span style={{ fontSize: '11px', color: THEME.white, fontWeight: 900, backgroundColor: THEME.coffeeDark, padding: '4px 10px', borderRadius: '8px' }}>
-                                     {proj.project_code}
+                                     {proj.project_code || 'بدون كود'}
                                  </span>
                                  <StatusBadge status={proj.status || 'قيد الدراسة'} />
                              </div>
                              
                              <h3 style={{ margin: '0 0 5px 0', color: THEME.coffeeDark, fontWeight: 900, fontSize: '18px', paddingLeft: '90px' }}>🏢 {proj.Property}</h3>
-                             <p style={{ margin: '0 0 20px 0', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>العميل: {proj.client?.name || '---'}</p>
+                             <p style={{ margin: '0 0 20px 0', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>العميل: {proj.client?.name || proj.client_name || '---'}</p>
 
                              <div style={{ background: 'rgba(255,255,255,0.5)', padding: '15px', borderRadius: '16px', marginBottom: '20px' }}>
                                  <div className="stat-row">
@@ -365,6 +384,10 @@ export default function AdvancedProjectsPage() {
 
             </div>
           )}
+
+          {/* 🚀 استدعاء المكون الجديد للمودال هنا */}
+          <AddProjectModal logic={logic} mounted={mounted} />
+
       </MasterPage>
     </div>
   );

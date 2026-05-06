@@ -26,7 +26,9 @@ export function useJournalErrorsLogic() {
         try {
             // جلب البيانات الأساسية (تخطي حد الـ 1000 سطر - الباب الثالث)
             const headers = await fetchAllSupabaseData(supabase, 'journal_headers', 'id, reference_id, entry_date, description', 'created_at', false) || [];
-            const lines = await fetchAllSupabaseData(supabase, 'journal_lines', '*', 'id', false) || [];
+            
+            // 🛠️ التعديل هنا: تم تغيير النجمة '*' إلى 'id' لحل مشكلة ترتيب Supabase المرفوض
+            const lines = await fetchAllSupabaseData(supabase, 'journal_lines', 'id', 'id', false) || [];
             
             const laborLogs = await fetchAllSupabaseData(supabase, 'labor_daily_logs', 'id, is_posted') || [];
             const receipts = await fetchAllSupabaseData(supabase, 'receipt_vouchers', 'id') || [];

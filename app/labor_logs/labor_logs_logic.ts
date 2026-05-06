@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import { fetchAllSupabaseData, formatCurrency, formatDate } from '@/lib/helpers'; 
 import { useToast } from '@/lib/toast-context'; 
-import { resolvePartnerId } from '@/lib/accounting';
 
 export function useLaborLogsLogic() {
     const queryClient = useQueryClient(); 
@@ -25,9 +24,11 @@ export function useLaborLogsLogic() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    // 🟢 1. إضافة الحقول (unit, skill_level, production_desc)
     const defaultLog = { 
         work_date: new Date().toISOString().split('T')[0], 
         sub_contractor: '', worker_name: '', site_ref: '', work_item: '', 
+        unit: '', skill_level: '', production_desc: '', 
         tareeha: '', productivity: '', completion_percentage: '', 
         daily_wage: '', attendance_value: '1', notes: '',
         worker_partner_id: '', project_id: '',
@@ -36,31 +37,30 @@ export function useLaborLogsLogic() {
     
     const [currentLog, setCurrentLog] = useState<any>(defaultLog);
 
+    // 🚀 1. سحب البيانات مرة واحدة مع حفظها في الكاش لمدة 5 دقائق
     const { data: logs = [], isLoading: isLogsLoading } = useQuery({
         queryKey: ['labor_logs'],
-        queryFn: () => fetchAllSupabaseData(supabase, 'labor_daily_logs')
+        queryFn: () => fetchAllSupabaseData(supabase, 'labor_daily_logs'),
+        staleTime: 1000 * 60 * 5, // كاش 5 دقائق
     });
 
+    // 🚀 2. سحب بيانات المقاولين والعمال مع كاش لمدة ساعة
     const { data: partners = [], isLoading: isPartnersLoading } = useQuery({
         queryKey: ['partners'],
-        queryFn: () => fetchAllSupabaseData(supabase, 'partners')
+        queryFn: () => fetchAllSupabaseData(supabase, 'partners'),
+        staleTime: 1000 * 60 * 60, // كاش ساعة كاملة
     });
 
-    const { data: statsData = [], isLoading: isStatsLoading } = useQuery({
-        queryKey: ['labor_stats'],
-        queryFn: async () => {
-            const { data, error } = await supabase.rpc('get_labor_stats');
-            if (error) console.error(error);
-            return data || [];
-        }
-    });
-
+    // 🚀 3. الحساب الذكي للإحصائيات بدون Double Fetching (صاروخي)
     const stats = useMemo(() => {
-        if (statsData && statsData.length > 0) {
-            return { sum: statsData[0].total_wage_sum || 0, attendance: statsData[0].total_attendance_sum || 0, count: statsData[0].total_records_count || 0 };
-        }
-        return { sum: 0, attendance: 0, count: 0 };
-    }, [statsData]);
+        if (!logs || logs.length === 0) return { sum: 0, attendance: 0, count: 0 };
+        
+        // حساب المجموع مباشرة من البيانات المحملة مسبقاً
+        const sum = logs.reduce((acc: number, row: any) => acc + Number(row.daily_wage || 0), 0);
+        const attendance = logs.reduce((acc: number, row: any) => acc + Number(row.attendance_value || 0), 0);
+        
+        return { sum, attendance, count: logs.length };
+    }, [logs]);
 
     const workersList = useMemo(() => partners.filter((p: any) => p.partner_type === 'عامل يومية' || p.partner_type === 'موظف'), [partners]);
     const sitesList = useMemo(() => partners.filter((p: any) => p.partner_type === 'جهة داخلية' || p.partner_type === 'عميل' || p.partner_type === 'مقاول'), [partners]);
@@ -121,7 +121,6 @@ export function useLaborLogsLogic() {
         onSuccess: () => {
             showToast('تم الحفظ بنجاح 🚀', 'success');
             queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
-            queryClient.invalidateQueries({ queryKey: ['labor_stats'] });
             setIsAddModalOpen(false);
             setEditingId(null);
             setCurrentLog(defaultLog);
@@ -131,12 +130,17 @@ export function useLaborLogsLogic() {
 
     const handleSaveLog = () => {
         if (!currentLog.worker_name) return showToast('يجب إدخال اسم العامل!', 'error');
+        
+        // 🟢 إرسال كافة الحقول للداتا بيز
         const payload = {
             work_date: currentLog.work_date, 
             sub_contractor: currentLog.sub_contractor || null,
             worker_name: currentLog.worker_name, 
             site_ref: currentLog.site_ref || null,
             work_item: currentLog.work_item || null, 
+            unit: currentLog.unit || null,                                   
+            skill_level: currentLog.skill_level || null,                     
+            production_desc: currentLog.production_desc || null,             
             tareeha: currentLog.tareeha || null, 
             productivity: currentLog.productivity || null, 
             completion_percentage: currentLog.completion_percentage ? Number(currentLog.completion_percentage) : null, 
@@ -145,7 +149,8 @@ export function useLaborLogsLogic() {
             notes: currentLog.notes || null,
             worker_partner_id: currentLog.worker_partner_id || null,
             project_id: currentLog.project_id || null,
-            credit_account_id: CREDIT_ACCOUNT_ID 
+            credit_account_id: CREDIT_ACCOUNT_ID,
+            debit_account_id: DEBIT_ACCOUNT_ID
         };
         saveMutation.mutate(payload);
     };
@@ -159,88 +164,24 @@ export function useLaborLogsLogic() {
             showToast('تم الحذف بنجاح 🗑️', 'success');
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
-            queryClient.invalidateQueries({ queryKey: ['labor_stats'] });
         },
         onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, 'error')
     });
 
+    // 🚀🚀 الترحيل الذكي والسريع باستخدام الـ RPC 🚀🚀
     const postMutation = useMutation({
         mutationFn: async (idsToPost: string[]) => {
-            const toPost = logs.filter((l: any) => idsToPost.includes(l.id) && !l.is_posted);
-            if (toPost.length === 0) throw new Error('NO_UNPOSTED_RECORDS');
+            if (!idsToPost || idsToPost.length === 0) throw new Error('لا يوجد سجلات للترحيل');
 
-            // 💎 منع الـ Timeout والتكرار عن طريق Chunking بـ 10 سجلات في المرة
-            const CHUNK_SIZE = 10;
-            for (let i = 0; i < toPost.length; i += CHUNK_SIZE) {
-                const chunk = toPost.slice(i, i + CHUNK_SIZE);
-                for (const log of chunk) {
-                    
-                    // 🟢 التعديل المطلوب: الاعتماد على قيمة اليومية مباشرة دون ضربها في قيمة الحضور
-                    const baseAmount = parseFloat(log.daily_wage || 0);
+            // 1. التحديث اللحظي للواجهة (Optimistic Update)
+            queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
+                if (!oldData) return [];
+                return oldData.map(log => idsToPost.includes(log.id) ? { ...log, is_posted: true } : log);
+            });
 
-                    // تخطي القيد إذا كان المبلغ صفر لتجنب قيود صفرية في الميزانية
-                    if (baseAmount <= 0) continue; 
-
-                    let safePartnerId = log.worker_partner_id;
-                    if (!safePartnerId && log.worker_name) {
-                        const matchedWorker = partners.find((p:any) => p.name === log.worker_name);
-                        if (matchedWorker) {
-                            safePartnerId = matchedWorker.id;
-                            await supabase.from('labor_daily_logs').update({ worker_partner_id: safePartnerId }).eq('id', log.id);
-                        }
-                    }
-
-                    const safeProjectId = log.project_id || null;
-
-                    // 💎 خط الدفاع الأول: التأكد التام من عدم وجود القيد لمنع التكرار نهائياً
-                    const { data: checkExisting } = await supabase.from('journal_headers').select('id').eq('reference_id', String(log.id)).maybeSingle();
-                    if (checkExisting) {
-                        await supabase.from('labor_daily_logs').update({ is_posted: true }).eq('id', log.id);
-                        continue; 
-                    }
-
-                    const { data: headerData, error: headerError } = await supabase
-                        .from('journal_headers')
-                        .insert([{
-                            entry_date: log.work_date,
-                            description: `إثبات استحقاق يومية: ${log.worker_name} - موقع: ${log.site_ref || 'غير محدد'}`,
-                            status: 'posted',
-                            reference_id: String(log.id) 
-                        }])
-                        .select('id').single();
-
-                    if (headerError) throw headerError;
-
-                    const journalLines: any[] = [
-                        {
-                            header_id: headerData.id,
-                            account_id: DEBIT_ACCOUNT_ID, 
-                            debit: baseAmount,
-                            credit: 0,
-                            partner_id: null, 
-                            project_id: safeProjectId,
-                            notes: `مصروف يومية: ${log.worker_name} (حضور: ${log.attendance_value})`
-                        },
-                        {
-                            header_id: headerData.id,
-                            account_id: CREDIT_ACCOUNT_ID, 
-                            debit: 0,
-                            credit: baseAmount,
-                            partner_id: safePartnerId, 
-                            project_id: safeProjectId,
-                            notes: `استحقاق يومية: ${log.worker_name}`
-                        }
-                    ];
-
-                    const { error: linesError } = await supabase.from('journal_lines').insert(journalLines);
-                    if (linesError) {
-                        await supabase.from('journal_headers').delete().eq('id', headerData.id); 
-                        throw linesError;
-                    }
-                    // تحديث الحالة فوراً لكل قيد ينجح
-                    await supabase.from('labor_daily_logs').update({ is_posted: true }).eq('id', log.id);
-                }
-            }
+            // 2. إرسال أمر الترحيل للداتا بيز
+            const { error } = await supabase.rpc('post_labor_logs_bulk', { p_ids: idsToPost });
+            if (error) throw error;
         },
         onSuccess: () => {
             showToast('تم الترحيل وسماع كشف الحساب بنجاح ✅', 'success');
@@ -248,68 +189,57 @@ export function useLaborLogsLogic() {
             queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
         },
         onError: (err: any) => {
-            if (err.message !== 'NO_UNPOSTED_RECORDS') showToast(`فشل الترحيل: ${err.message}`, 'error');
+            showToast(`فشل الترحيل: ${err.message}`, 'error');
+            queryClient.invalidateQueries({ queryKey: ['labor_logs'] }); // إرجاع الحالة في حال الفشل
         }
     });
 
-    // 💎 المسح المتسلسل الذكي (Deep Cascade Unposting - V11 Diamond Edition)
+    // ⏸️ فك الترحيل الذكي والسريع باستخدام الـ RPC ⏸️
     const unpostMutation = useMutation({
         mutationFn: async (idsToSuspend: string[]) => {
-            const stringIds = idsToSuspend.map(id => String(id));
-            
-            // 🛡️ تقسيم العمليات (Chunking) لحماية الرابط من الانهيار وتجنب خطأ 400
-            const CHUNK_SIZE = 50; 
-            for (let i = 0; i < stringIds.length; i += CHUNK_SIZE) {
-                const chunk = stringIds.slice(i, i + CHUNK_SIZE);
-                
-                // 1️⃣ سحب رؤوس القيود المرتبطة باليوميات المختارة
-                const { data: headers, error: headersErr } = await supabase
-                    .from('journal_headers')
-                    .select('id, reference_id, entry_date, description')
-                    .in('reference_id', chunk);
+            if (!idsToSuspend || idsToSuspend.length === 0) throw new Error('لا يوجد سجلات للتعليق');
 
-                if (headersErr) throw new Error("فشل في الوصول للقيود المحاسبية المرتبطة.");
+            // 1. التحديث اللحظي للواجهة
+            queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
+                if (!oldData) return [];
+                return oldData.map(log => idsToSuspend.includes(log.id) ? { ...log, is_posted: false } : log);
+            });
 
-                if (headers && headers.length > 0) {
-                    const headerIds = headers.map(h => h.id);
-                    
-                    // 2️⃣ تنفيذ الباب الثاني: مسح سطور القيود أولاً (النزاهة المالية)
-                    const { error: linesDelErr } = await supabase
-                        .from('journal_lines')
-                        .delete()
-                        .in('header_id', headerIds);
-                    if (linesDelErr) throw new Error("فشل في تطهير سطور الأستاذ المساعد.");
-
-                    // 3️⃣ مسح رؤوس القيود
-                    const { error: headersDelErr } = await supabase
-                        .from('journal_headers')
-                        .delete()
-                        .in('id', headerIds);
-                    if (headersDelErr) throw new Error("فشل في مسح رؤوس القيود المحاسبية.");
-                }
-
-                // 4️⃣ تحديث حالة اليومية إلى "معلق" (is_posted = false) لفتحها للتعديل مجدداً
-                const { error: updateErr } = await supabase
-                    .from('labor_daily_logs')
-                    .update({ is_posted: false })
-                    .in('id', chunk);
-                
-                if (updateErr) throw new Error("تم مسح القيود ولكن فشل تحديث حالة السجل الأصلي.");
-            }
+            // 2. إرسال أمر فك الترحيل للداتا بيز
+            const { error } = await supabase.rpc('unpost_labor_logs_bulk', { p_ids: idsToSuspend });
+            if (error) throw error;
         },
         onSuccess: () => {
             showToast('تم إلغاء الترحيل وتطهير الحسابات بنجاح ⏸️', 'warning');
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
-            queryClient.invalidateQueries({ queryKey: ['labor_stats'] }); // تحديث الإحصائيات فوراً
         },
-        onError: (err: any) => showToast(`عذراً: ${err.message}`, 'error')
+        onError: (err: any) => {
+            showToast(`عذراً: ${err.message}`, 'error');
+            queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
+        }
     });
 
     const exportToExcel = () => {
-        const ws = XLSX.utils.json_to_sheet(allFiltered);
+        const ws = XLSX.utils.json_to_sheet(allFiltered.map(log => ({
+            'التاريخ': log.work_date,
+            'اسم العامل': log.worker_name,
+            'الموقع': log.site_ref || '-',
+            'البند': log.work_item || '-',
+            'الوحدة': log.unit || '-',
+            'مستوى المهارة': log.skill_level || '-',
+            'الطريحة': log.tareeha || '-',
+            'الإنتاجية': log.productivity || '-',
+            'الإنجاز': log.completion_percentage ? `${log.completion_percentage}%` : '-',
+            'اليومية': log.daily_wage,
+            'الاستحقاق الفعلي': Number(log.daily_wage || 0) * Number(log.attendance_value || 1),
+            'الحضور': log.attendance_value === 1 ? 'يوم كامل' : log.attendance_value === 0.5 ? 'نصف يوم' : 'غياب',
+            'المقاول': log.sub_contractor || '-',
+            'ملاحظات': log.notes || '-',
+            'الحالة': log.is_posted ? 'مرحل' : 'معلق'
+        })));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "LaborLogs");
+        XLSX.utils.book_append_sheet(wb, ws, "يوميات_العمالة");
         XLSX.writeFile(wb, "يوميات_العمالة.xlsx");
         showToast('تم تصدير الإكسل 📊', 'success');
     };
@@ -325,14 +255,14 @@ export function useLaborLogsLogic() {
     const toggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
     return {
-        isLoading: isLogsLoading || isPartnersLoading || isStatsLoading, 
+        isLoading: isLogsLoading || isPartnersLoading, 
         searchTerm, setSearchTerm, filterStatus, setFilterStatus, dateFrom, setDateFrom, dateTo, setDateTo,
         filteredLogs: paginatedLogs, stats, totalResults: allFiltered.length,
         selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, 
         isAddModalOpen, setIsAddModalOpen, currentLog, setCurrentLog, defaultLog,
         isSaving: saveMutation.isPending, 
-        isPosting: postMutation.isPending, // 💎 حالة الترحيل لإغلاق الزر في الواجهة
-        isSuspending: unpostMutation.isPending, // 💎 حالة التعليق لإغلاق الزر
+        isPosting: postMutation.isPending, 
+        isSuspending: unpostMutation.isPending, 
         editingId, setEditingId,
         workersList, sitesList,
         handleSaveLog, 

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react'; // 🚀 أضفنا useMemo للفلترة المحلية
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom'; 
 import { useExpensesLogic } from './expenses_logic';
 import { THEME } from '@/lib/theme';
@@ -10,11 +10,13 @@ import SecureAction from '@/components/SecureAction';
 import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
 import RawasiSmartTable from '@/components/rawasismarttable';
+import { usePaymentVouchersLogic } from '../PaymentVouchers/payment_vouchers_logic'; 
+import PaymentVoucherModal from '../PaymentVouchers/PaymentVoucherModal'; 
 
 // 🎬 المودالز
 import ExpenseFormModal from './ExpenseFormModal'; 
 import ExpensePrintModal from './ExpensePrintModal'; 
-import ExpensePaymentModal from './ExpenseFormModal'; 
+import ExpensePaymentModal from './ExpenseFormModal'; // تأكد من اسم الاستيراد هنا إذا كان يختلف عن ExpenseFormModal
 
 const MAIN_CATEGORIES = [
   "إعاشة وتغذية", "محروقات وانتقالات", "عدد ومعدات", "مستهلكات ومواد تشغيل", 
@@ -24,7 +26,10 @@ const MAIN_CATEGORIES = [
 
 export default function ExpensesPage() {
   const logic = useExpensesLogic();
+  const pvLogic = usePaymentVouchersLogic();
+  
   const [mounted, setMounted] = useState(false); 
+  const { data: expenses, actions, state } = useExpensesLogic(); // Note: logic is already initialized above, you might be calling it twice here based on the original snippet.
   
   // 🚀 حالة محليّة للفلترة بالتصنيف بما أن الـ Hook لا يدعمها مباشرة
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -55,18 +60,46 @@ export default function ExpensesPage() {
   }, [displayedExpenses]);
 
   // =========================================================================
-  // 💎 أعمدة الجدول (كما هي دون أي حذف + إضافة exportValue للتصدير)
+  // 💎 أعمدة الجدول
+  // =========================================================================
+  // =========================================================================
+  // 💎 أعمدة الجدول
   // =========================================================================
   const expenseColumns = [
     {
-      header: 'تحديد',
+      // 🚀 إضافة Checkbox في رأس الجدول لتحديد/إلغاء تحديد كل الصفوف المفلترة
+      header: (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <input 
+            type="checkbox" 
+            className="custom-checkbox"
+            checked={logic.selectedIds.length > 0 && logic.selectedIds.length === displayedExpenses.length}
+            ref={(input) => {
+              if (input) {
+                // تفعيل حالة الـ Indeterminate (علامة الناقص) لو فيه بعض الصفوف متحددة بس مش كلها
+                input.indeterminate = logic.selectedIds.length > 0 && logic.selectedIds.length < displayedExpenses.length;
+              }
+            }}
+            onChange={(e) => {
+              e.stopPropagation();
+              if (e.target.checked) {
+                // تحديد كل الصفوف المفلترة حالياً
+                logic.setSelectedIds(displayedExpenses.map((row: any) => row.id));
+              } else {
+                // إلغاء تحديد الكل
+                logic.setSelectedIds([]);
+              }
+            }} 
+          />
+        </div>
+      ),
       accessor: 'id',
-      excludeFromExport: true, // 🚀 إخفاء من التصدير
+      excludeFromExport: true, 
       render: (row: any) => {
         if (!row) return null;
         const isSelected = logic.selectedIds.includes(row.id);
         return (
-          <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-block' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
               <input 
                   type="checkbox" 
                   className="custom-checkbox" 
@@ -211,6 +244,7 @@ export default function ExpensesPage() {
         let bgColor = '';
         let textColor = '';
 
+        // 🛡️ الاعتماد على قيمة paid_amount لحساب الحالة كما طلبنا في الخطوة السابقة
         if (paid <= 0) {
             statusText = 'لم يتم الصرف ❌';
             bgColor = '#fef2f2'; 
@@ -220,7 +254,7 @@ export default function ExpensesPage() {
             bgColor = '#fffbeb'; 
             textColor = '#f59e0b';
         } else if (paid >= total) {
-            statusText = 'مدفوع كلياً ✅';
+            statusText = 'تم السداد ✅';
             bgColor = '#ecfdf5'; 
             textColor = '#10b981';
         }
@@ -246,7 +280,7 @@ export default function ExpensesPage() {
         const paid = Number(row.paid_amount || 0);
         if (paid <= 0) return 'لم يتم الصرف ❌';
         if (paid > 0 && paid < total) return 'مدفوع جزئي ⏳';
-        return 'مدفوع كلياً ✅';
+        return 'تم السداد ✅';
       }
     },
     {
@@ -263,13 +297,14 @@ export default function ExpensesPage() {
     {
       header: 'الإجراءات',
       accessor: 'actions',
-      excludeFromExport: true, // 🚀 إخفاء من التصدير
+      excludeFromExport: true, 
       render: (row: any) => {
         if (!row) return null;
         const total = row.total_price || ((Number(row.quantity || 1) * Number(row.unit_price || 0)) + Number(row.vat_amount || 0) - Number(row.discount_amount || 0));
         const paid = Number(row.paid_amount || 0);
         const balance = total - paid;
         
+        // يعرض الزر فقط إذا كان الرصيد أكبر من صفر والسجل مُرحل
         const needsPayment = balance > 0 && row.is_posted === true; 
 
         return (
@@ -283,15 +318,66 @@ export default function ExpensesPage() {
             </button>
             {needsPayment && (
               <button 
-                onClick={(e) => {
-                  e.stopPropagation(); 
-                  setExpenseForPay({ ...row, amount: balance }); 
-                  setIsPaymentModalOpen(true);
-                }} 
-                style={{ background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 800, fontSize: '11px', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}
-                title="إصدار سند صرف"
+                  onClick={(e) => {
+                      e.stopPropagation(); 
+
+                      // 🏦 ثوابت الخزينة الرئيسية
+                      const MAIN_TREASURY_ID = '21b8a1db-bc9f-4cf8-b741-1efeded0963c';
+                      const MAIN_TREASURY_NAME = 'الخزينة الرئيسية';
+
+                      // 🔄 تحويل بيانات المصروف إلى سند صرف (عكس القيد)
+                      const preparedVoucher = {
+                          date: new Date().toISOString().split('T')[0],
+                          amount: balance, // المبلغ المتبقي من الفاتورة
+                          
+                          // الطرف المدين في السند = حساب السداد في الفاتورة (لإغلاق الالتزام)
+                          debit_account_id: row.payment_account_id, 
+                          debit_account_name: row.payment_account, 
+                          
+                          // الطرف الدائن في السند = الخزينة الرئيسية
+                          credit_account_id: MAIN_TREASURY_ID,
+                          credit_account_name: MAIN_TREASURY_NAME,
+                          
+                          // الربط مع المورد والمشروع
+                          partner_id: row.partner_id, 
+                          payee_name: row.supplier_name || row.creditor_account,
+                          site_ref: row.site_ref,
+                          
+                          description: `سداد مصروف: ${row.description || ''} (فاتورة: ${row.invoice_number || 'غير محدد'})`,
+                          payment_method: 'نقدي',
+                          reference_no: row.invoice_number, // ✅ تم التصحيح ليطابق قاعدة البيانات
+                          
+                          // 🔗 الربط لضمان تغيير الحالة ومنع التكرار
+                          related_expense_id: row.id 
+                      };
+
+                      // تشغيل المحرك المالي لفتح المودال
+                      pvLogic.actions.setCurrentVoucher(preparedVoucher);
+                      pvLogic.actions.setIsEditModalOpen(true);
+                  }} 
+                  className="btn-pay-action"
+                  style={{ 
+                      background: 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)', 
+                      color: 'white', 
+                      border: 'none', 
+                      padding: '8px 16px', 
+                      borderRadius: '10px', 
+                      cursor: 'pointer', 
+                      fontWeight: 900, 
+                      fontSize: '12px', 
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)',
+                      transition: 'all 0.2s ease',
+                      whiteSpace: 'nowrap'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                  title="إصدار سند صرف فوري"
               >
-                💸 صرف
+                  <span style={{ fontSize: '14px' }}>💸</span>
+                  صرف السند
               </button>
             )}
           </div>
@@ -345,7 +431,7 @@ export default function ExpensesPage() {
             summary={
               <div className="summary-glass-card">
                 <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي مصروفات الفترة 📉</span>
-                {/* 🚀 تم التعديل لعرض الإجمالي المفلتر محلياً */}
+                {/* 🚀 الإجمالي المفلتر محلياً */}
                 <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.primary, marginTop:'5px'}}>{formatCurrency(displayedTotal)}</div>
                 <div style={{fontSize:'11px', color:'#10b981', fontWeight:800, marginTop:'5px'}}>إجمالي القيود: {displayedExpenses.length}</div>
               </div>
@@ -354,7 +440,7 @@ export default function ExpensesPage() {
             customFilters={
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
                 
-                {/* 🚀 فلتر التصنيف الرئيسي (تم ربطه بالحالة المحلية) */}
+                {/* 🚀 فلتر التصنيف الرئيسي (مربوط بالحالة المحلية) */}
                 <div>
                   <label style={{color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px'}}>تصفية بالتصنيف:</label>
                   <select 
@@ -362,7 +448,6 @@ export default function ExpensesPage() {
                       value={categoryFilter || "الكل"}
                       onChange={e => {
                         const val = e.target.value;
-                        // تحديث الحالة المحلية فقط لتجنب أخطاء الـ Hook
                         setCategoryFilter(val === 'الكل' ? null : val);
                       }}
                   >
@@ -425,7 +510,6 @@ export default function ExpensesPage() {
           ) : (
             <div className="table-glass-wrapper cinematic-scroll" style={{ overflowX: 'auto' }}>
               <RawasiSmartTable 
-                /* 🚀 تم تمرير البيانات المفلترة محلياً للجدول بدون تقطيع حتى يعمل الفرز */
                 data={displayedExpenses} 
                 columns={expenseColumns} 
                 onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
@@ -439,7 +523,7 @@ export default function ExpensesPage() {
             </div>
           )}
 
-          {/* 🚀 المودالز المدمجة في الصفحة الأساسية (التصحيح المجمع) */}
+          {/* 🚀 المودالات المدمجة */}
           {mounted && logic.isBulkFixModalOpen && createPortal(
             <div style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(40, 24, 10, 0.85)', backdropFilter: 'blur(10px)', padding: '50px 20px', overflowY: 'auto' }}>
               <div style={{ position: 'fixed', inset: 0 }} onClick={() => logic.setIsBulkFixModalOpen(false)} />
@@ -447,10 +531,36 @@ export default function ExpensesPage() {
                 <h2 style={{ fontWeight: 900, textAlign: 'center', marginBottom: '30px', color: THEME.brand.coffee, fontSize: '24px' }}>🛠️ تصحيح الحسابات لـ ({logic.selectedIds.length}) سجل</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', zIndex: 50, position: 'relative' }}>
                   <div style={{ zIndex: 60, position: 'relative' }}>
-                    <SmartCombo label="🧾 حساب المصروف (المدين)" table="accounts" displayCol="name" initialDisplay={logic.bulkFixAccounts.creditor_account} onSelect={(val:any)=>logic.setBulkFixAccounts({...logic.bulkFixAccounts, creditor_account: val.name})} strict={true} />
+                    <SmartCombo 
+                      label="🧾 حساب المصروف (المدين)" 
+                      table="accounts" 
+                      displayCol="name" 
+                      initialDisplay={logic.bulkFixAccounts.creditor_account} 
+                      onSelect={(val:any) => {
+                        logic.setBulkFixAccounts({
+                          ...logic.bulkFixAccounts, 
+                          creditor_account: val?.name || val,
+                          creditor_account_id: val?.id || null 
+                        });
+                      }} 
+                      strict={true} 
+                    />
                   </div>
                   <div style={{ zIndex: 50, position: 'relative' }}>
-                    <SmartCombo label="🏦 حساب السداد (الدائن)" table="accounts" displayCol="name" initialDisplay={logic.bulkFixAccounts.payment_account} onSelect={(val:any)=>logic.setBulkFixAccounts({...logic.bulkFixAccounts, payment_account: val.name})} strict={true} />
+                    <SmartCombo 
+                      label="🏦 حساب السداد (الدائن)" 
+                      table="accounts" 
+                      displayCol="name" 
+                      initialDisplay={logic.bulkFixAccounts.payment_account} 
+                      onSelect={(val:any) => {
+                        logic.setBulkFixAccounts({
+                          ...logic.bulkFixAccounts, 
+                          payment_account: val?.name || val,
+                          payment_account_id: val?.id || null 
+                        });
+                      }} 
+                      strict={true} 
+                    />
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '15px', marginTop: '40px' }}>
@@ -462,14 +572,29 @@ export default function ExpensesPage() {
             document.body
           )}
 
-          {/* 🚀 المكونات المستقلة (المودالز) */}
+          {/* 💸 مودال سند الصرف الموحد الجديد (الذي يتم فتحه عند الضغط على "صرف") */}
+          {mounted && pvLogic.state.isEditModalOpen && (
+              <PaymentVoucherModal 
+                isOpen={pvLogic.state.isEditModalOpen}
+                onClose={() => pvLogic.actions.setIsEditModalOpen(false)}
+                record={pvLogic.state.currentVoucher}
+                setRecord={pvLogic.actions.setCurrentVoucher}
+                onSave={pvLogic.actions.handleSaveVoucher}
+                isSaving={pvLogic.isLoading}
+                partnerBalance={pvLogic.state.partnerBalance}
+                isBalanceLoading={pvLogic.state.isBalanceLoading}
+              />
+          )}
+
+          {/* 🚀 المودالات القديمة */}
           {mounted && isPaymentModalOpen && (
               <ExpensePaymentModal 
                 isOpen={isPaymentModalOpen} 
                 onClose={() => setIsPaymentModalOpen(false)} 
                 record={expenseForPay || {}} 
                 onSave={(data: any) => { 
-                  if(logic.handleSavePayment) logic.handleSavePayment(data); 
+                  // If logic has a save payment handler, call it.
+                  if((logic as any).handleSavePayment) (logic as any).handleSavePayment(data); 
                   setIsPaymentModalOpen(false); 
                 }} 
               />
