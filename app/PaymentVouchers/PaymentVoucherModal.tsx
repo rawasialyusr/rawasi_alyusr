@@ -65,6 +65,11 @@ export default function PaymentVoucherModal({
                         <h2 style={{ fontWeight: 900, color: THEME.primary, margin:0, fontSize: '26px' }}>
                             💸 {record.id ? 'تعديل سند الصرف' : 'إصدار سند صرف'}
                         </h2>
+                        {record.voucher_number && (
+                            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 800, marginTop: '8px' }}>
+                                رقم السند: <span style={{ color: THEME.goldAccent }}>{record.voucher_number}</span>
+                            </div>
+                        )}
                     </div>
                     <div style={{ textAlign: 'left', background: '#fef2f2', padding: '10px 20px', borderRadius: '16px', border: `1px solid ${THEME.danger}30` }}>
                         <div style={{ fontSize: '11px', color: THEME.danger, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.5px' }}>مبلغ السند</div>
@@ -224,7 +229,6 @@ export default function PaymentVoucherModal({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>🔢 رقم المرجع (حوالة / شيك)</label>
-                        {/* 🚀 ضمان التوافق مع قاعدة البيانات بتحديث المتغيرين */}
                         <input 
                             type="text" 
                             placeholder="رقم المرجع..." 

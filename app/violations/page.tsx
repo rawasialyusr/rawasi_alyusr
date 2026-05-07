@@ -13,10 +13,8 @@ import RawasiSmartTable from '@/components/rawasismarttable';
 
 /**
  * صفحة سجل رصد المخالفات - رواسي اليسر V11
- * تلتزم بمعايير الباب الأول (معمارية الموديولات) والباب الرابع (الهوية البصرية)
  */
 export default function ViolationsPage() {
-  // استدعاء أحادي للعقل المدبر وفقاً للميثاق
   const logic = useViolationsLogic();
   const [mounted, setMounted] = useState(false);
   const { can, loading: permsLoading } = usePermissions();
@@ -24,16 +22,67 @@ export default function ViolationsPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  
+  // 🚀 حالة الترقيم المحلية للجدول الذكي لضبط "تحديد الكل"
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 50;
 
   useEffect(() => { setMounted(true); }, []);
 
+  // 🚀 استخراج العناصر المعروضة في الصفحة الحالية لزر "تحديد الكل"
+  const currentVisibleIds = useMemo(() => {
+      return logic.data
+          .slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+          .map((v: any) => String(v.id));
+  }, [logic.data, currentPage, rowsPerPage]);
+
+  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.state.selectedIds.includes(id));
+
   // تعريف الأعمدة مع الالتزام بحراس الرندر (Render Guards)
   const columns = useMemo(() => [
+    {
+      header: (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox"
+                  checked={isAllVisibleSelected}
+                  title="تحديد كل الصفحة"
+                  onChange={() => {
+                      if (isAllVisibleSelected) {
+                          logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                      } else {
+                          logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...currentVisibleIds])]);
+                      }
+                  }}
+              />
+          </div>
+      ), 
+      accessor: 'id',
+      render: (row: any) => {
+        if (!row) return null;
+        const isSelected = logic.state.selectedIds.includes(String(row.id));
+        return (
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox" 
+                  checked={isSelected} 
+                  onChange={(e) => {
+                      e.stopPropagation();
+                      if (isSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((i:any) => i !== String(row.id))); 
+                      else logic.actions.setSelectedIds([...logic.state.selectedIds, String(row.id)]); 
+                  }} 
+              />
+          </div>
+        );
+      }
+    },
     { 
       header: 'التاريخ', 
       accessor: 'date', 
       render: (row: any) => {
-        if (!row) return null; // حارس الرندر الإلزامي
+        if (!row) return null; 
         return <span style={{ color: '#64748b', fontWeight: 900 }}>{row.date}</span>;
       }
     },
@@ -103,9 +152,9 @@ export default function ViolationsPage() {
         );
       }
     }
-  ], [can, logic.actions]);
+  ], [can, logic.actions, isAllVisibleSelected, currentVisibleIds, logic.state.selectedIds]);
 
-  // جسر الترحيل للأكشنز عبر SidebarManager[cite: 9]
+  // جسر الترحيل للأكشنز عبر SidebarManager
   const sidebarActions = useMemo(() => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="violations" action="create">
@@ -183,7 +232,10 @@ export default function ViolationsPage() {
                       {['الكل', 'مرحل', 'معلق'].map(type => (
                         <button 
                           key={type} 
-                          onClick={() => logic.actions.setFilterStatus(type)} 
+                          onClick={() => {
+                              logic.actions.setFilterStatus(type);
+                              setCurrentPage(1); // العودة للصفحة الأولى عند الفلترة
+                          }} 
                           className={`filter-btn ${logic.state.filterStatus === type ? 'active' : ''}`}
                         >
                           {type}
@@ -193,11 +245,15 @@ export default function ViolationsPage() {
                   </div>
                 </div>
               }
-              onSearch={(val) => logic.actions.setGlobalSearch(val)} 
+              onSearch={(val) => {
+                  logic.actions.setGlobalSearch(val);
+                  setCurrentPage(1); // العودة للصفحة الأولى عند البحث
+              }} 
               watchDeps={[logic.state.selectedIds, logic.totals.totalSum, logic.state.filterStatus]}
             />
 
             <style>{`
+              .custom-checkbox { width: 20px; height: 20px; accent-color: ${THEME.goldAccent}; cursor: pointer; transition: 0.1s; }
               .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
               .btn-main-glass.gold { background: linear-gradient(135deg, rgba(197, 160, 89, 0.9), rgba(151, 115, 50, 1)); color: white; }
               .btn-main-glass.green { background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(22, 163, 74, 0.9)); color: white; }
@@ -220,17 +276,17 @@ export default function ViolationsPage() {
               <RawasiSmartTable 
                   data={logic.data} 
                   columns={columns} 
-                  selectable={true}
-                  selectedIds={logic.state.selectedIds}
-                  onSelectionChange={logic.actions.setSelectedIds}
                   enablePagination={true}
-                  rowsPerPage={50}
+                  currentPage={currentPage}
+                  totalItems={logic.data.length}
+                  rowsPerPage={rowsPerPage}
+                  onPageChange={setCurrentPage}
+                  // أزلنا onRowsChange لتثبيت 50 سطر كما هو مطلوب أو يمكنك إضافتها إذا أردت
               />
             )}
         </MasterPage>
       </div>
 
-      {/* مودال تسجيل المخالفة باستخدام Portal لإدارة الطبقات والبحث الذكي[cite: 9] */}
       {mounted && logic.state.isEditModalOpen && logic.state.editingRecord && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100dvh', backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 999999, padding: '5vh 20px', overflowY: 'auto' }}>
           

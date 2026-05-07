@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom'; 
 import { useQueryClient } from '@tanstack/react-query'; 
-import { supabase } from '@/lib/supabase'; // 🚀 استدعاء مهم جداً للسيرفر
 import { useExpensesLogic } from './expenses_logic';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo'; 
@@ -289,7 +288,10 @@ export default function ExpensesPage() {
                           credit_account_id: MAIN_TREASURY_ID,
                           credit_account_name: MAIN_TREASURY_NAME,
                           partner_id: row.partner_id, 
-                          payee_name: row.supplier_name || row.creditor_account,
+                          
+                          // 🚀 ✅ السطر اللي تم تعديله: بياخد المقاول الأول، ولو مش موجود ياخد المستفيد، ولو مش موجود ياخد اسم الحساب الدائن
+                          payee_name: row.sub_contractor || row.payee_name || row.creditor_account,
+                          
                           site_ref: row.site_ref,
                           description: `سداد مصروف: ${row.description || ''} (فاتورة: ${row.invoice_number || 'غير محدد'})`,
                           payment_method: 'نقدي',
@@ -573,7 +575,6 @@ export default function ExpensesPage() {
                         queryClient.setQueryData(['expenses'], previousCache);
                         console.error("Voucher save failed:", error);
                     } 
-                    // 🛑 شلنا الـ invalidateQueries عشان نمنع سحب الداتا القديمة قبل ما الداتا بيز تخلص
                 }}
                 isSaving={pvLogic.isLoading}
                 partnerBalance={pvLogic.state.partnerBalance}

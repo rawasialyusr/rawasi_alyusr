@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from 'react'; 
+import { useState, useMemo, useEffect, useDeferredValue } from 'react'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -10,24 +10,22 @@ export function useLaborLogsLogic() {
     const queryClient = useQueryClient(); 
     const { showToast } = useToast();
 
-    // 🎯 دالة سحرية مساعدة: لتحديث سطر في الكاش بدقة شديدة بدون مسح باقي البيانات
+    // 🎯 دالة سحرية مساعدة لتحديث الكاش
     const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
         queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
             if (!oldData) return [];
             const stringIds = targetIds.map(String);
             return oldData.map(row => 
-                stringIds.includes(String(row.id)) 
-                    ? { ...row, ...updatedFields } 
-                    : row 
+                stringIds.includes(String(row.id)) ? { ...row, ...updatedFields } : row 
             );
         });
     };
 
-    // 💎 الحسابات الثابتة حسب الميثاق
     const DEBIT_ACCOUNT_ID = '70d181ba-6385-4c1e-b0fc-d5b1f800dd2c'; 
     const CREDIT_ACCOUNT_ID = '39f878cd-dc58-4a2a-a199-50f6fca983d4'; 
 
     const [searchTerm, setSearchTerm] = useState(''); 
+    const deferredSearch = useDeferredValue(searchTerm); // 🚀 تأخير ذكي لمنع التقطيع أثناء الكتابة
     const [filterStatus, setFilterStatus] = useState('الكل');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -37,19 +35,19 @@ export function useLaborLogsLogic() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    // 🚀 تحديث Default Log (بدون مقاول وبدون استقطاع)
     const defaultLog = { 
         work_date: new Date().toISOString().split('T')[0], 
-        sub_contractor: '', worker_name: '', site_ref: '', work_item: '', 
+        worker_name: '', site_ref: '', work_item: '', 
         unit: '', skill_level: '', production_desc: '', 
         tareeha: '', productivity: '', completion_percentage: '', 
-        daily_wage: '', attendance_value: '1', notes: '',
+        daily_wage: '', attendance_value: 1, notes: '',
         worker_partner_id: '', project_id: '',
         credit_account_id: CREDIT_ACCOUNT_ID, credit_account_name: 'رواتب وأجور مستحقة'
     };
     
     const [currentLog, setCurrentLog] = useState<any>(defaultLog);
 
-    // 🚀 سحب البيانات مرة واحدة مع حفظها في الكاش لمدة 5 دقائق
     const { data: logs = [], isLoading: isLogsLoading } = useQuery({
         queryKey: ['labor_logs'],
         queryFn: () => fetchAllSupabaseData(supabase, 'labor_daily_logs'),
@@ -62,43 +60,42 @@ export function useLaborLogsLogic() {
         staleTime: 1000 * 60 * 60, 
     });
 
-    const stats = useMemo(() => {
-        if (!logs || logs.length === 0) return { sum: 0, attendance: 0, count: 0 };
-        const sum = logs.reduce((acc: number, row: any) => acc + Number(row.daily_wage || 0), 0);
-        const attendance = logs.reduce((acc: number, row: any) => acc + Number(row.attendance_value || 0), 0);
-        return { sum, attendance, count: logs.length };
-    }, [logs]);
-
     const workersList = useMemo(() => partners.filter((p: any) => p.partner_type === 'عامل يومية' || p.partner_type === 'موظف'), [partners]);
     const sitesList = useMemo(() => partners.filter((p: any) => p.partner_type === 'جهة داخلية' || p.partner_type === 'عميل' || p.partner_type === 'مقاول'), [partners]);
 
+    // 🌟 دعم الفلترة القادمة من الواجهة العامة للمشروع
     useEffect(() => {
-        if (!currentLog) return;
-        const t = parseFloat(currentLog.tareeha);
-        const p = parseFloat(currentLog.productivity);
-        if (!isNaN(t) && t > 0 && !isNaN(p)) {
-            const percentage = Math.round((p / t) * 100).toString(); 
-            if (currentLog.completion_percentage !== percentage) {
-                setCurrentLog((prev: any) => ({ ...prev, completion_percentage: percentage }));
-            }
-        } else if ((!currentLog.productivity || !currentLog.tareeha) && currentLog.completion_percentage !== '') {
-            setCurrentLog((prev: any) => ({ ...prev, completion_percentage: '' }));
-        }
-    }, [currentLog?.tareeha, currentLog?.productivity]);
+        const handleDateChange = (e: any) => { setDateFrom(e.detail?.start || ''); setDateTo(e.detail?.end || ''); setCurrentPage(1); };
+        const handleSearchChange = (e: any) => { setSearchTerm(e.detail || ''); setCurrentPage(1); };
+        window.addEventListener('globalDateFilter', handleDateChange as EventListener);
+        window.addEventListener('globalSearch', handleSearchChange as EventListener);
+        return () => {
+            window.removeEventListener('globalDateFilter', handleDateChange as EventListener);
+            window.removeEventListener('globalSearch', handleSearchChange as EventListener);
+        };
+    }, []);
 
+    // 🚀 الفلترة الأساسية الصاروخية
     const allFiltered = useMemo(() => {
         if (!logs) return [];
         const uniqueLogsMap = new Map();
-        logs.forEach((item: any) => {
-            if (item && item.id) uniqueLogsMap.set(item.id, item);
-        });
+        logs.forEach((item: any) => { if (item && item.id) uniqueLogsMap.set(item.id, item); });
         const uniqueLogs = Array.from(uniqueLogsMap.values());
 
         const sortedLogs = [...uniqueLogs].sort((a: any, b: any) => new Date(b.work_date).getTime() - new Date(a.work_date).getTime());
+        
         return sortedLogs.filter((log: any) => {
-            const search = searchTerm.toLowerCase();
-            const matchesGlobal = (log.worker_name || '').toLowerCase().includes(search) || (log.site_ref || '').toLowerCase().includes(search) || (log.work_item || '').toLowerCase().includes(search);
-            const matchesStatus = filterStatus === 'الكل' || (filterStatus === 'مرحل' && log.is_posted) || (filterStatus === 'معلق' && !log.is_posted);
+            const search = (deferredSearch || '').toLowerCase().trim();
+            const matchesGlobal = search === '' || 
+                                  (log.worker_name || '').toLowerCase().includes(search) || 
+                                  (log.site_ref || '').toLowerCase().includes(search) || 
+                                  (log.work_item || '').toLowerCase().includes(search) ||
+                                  (log.production_desc || '').toLowerCase().includes(search) ||
+                                  (log.notes || '').toLowerCase().includes(search);
+            
+            const matchesStatus = filterStatus === 'الكل' || 
+                                  (filterStatus === 'مرحل' && log.is_posted === true) || 
+                                  (filterStatus === 'معلق' && (log.is_posted === false || log.is_posted === null));
             
             const logDate = new Date(log.work_date);
             const matchesFrom = dateFrom ? logDate >= new Date(dateFrom) : true;
@@ -106,16 +103,22 @@ export function useLaborLogsLogic() {
 
             return matchesGlobal && matchesStatus && matchesFrom && matchesTo;
         });
-    }, [logs, searchTerm, filterStatus, dateFrom, dateTo]);
+    }, [logs, deferredSearch, filterStatus, dateFrom, dateTo]);
 
-    const paginatedLogs = useMemo(() => {
-        const start = (currentPage - 1) * rowsPerPage;
-        return allFiltered.slice(start, start + rowsPerPage);
-    }, [allFiltered, currentPage, rowsPerPage]);
+    // 💰 تحديث الأرقام الإجمالية
+    const stats = useMemo(() => {
+        if (!allFiltered || allFiltered.length === 0) return { sum: 0, attendance: 0, count: 0 };
+        const sum = allFiltered.reduce((acc: number, row: any) => {
+            const totalWage = Number(row.daily_wage || 0);
+            return acc + Math.max(0, totalWage);
+        }, 0);
+        const attendance = allFiltered.reduce((acc: number, row: any) => acc + Number(row.attendance_value || 0), 0);
+        return { sum, attendance, count: allFiltered.length };
+    }, [allFiltered]);
 
-    const totalPages = Math.ceil(allFiltered.length / rowsPerPage) || 1;
+    const totalPages = Math.max(1, Math.ceil(allFiltered.length / rowsPerPage));
 
-    // 💾 التحديث الذكي: إرجاع السطر المعدل فقط وإضافته للكاش (بدون ريفرش)
+    // 💾 التحديث الذكي للحفظ (الكاش)
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
             if (editingId) {
@@ -133,8 +136,6 @@ export function useLaborLogsLogic() {
             setIsAddModalOpen(false);
             setEditingId(null);
             setCurrentLog(defaultLog);
-            
-            // 🚀 التحديث اللحظي للكاش (سطر واحد فقط)
             if (res && res.data) {
                 queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
                     if (!oldData) return [res.data];
@@ -151,10 +152,16 @@ export function useLaborLogsLogic() {
 
     const handleSaveLog = () => {
         if (!currentLog.worker_name) return showToast('يجب إدخال اسم العامل!', 'error');
-        
+
+        let finalPercentage = currentLog.completion_percentage;
+        const t = parseFloat(currentLog.tareeha);
+        const p = parseFloat(currentLog.productivity);
+        if (!isNaN(t) && t > 0 && !isNaN(p)) {
+            finalPercentage = Math.round((p / t) * 100);
+        }
+
         const payload = {
             work_date: currentLog.work_date, 
-            sub_contractor: currentLog.sub_contractor || null,
             worker_name: currentLog.worker_name, 
             site_ref: currentLog.site_ref || null,
             work_item: currentLog.work_item || null, 
@@ -163,9 +170,9 @@ export function useLaborLogsLogic() {
             production_desc: currentLog.production_desc || null,             
             tareeha: currentLog.tareeha || null, 
             productivity: currentLog.productivity || null, 
-            completion_percentage: currentLog.completion_percentage ? Number(currentLog.completion_percentage) : null, 
+            completion_percentage: finalPercentage ? Number(finalPercentage) : null, 
             daily_wage: Number(currentLog.daily_wage) || 0,
-            attendance_value: Number(currentLog.attendance_value) || 1, 
+            attendance_value: Number(currentLog.attendance_value ?? 1), 
             notes: currentLog.notes || null,
             worker_partner_id: currentLog.worker_partner_id || null,
             project_id: currentLog.project_id || null,
@@ -175,91 +182,87 @@ export function useLaborLogsLogic() {
         saveMutation.mutate(payload);
     };
 
-    // 🗑️ الحذف اللحظي (إزالة السطر من الكاش فوراً)
     const deleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
-            const { error } = await supabase.from('labor_daily_logs').delete().in('id', ids);
-            if (error) throw error;
-            return ids; // تمرير الـ IDs لدالة onSuccess
-        },
-        onSuccess: (deletedIds) => {
-            showToast('تم الحذف بنجاح 🗑️', 'success');
-            setSelectedIds([]);
-            
-            // 🚀 مسح السطور من الكاش بدون ريفرش
-            const stringDeletedIds = deletedIds.map(String);
+            const previousData = queryClient.getQueryData(['labor_logs']);
+            const stringDeletedIds = ids.map(String);
             queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
                 if (!oldData) return [];
                 return oldData.filter(log => !stringDeletedIds.includes(String(log.id)));
             });
+
+            const { error } = await supabase.rpc('delete_labor_logs_bulk', { p_ids: ids });
+            if (error) {
+                queryClient.setQueryData(['labor_logs'], previousData);
+                throw error;
+            }
+            return ids; 
+        },
+        onSuccess: () => {
+            showToast('تم الحذف بنجاح 🗑️', 'success');
+            setSelectedIds([]);
         },
         onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, 'error')
     });
 
-    // 🚀 الترحيل الذكي والسريع
     const postMutation = useMutation({
         mutationFn: async (idsToPost: string[]) => {
             if (!idsToPost || idsToPost.length === 0) throw new Error('لا يوجد سجلات للترحيل');
-
-            // 1. التحديث اللحظي للواجهة 
+            const previousData = queryClient.getQueryData(['labor_logs']);
             updateRowsInCache(idsToPost, { is_posted: true });
 
-            // 2. إرسال أمر الترحيل للداتا بيز
             const { error } = await supabase.rpc('post_labor_logs_bulk', { p_ids: idsToPost });
-            if (error) throw error;
+            if (error) {
+                queryClient.setQueryData(['labor_logs'], previousData); 
+                throw error;
+            }
         },
         onSuccess: () => {
             showToast('تم الترحيل وسماع كشف الحساب بنجاح ✅', 'success');
             setSelectedIds([]);
-            // 🛑 ألغينا الـ invalidateQueries عشان الشاشة ماترمش وتعتمد على الكاش اللحظي
         },
-        onError: (err: any) => {
-            showToast(`فشل الترحيل: ${err.message}`, 'error');
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] }); // ريفرش فقط في حالة الخطأ لاسترجاع الحالة الأصلية
-        }
+        onError: (err: any) => showToast(`فشل الترحيل: ${err.message}`, 'error')
     });
 
-    // ⏸️ فك الترحيل الذكي والسريع
     const unpostMutation = useMutation({
         mutationFn: async (idsToSuspend: string[]) => {
             if (!idsToSuspend || idsToSuspend.length === 0) throw new Error('لا يوجد سجلات للتعليق');
-
-            // 1. التحديث اللحظي للواجهة
+            const previousData = queryClient.getQueryData(['labor_logs']);
             updateRowsInCache(idsToSuspend, { is_posted: false });
 
-            // 2. إرسال أمر فك الترحيل للداتا بيز
             const { error } = await supabase.rpc('unpost_labor_logs_bulk', { record_ids: idsToSuspend });
-            if (error) throw error;
+            if (error) {
+                queryClient.setQueryData(['labor_logs'], previousData); 
+                throw error;
+            }
         },
         onSuccess: () => {
             showToast('تم إلغاء الترحيل وتطهير الحسابات بنجاح ⏸️', 'warning');
             setSelectedIds([]);
-            // 🛑 ألغينا الـ invalidateQueries هنا كمان
         },
-        onError: (err: any) => {
-            showToast(`عذراً: ${err.message}`, 'error');
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
-        }
+        onError: (err: any) => showToast(`عذراً: ${err.message}`, 'error')
     });
 
     const exportToExcel = () => {
-        const ws = XLSX.utils.json_to_sheet(allFiltered.map(log => ({
-            'التاريخ': log.work_date,
-            'اسم العامل': log.worker_name,
-            'الموقع': log.site_ref || '-',
-            'البند': log.work_item || '-',
-            'الوحدة': log.unit || '-',
-            'مستوى المهارة': log.skill_level || '-',
-            'الطريحة': log.tareeha || '-',
-            'الإنتاجية': log.productivity || '-',
-            'الإنجاز': log.completion_percentage ? `${log.completion_percentage}%` : '-',
-            'اليومية': log.daily_wage,
-            'الاستحقاق الفعلي': Number(log.daily_wage || 0) * Number(log.attendance_value || 1),
-            'الحضور': log.attendance_value === 1 ? 'يوم كامل' : log.attendance_value === 0.5 ? 'نصف يوم' : 'غياب',
-            'المقاول': log.sub_contractor || '-',
-            'ملاحظات': log.notes || '-',
-            'الحالة': log.is_posted ? 'مرحل' : 'معلق'
-        })));
+        const ws = XLSX.utils.json_to_sheet(allFiltered.map(log => {
+            const totalWage = Number(log.daily_wage || 0);
+            return {
+                'التاريخ': log.work_date,
+                'اسم العامل': log.worker_name,
+                'الموقع': log.site_ref || '-',
+                'البند': log.work_item || '-',
+                'الوحدة': log.unit || '-',
+                'مستوى المهارة': log.skill_level || '-',
+                'الطريحة': log.tareeha || '-',
+                'الإنتاجية': log.productivity || '-',
+                'الإنجاز': log.completion_percentage ? `${log.completion_percentage}%` : '-',
+                'اليومية': log.daily_wage,
+                'الصافي الفعلي': Math.max(0, totalWage),
+                'الحضور': log.attendance_value === 1 ? 'يوم كامل' : log.attendance_value === 0.5 ? 'نصف يوم' : 'غياب',
+                'ملاحظات': log.notes || '-',
+                'الحالة': log.is_posted ? 'مرحل' : 'معلق'
+            }
+        }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "يوميات_العمالة");
         XLSX.writeFile(wb, "يوميات_العمالة.xlsx");
@@ -278,8 +281,11 @@ export function useLaborLogsLogic() {
 
     return {
         isLoading: isLogsLoading || isPartnersLoading, 
-        searchTerm, setSearchTerm, filterStatus, setFilterStatus, dateFrom, setDateFrom, dateTo, setDateTo,
-        filteredLogs: paginatedLogs, stats, totalResults: allFiltered.length,
+        searchTerm, setSearchTerm: (term: string) => { setSearchTerm(term); setCurrentPage(1); }, 
+        filterStatus, setFilterStatus: (status: string) => { setFilterStatus(status); setCurrentPage(1); }, 
+        dateFrom, setDateFrom, dateTo, setDateTo,
+        filteredLogs: allFiltered, // 🚀 بنبعت الداتا المفلترة كلها للجدول الذكي وهو يقسمها
+        stats, totalResults: allFiltered.length,
         selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, 
         isAddModalOpen, setIsAddModalOpen, currentLog, setCurrentLog, defaultLog,
         isSaving: saveMutation.isPending, 

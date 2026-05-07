@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react'; 
+import { createPortal } from 'react-dom'; // 🚀 ضفنا الـ createPortal عشان المودال يظهر صح
 import { usePaymentVouchersLogic } from './payment_vouchers_logic';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo'; 
@@ -129,7 +130,7 @@ export default function PaymentVouchersPage() {
     }
   ], [logic.state.selectedIds, isAllVisibleSelected, currentVisibleIds, logic.actions]); 
 
-  // 🚀 القائمة الجانبية للأزرار الإجرائية (جسر الترحيل)
+  // 🚀 القائمة الجانبية للأزرار الإجرائية
   const sidebarActions = useMemo(() => {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -151,6 +152,11 @@ export default function PaymentVouchersPage() {
               </button>
             </div>
             
+            {/* 🚀 الزرار الجديد بتاع التصحيح المجمع */}
+            <SecureAction module="payments" action="edit">
+              <button className="btn-main-glass blue" onClick={() => logic.actions.setIsBulkFixModalOpen(true)}>🛠️ تصحيح التوجيه مجمع</button>
+            </SecureAction>
+
             {logic.state.selectedIds.length === 1 && (
               <SecureAction module="payments" action="edit">
                 <button className="btn-main-glass white" onClick={logic.actions.handleEditSelected}>✏️ تعديل السجل</button>
@@ -183,8 +189,6 @@ export default function PaymentVouchersPage() {
                 </div>
               }
               actions={sidebarActions}
-              
-              // 🌟 الفلاتر الإضافية أصبحت أبسط بكثير بفضل المحرك المركزي!
               customFilters={
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
                   <div>
@@ -203,7 +207,6 @@ export default function PaymentVouchersPage() {
                   </div>
                 </div>
               }
-              // تمت إزالة globalSearch من هنا لأن السايد بار الجديد يرسل CustomEvent للوجيك مباشرة!
               watchDeps={[logic.state.selectedIds, logic.totals.totalAmount, logic.state.rowsPerPage, logic.data.length, logic.state.filterStatus]}
             />
 
@@ -211,6 +214,7 @@ export default function PaymentVouchersPage() {
               .custom-checkbox { width: 20px; height: 20px; accent-color: ${THEME.goldAccent}; cursor: pointer; transition: 0.1s; }
               .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
               .btn-main-glass.gold { background: linear-gradient(135deg, rgba(197, 160, 89, 0.9), rgba(151, 115, 50, 1)); color: white; }
+              .btn-main-glass.blue { background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(2, 132, 199, 0.9)); color: white; }
               .btn-main-glass.green { background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(22, 163, 74, 0.9)); color: white; }
               .btn-main-glass.yellow { background: linear-gradient(135deg, rgba(245, 158, 11, 0.8), rgba(217, 119, 6, 0.9)); color: white; }
               .btn-main-glass.white { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
@@ -225,19 +229,70 @@ export default function PaymentVouchersPage() {
               <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
             ) : (
               <RawasiSmartTable 
-    data={logic.data}
-    columns={voucherColumns} 
-    onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
-    enablePagination={true}
-    currentPage={logic.state.currentPage}
-    totalItems={logic.data.length}
-    rowsPerPage={logic.state.rowsPerPage}
-    onPageChange={logic.actions.setCurrentPage}
-    onRowsChange={logic.actions.setRowsPerPage}
-/>
+                data={logic.data}
+                columns={voucherColumns} 
+                onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
+                enablePagination={true}
+                currentPage={logic.state.currentPage}
+                totalItems={logic.data.length}
+                rowsPerPage={logic.state.rowsPerPage}
+                onPageChange={logic.actions.setCurrentPage}
+                onRowsChange={logic.actions.setRowsPerPage}
+              />
             )}
         </MasterPage>
       </div>
+
+      {/* 🚀 المودال الجديد للتصحيح المجمع */}
+      {mounted && logic.state.isBulkFixModalOpen && createPortal(
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(10px)', padding: '50px 20px', overflowY: 'auto' }}>
+              <div style={{ position: 'fixed', inset: 0 }} onClick={() => logic.actions.setIsBulkFixModalOpen(false)} />
+              <div className="cinematic-scroll" style={{ background: 'white', borderRadius: '32px', width: '100%', maxWidth: '600px', padding: '40px', position: 'relative', zIndex: 10, margin: 'auto', boxShadow: '0 50px 100px -20px rgba(0,0,0,0.5)' }}>
+                  <h2 style={{ fontWeight: 900, textAlign: 'center', marginBottom: '30px', color: THEME.primary, fontSize: '24px' }}>🛠️ تصحيح الحسابات لـ ({logic.state.selectedIds.length}) سند معلق</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', zIndex: 50, position: 'relative' }}>
+                      <div style={{ zIndex: 60, position: 'relative' }}>
+                          <SmartCombo 
+                              label="🧾 الحساب المدين الجديد (من حـ)" 
+                              table="accounts" 
+                              displayCol="name" 
+                              initialDisplay={logic.state.bulkFixAccounts.debit_account_name} 
+                              onSelect={(val:any) => {
+                                  logic.actions.setBulkFixAccounts({
+                                      ...logic.state.bulkFixAccounts, 
+                                      debit_account_name: val?.name || '',
+                                      debit_account_id: val?.id || null 
+                                  });
+                              }} 
+                              strict={true} 
+                          />
+                      </div>
+                      <div style={{ zIndex: 50, position: 'relative' }}>
+                          <SmartCombo 
+                              label="🏦 الحساب الدائن الجديد (إلى حـ)" 
+                              table="accounts" 
+                              displayCol="name" 
+                              initialDisplay={logic.state.bulkFixAccounts.credit_account_name} 
+                              onSelect={(val:any) => {
+                                  logic.actions.setBulkFixAccounts({
+                                      ...logic.state.bulkFixAccounts, 
+                                      credit_account_name: val?.name || '',
+                                      credit_account_id: val?.id || null 
+                                  });
+                              }} 
+                              strict={true} 
+                          />
+                      </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '15px', marginTop: '40px' }}>
+                      <button onClick={logic.actions.handleBulkFixSave} disabled={logic.isLoading} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: THEME.info, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px' }}>
+                          {logic.isLoading ? '⏳ جاري الحفظ...' : '✅ تطبيق التعديلات'}
+                      </button>
+                      <button onClick={()=>logic.actions.setIsBulkFixModalOpen(false)} style={{ flex: 1, padding: '18px', borderRadius: '16px', border: '2px solid #e2e8f0', background: 'white', color: '#64748b', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إلغاء</button>
+                  </div>
+              </div>
+          </div>,
+          document.body
+      )}
 
       {mounted && logic.state.isEditModalOpen && (
           <PaymentVoucherModal 

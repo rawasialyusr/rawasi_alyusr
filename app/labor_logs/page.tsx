@@ -19,20 +19,66 @@ export default function LaborLogsDirectory() {
 
   const isOneSelected = logic.selectedIds.length === 1;
 
-  // 📋 1. تعريف أعمدة الجدول الذكي
+  // 🚀 استخراج العناصر الحالية لتحديد الكل بأمان تام
+  const currentVisibleIds = useMemo(() => {
+    return logic.filteredLogs
+      .slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage)
+      .map((v: any) => String(v.id));
+  }, [logic.filteredLogs, logic.currentPage, logic.rowsPerPage]);
+
+  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
+
+  // 📋 تعريف أعمدة الجدول
   const columns = useMemo(() => [
+    {
+      key: 'select',
+      label: (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox"
+                  checked={isAllVisibleSelected}
+                  title="تحديد كل الصفحة"
+                  onChange={() => {
+                      if (isAllVisibleSelected) {
+                          logic.setSelectedIds(logic.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                      } else {
+                          logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
+                      }
+                  }}
+              />
+          </div>
+      ), 
+      render: (row: any) => {
+        if (!row) return null;
+        const isSelected = logic.selectedIds.includes(String(row.id));
+        return (
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox" 
+                  checked={isSelected} 
+                  onChange={(e) => {
+                      e.stopPropagation();
+                      if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
+                      else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
+                  }} 
+              />
+          </div>
+        );
+      }
+    },
     { 
       key: 'work_date', 
-      label: 'التاريخ', 
-      sortable: true,
+      label: 'التاريخ',
       render: (row: any) => {
         if (!row) return null; 
         return <span style={{ color: THEME.goldAccent, fontWeight: 900 }}>{row.work_date}</span>
       }
     },
-    { key: 'worker_name', label: 'اسم العامل', bold: true },
-    { key: 'site_ref', label: 'الموقع' },
-    { key: 'work_item', label: 'البند' },
+    { key: 'worker_name', label: 'اسم العامل', render: (row: any) => row ? <b style={{ color: THEME.primary }}>{row.worker_name}</b> : null },
+    { key: 'site_ref', label: 'الموقع', render: (row: any) => row?.site_ref || '-' },
+    { key: 'work_item', label: 'البند', render: (row: any) => row?.work_item || '-' },
     { key: 'unit', label: 'الوحدة', render: (row: any) => row?.unit || '-' },
     { key: 'skill_level', label: 'المهارة', render: (row: any) => row?.skill_level || '-' },
     { key: 'production_desc', label: 'وصف الإنتاج', render: (row: any) => row?.production_desc || '-' },
@@ -40,20 +86,17 @@ export default function LaborLogsDirectory() {
     { key: 'productivity', label: 'الإنتاجية', render: (row: any) => row?.productivity || '-' },
     { 
       key: 'completion_percentage', 
-      label: 'الإنجاز', 
-      render: (row: any) => row?.completion_percentage ? `${row.completion_percentage}%` : '-' 
+      label: 'الإنجاز',
+      render: (row: any) => row?.completion_percentage ? <span style={{ fontWeight: 800 }}>{row.completion_percentage}%</span> : '-'
     },
     { 
       key: 'daily_wage', 
-      label: 'اليومية 💰', 
-      render: (row: any) => {
-        if (!row) return null;
-        return <span style={{ fontWeight: 900, color: '#059669' }}>{logic.formatCurrency(row.daily_wage || 0)}</span>
-      }
+      label: 'اليومية',
+      render: (row: any) => row ? <span style={{ fontWeight: 900, color: '#059669', fontSize: '14px' }}>{logic.formatCurrency(row.daily_wage || 0)}</span> : null
     },
     { 
       key: 'attendance_value', 
-      label: 'الحضور', 
+      label: 'الحضور',
       render: (row: any) => {
         if (!row) return null;
         const style = logic.getAttendanceStyle(String(row.attendance_value));
@@ -64,11 +107,10 @@ export default function LaborLogsDirectory() {
         );
       }
     },
-    { key: 'sub_contractor', label: 'المقاول', render: (row: any) => row?.sub_contractor || 'المركز' },
     { key: 'notes', label: 'ملاحظات', render: (row: any) => row?.notes || '-' },
     { 
       key: 'is_posted', 
-      label: 'الحالة', 
+      label: 'الحالة',
       render: (row: any) => {
         if (!row) return null;
         return (
@@ -78,10 +120,9 @@ export default function LaborLogsDirectory() {
         );
       }
     }
-  ], [logic]);
+  ], [logic.selectedIds, isAllVisibleSelected, currentVisibleIds, logic]); 
 
-  // 🚀 2. إجراءات السايد بار
-  const sidebarActions = (
+  const sidebarActions = useMemo(() => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="labor_logs" action="create">
         <button className="btn-main-glass gold" onClick={() => {
@@ -99,46 +140,37 @@ export default function LaborLogsDirectory() {
       </SecureAction>
       
       {logic.selectedIds.length > 0 && (
-        <>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
           <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
           <SecureAction module="labor_logs" action="post">
-            <button className="btn-main-glass blue" onClick={logic.handlePostSelected} disabled={logic.isPosting}>
-                {logic.isPosting ? '⏳ جاري الترحيل...' : '🚀 اعتماد وترحيل'}
-            </button>
+            <button className="btn-main-glass green" onClick={logic.handlePostSelected}>🚀 اعتماد وترحيل</button>
           </SecureAction>
-          
           <SecureAction module="labor_logs" action="post">
-            <button className="btn-main-glass" style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white'}} onClick={logic.handleSuspendSelected} disabled={logic.isSuspending}>
-                {logic.isSuspending ? '⏳ جاري التعليق...' : '⏸️ تعليق اليومية'}
-            </button>
+            <button className="btn-main-glass yellow" onClick={logic.handleSuspendSelected}>↩️ فك الترحيل</button>
           </SecureAction>
-
           <SecureAction module="labor_logs" action="delete">
             <button className="btn-main-glass red" onClick={logic.handleDeleteSelected}>🗑️ حذف نهائي</button>
           </SecureAction>
-        </>
+        </div>
       )}
 
       <button className="btn-main-glass white" onClick={logic.exportToExcel}>📊 تصدير إكسل</button>
       <button className="btn-main-glass white" onClick={() => window.print()}>🖨️ طباعة الكشف</button>
     </div>
-  );
+  ), [logic.selectedIds, isOneSelected, logic]); 
   
   return (
     <>
-      <MasterPage 
-        title="يوميات العمالة" 
-        subtitle="إدارة الحضور والأجور الميدانية - رواسي اليسر للمقاولات"
-      >
+      <MasterPage title="يوميات العمالة" subtitle="إدارة الحضور والأجور والإنتاجية الميدانية">
         <RawasiSidebarManager 
           summary={
             <div className="summary-glass-card">
               <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي الأجور المحسوبة 💰</span>
               <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.goldAccent, marginTop:'5px'}}>
-                {logic.formatCurrency(logic.stats.sum || 0)}
+                {logic.formatCurrency(logic.stats.sum)}
               </div>
               <div style={{fontSize:'11px', color:'#10b981', fontWeight:800, marginTop:'5px'}}>
-                إجمالي السجلات: {logic.totalResults}
+                إجمالي السجلات: {logic.stats.count}
               </div>
             </div>
           }
@@ -170,15 +202,13 @@ export default function LaborLogsDirectory() {
                   ))}
                 </div>
               </div>
-
-              <div className="glass-divider" />
               
               <div>
                 <label className="glass-label">عرض السجلات:</label>
                 <select 
                   className="glass-input dark-select" 
                   value={logic.rowsPerPage} 
-                  onChange={(e) => { logic.setRowsPerPage(Number(e.target.value)); logic.setCurrentPage(1); }}
+                  onChange={(e) => logic.setRowsPerPage(Number(e.target.value))}
                 >
                   <option value={50}>50 سجل</option>
                   <option value={100}>100 سجل</option>
@@ -187,18 +217,15 @@ export default function LaborLogsDirectory() {
               </div>
             </div>
           }
-          watchDeps={[logic.selectedIds, logic.stats.sum, logic.searchTerm, logic.filterStatus, logic.rowsPerPage]}
+          watchDeps={[logic.selectedIds, logic.stats.sum, logic.filterStatus, logic.rowsPerPage]}
         />
 
         <style>{`
           .glass-label { color: white; fontSize: 12px; fontWeight: 900; display: block; marginBottom: 8px; }
-          .filter-btn { flex: 1; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: none; fontWeight: 900; cursor: pointer; fontSize: 11px; transition: 0.3s; }
+          .glass-input { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; font-weight: 800; outline: none; font-size: 12px; }
+          .filter-btn { flex: 1; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: none; font-weight: 900; cursor: pointer; font-size: 11px; transition: 0.3s; }
           .filter-btn.active { background: ${THEME.goldAccent}; color: #1e293b; }
-          .glass-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 5px 0; }
           .dark-select option { color: #000; }
-          .pagination-container { marginTop: 20px; display: flex; justifyContent: center; alignItems: center; gap: 15px; paddingBottom: 20px; }
-          .page-indicator { background: ${THEME.coffeeDark}; color: white; padding: 10px 25px; border-radius: 12px; fontWeight: 900; }
-          .btn-nav { padding: 10px 20px; border-radius: 12px; border: 1px solid #cbd5e1; background: white; fontWeight: 900; cursor: pointer; }
           .glass-badge { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; display: inline-block; }
           
           /* أنماط المودال */
@@ -207,286 +234,119 @@ export default function LaborLogsDirectory() {
           .success-text { fontWeight: 900; color: ${THEME.success}; }
           .save-btn { flex: 2; background: ${THEME.coffeeDark}; color: white; padding: 16px; border-radius: 15px; border: none; fontWeight: 900; cursor: pointer; fontSize: 16px; transition: 0.3s; }
           .cancel-btn { flex: 1; background: #f1f5f9; color: #64748b; padding: 16px; border-radius: 15px; border: none; fontWeight: 900; cursor: pointer; transition: 0.3s; }
-          .save-btn:hover { background: ${THEME.goldAccent}; color: #1e293b; }
         `}</style>
 
-        {/* 💎 منطقة الجدول الذكي */}
         <div className="no-print">
           {logic.isLoading ? (
-            <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>
-              ⏳ جاري المزامنة مع رواسي...
-            </div>
+            <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة مع رواسي...</div>
           ) : (
-            <div className="cinematic-scroll" style={{ background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-              <RawasiSmartTable 
-                columns={columns} 
-                data={logic.filteredLogs}
-                isLoading={logic.isLoading}
-                selectable={true} 
-                selectedIds={logic.selectedIds}
-                onSelectionChange={logic.setSelectedIds}
-              />
-              
-              <div className="pagination-container">
-                <button 
-                  disabled={logic.currentPage === 1} 
-                  onClick={() => logic.setCurrentPage(p => p - 1)} 
-                  className="btn-nav"
-                >
-                  السابق
-                </button>
-                <div className="page-indicator">
-                  صفحة {logic.currentPage} من {logic.totalPages || 1}
-                </div>
-                <button 
-                  disabled={logic.currentPage >= logic.totalPages} 
-                  onClick={() => logic.setCurrentPage(p => p + 1)} 
-                  className="btn-nav"
-                >
-                  التالي
-                </button>
-              </div>
-            </div>
+            <RawasiSmartTable 
+              columns={columns} 
+              data={logic.filteredLogs}
+              enablePagination={true}
+              currentPage={logic.currentPage}
+              totalItems={logic.filteredLogs.length}
+              rowsPerPage={logic.rowsPerPage}
+              onPageChange={logic.setCurrentPage}
+              onRowsChange={logic.setRowsPerPage}
+            />
           )}
-        </div>
-
-        {/* 🖨️ نسخة الطباعة القانونية */}
-        <div className="print-only" style={{ display: 'none' }}>
-          <div className="print-header">
-            <div style={{ textAlign: 'right' }}>
-              <h1 style={{ margin: 0, fontSize: '26pt', color: THEME.coffeeDark, fontWeight: 900 }}>سجل يوميات العمالة الميدانية</h1>
-              <p style={{ margin: 0, fontSize: '14pt', color: THEME.goldAccent, fontWeight: 700 }}>رواسي اليسر للمقاولات</p>
-            </div>
-            <img src="/RYC_Logo.png" style={{ width: '180px' }} alt="Logo" />
-          </div>
-          <table className="print-table">
-            <thead>
-              <tr>
-                <th>التاريخ</th><th>اسم العامل</th><th>الموقع</th><th>البند</th><th>الوحدة</th>
-                <th>المهارة</th><th>وصف الإنتاج</th><th>الطريحة</th><th>الإنتاجية</th><th>الإنجاز</th>
-                <th>اليومية</th><th>الحضور</th><th>المقاول</th><th>ملاحظات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logic.filteredLogs.map((l:any, idx: number) => (
-                <tr key={`print-${l.id}-${idx}`}>
-                  <td>{l.work_date}</td>
-                  <td>{l.worker_name}</td>
-                  <td>{l.site_ref || '-'}</td>
-                  <td>{l.work_item || '-'}</td>
-                  <td>{l.unit || '-'}</td>
-                  <td>{l.skill_level || '-'}</td>
-                  <td>{l.production_desc || '-'}</td>
-                  <td>{l.tareeha || '-'}</td>
-                  <td>{l.productivity || '-'}</td>
-                  <td>{l.completion_percentage ? `${l.completion_percentage}%` : '-'}</td>
-                  <td>{logic.formatCurrency(l.daily_wage)}</td>
-                  <td>{l.attendance_value === 1 ? 'يوم كامل' : l.attendance_value === 0.5 ? 'نصف يوم' : 'غياب'}</td>
-                  <td>{l.sub_contractor || '-'}</td>
-                  <td>{l.notes || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </MasterPage>
 
+      {/* 🚀 المودال مع الحقول المكتملة بناءً على الاسكيما */}
       {mounted && logic.isAddModalOpen && createPortal(
-        <div 
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(67, 52, 46, 0.5)', 
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            zIndex: 999999, 
-            display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '5vh', paddingBottom: '5vh',
-            overflowY: 'auto'
-          }}
-          onClick={() => logic.setIsAddModalOpen(false)}
-        >
-          <div 
-            className="cinematic-scroll modal-content" 
-            onClick={(e) => e.stopPropagation()} 
-            style={{ 
-              background: 'white', padding: '35px', borderRadius: '24px', 
-              width: '100%', maxWidth: '850px', 
-              direction: 'rtl', boxShadow: '0 40px 100px rgba(0,0,0,0.5)',
-              margin: 'auto' 
-            }}
-          >
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(67, 52, 46, 0.5)', backdropFilter: 'blur(12px)', zIndex: 999999, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '5vh', paddingBottom: '5vh', overflowY: 'auto' }} onClick={() => logic.setIsAddModalOpen(false)}>
+          <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ background: 'white', padding: '35px', borderRadius: '24px', width: '100%', maxWidth: '900px', direction: 'rtl', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', margin: 'auto' }}>
             <h2 style={{ fontWeight: 900, color: THEME.coffeeDark, marginBottom: '25px', fontSize: '24px', borderBottom: `2px dashed ${THEME.goldAccent}`, paddingBottom: '15px' }}>
               {logic.editingId ? '✏️ تعديل بيانات اليومية' : '➕ إضافة يومية جديدة'}
             </h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                
+               {/* الصف الأول */}
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px', zIndex: 100 }}>
                  <div>
                     <label className="modal-label">📅 التاريخ</label>
-                    <input 
-                      type="date" 
-                      value={logic.currentLog.work_date || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, work_date: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <input type="date" value={logic.currentLog.work_date || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, work_date: e.target.value})} className="modal-input" />
                  </div>
-                 <SmartCombo 
-                   label="👷 اسم العامل" 
-                   table="partners" 
-                   displayCol="name" 
-                   freeText={true} 
-                   initialDisplay={logic.currentLog.worker_name} 
-                   onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, worker_name: v?.name || v, worker_partner_id: v?.id || null})} 
-                 />
+                 <SmartCombo label="👷 اسم العامل" table="partners" displayCol="name" freeText={true} initialDisplay={logic.currentLog.worker_name} onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, worker_name: v?.name || v, worker_partner_id: v?.id || null})} />
                </div>
 
+               {/* الصف الثاني */}
                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr', gap: '20px', zIndex: 90 }}>
-                 <SmartCombo 
-                   label="📍 الموقع / العمارة" 
-                   table="projects" 
-                   displayCol="Property" 
-                   searchCols="Property,project_name,project_code" 
-                   freeText={true} 
-                   initialDisplay={logic.currentLog.site_ref} 
-                   onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, site_ref: v?.Property || v, project_id: v?.id || null})} 
-                 />
-                 <SmartCombo 
-                   label="🔨 البند" 
-                   table="boq_items" 
-                   searchCols="item_name,item_code" 
-                   displayCol="item_name" 
-                   freeText={true} 
-                   initialDisplay={logic.currentLog.work_item || ''} 
-                   onSelect={(v:any) => logic.setCurrentLog({...logic.currentLog, work_item: v?.item_name || v})} 
-                 />
+                 <SmartCombo label="📍 الموقع / العمارة" table="projects" displayCol="Property" searchCols="Property,project_name,project_code" freeText={false} strict={true} initialDisplay={logic.currentLog.site_ref} onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, site_ref: v?.Property || '', project_id: v?.id || null})} />
+                 <SmartCombo label="🔨 البند" table="boq_items" searchCols="item_name,item_code" displayCol="item_name" freeText={true} initialDisplay={logic.currentLog.work_item || ''} onSelect={(v:any) => logic.setCurrentLog({...logic.currentLog, work_item: v?.item_name || v})} />
                  <div>
                     <label className="modal-label">📏 الوحدة</label>
-                    <input 
-                      type="text" 
-                      placeholder="مثال: م2، يومية" 
-                      value={logic.currentLog.unit || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, unit: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <input type="text" placeholder="مثال: م2" value={logic.currentLog.unit || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, unit: e.target.value})} className="modal-input" />
                  </div>
                </div>
 
+               {/* الصف الثالث (حقول الإنتاج والطريحة) */}
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '20px' }}>
                  <div>
                     <label className="modal-label">⭐ مستوى المهارة</label>
-                    <input 
-                      type="text" 
-                      placeholder="معلم، مساعد..." 
-                      value={logic.currentLog.skill_level || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, skill_level: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <input type="text" placeholder="معلم، مساعد..." value={logic.currentLog.skill_level || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, skill_level: e.target.value})} className="modal-input" />
                  </div>
                  <div>
                     <label className="modal-label">📝 وصف الإنتاج</label>
-                    <input 
-                      type="text" 
-                      placeholder="وصف تفصيلي للعمل..." 
-                      value={logic.currentLog.production_desc || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, production_desc: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <input type="text" placeholder="تفاصيل العمل المنجز..." value={logic.currentLog.production_desc || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, production_desc: e.target.value})} className="modal-input" />
                  </div>
                  <div>
-                    <label className="modal-label">📦 الطريحة</label>
-                    <input 
-                      type="text" 
-                      placeholder="مثال: مباني" 
-                      value={logic.currentLog.tareeha || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, tareeha: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <label className="modal-label">📦 الطريحة (المستهدف)</label>
+                    <input type="text" placeholder="مثال: 50" value={logic.currentLog.tareeha || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, tareeha: e.target.value})} className="modal-input" />
                  </div>
                </div>
 
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+               {/* الصف الرابع (الإنتاجية والأجور) */}
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
                  <div>
-                    <label className="modal-label">📈 الإنتاجية</label>
-                    <input 
-                      type="text" 
-                      placeholder="مثال: 50" 
-                      value={logic.currentLog.productivity || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, productivity: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <label className="modal-label">📈 الإنتاجية (المنفذ)</label>
+                    <input type="text" placeholder="الكمية المنفذة فعلياً" value={logic.currentLog.productivity || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, productivity: e.target.value})} className="modal-input" />
                  </div>
                  <div>
-                    <label className="modal-label">📊 الإنجاز (%)</label>
-                    <input 
-                      type="number" 
-                      min="0" max="100" 
-                      placeholder="100" 
-                      value={logic.currentLog.completion_percentage || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, completion_percentage: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <label className="modal-label">📊 نسبة الإنجاز (%)</label>
+                    <input type="number" min="0" max="100" placeholder="100" value={logic.currentLog.completion_percentage || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, completion_percentage: e.target.value})} className="modal-input" />
                  </div>
-                 <div>
-                    <label className="modal-label">💰 اليومية</label>
-                    <input 
-                      type="number" 
-                      placeholder="القيمة" 
-                      value={logic.currentLog.daily_wage || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, daily_wage: e.target.value})} 
-                      className="modal-input success-text" 
-                    />
-                 </div>
-               </div>
-
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 2fr', gap: '20px' }}>
                  <div>
                     <label className="modal-label">⏱️ الحضور</label>
-                    <select 
-                      value={logic.currentLog.attendance_value ?? 1} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, attendance_value: Number(e.target.value)})} 
-                      className="modal-input"
-                    >
+                    <select value={logic.currentLog.attendance_value ?? 1} onChange={e => logic.setCurrentLog({...logic.currentLog, attendance_value: Number(e.target.value)})} className="modal-input">
                       <option value={1}>يوم كامل</option>
                       <option value={0.5}>نصف يوم</option>
                       <option value={0}>غياب</option>
                     </select>
                  </div>
                  <div>
-                    <label className="modal-label">🏗️ المقاول (اختياري)</label>
-                    <input 
-                      type="text" 
-                      placeholder="اسم المقاول" 
-                      value={logic.currentLog.sub_contractor || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, sub_contractor: e.target.value})} 
-                      className="modal-input" 
-                    />
-                 </div>
-                 <div>
-                    <label className="modal-label">📝 الملاحظات</label>
-                    <input 
-                      type="text" 
-                      placeholder="أي ملاحظات إضافية..." 
-                      value={logic.currentLog.notes || ''} 
-                      onChange={e => logic.setCurrentLog({...logic.currentLog, notes: e.target.value})} 
-                      className="modal-input" 
-                    />
+                    <label className="modal-label">💰 اليومية</label>
+                    <input type="number" value={logic.currentLog.daily_wage || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, daily_wage: e.target.value})} className="modal-input success-text" />
                  </div>
                </div>
 
+               {/* الصف الخامس (ملاحظات ومقاول) */}
+               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr', gap: '20px', zIndex: 80 }}>
+                 {/* 🚀 التعديل هنا: منع إدخال أي نصوص حرة في المقاول الباطن والإجبار على اختيار من شركاء العمل */}
+                 <SmartCombo 
+                    label="🏗️ المقاول الباطن (اختياري)" 
+                    table="partners" 
+                    displayCol="name" 
+                    freeText={false} 
+                    strict={true} 
+                    initialDisplay={logic.currentLog.sub_contractor || ''} 
+                    onSelect={(v:any) => logic.setCurrentLog({...logic.currentLog, sub_contractor: v?.name || '', sub_contractor_id: v?.id || null})} 
+                 />
+                 <div>
+                    <label className="modal-label">📝 الملاحظات</label>
+                    <input type="text" placeholder="أي ملاحظات عامة..." value={logic.currentLog.notes || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, notes: e.target.value})} className="modal-input" />
+                 </div>
+               </div>
+
+               {/* أزرار الحفظ */}
                <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-                 <button 
-                   onClick={logic.handleSaveLog} 
-                   disabled={logic.isSaving} 
-                   className="save-btn"
-                 >
+                 <button onClick={logic.handleSaveLog} disabled={logic.isSaving} className="save-btn">
                    {logic.isSaving ? '⏳ جاري الحفظ...' : '💾 اعتماد السجل'}
                  </button>
-                 <button 
-                   onClick={() => logic.setIsAddModalOpen(false)} 
-                   className="cancel-btn"
-                 >
-                   إلغاء
-                 </button>
+                 <button onClick={() => logic.setIsAddModalOpen(false)} className="cancel-btn">إلغاء</button>
                </div>
             </div>
           </div>
