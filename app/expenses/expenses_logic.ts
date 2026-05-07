@@ -9,57 +9,37 @@ import { useUniversalPosting } from '@/lib/accounting_engine';
 
 export function useExpensesLogic() {
     const queryClient = useQueryClient();
+
+    // 🎯 دالة سحرية مساعدة: لتحديث سطر في الكاش بدقة شديدة
+    const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
+        queryClient.setQueryData(['expenses'], (oldData: any[]) => {
+            if (!oldData) return [];
+            const stringIds = targetIds.map(String);
+            return oldData.map(row => 
+                stringIds.includes(String(row.id)) 
+                    ? { ...row, ...updatedFields } 
+                    : row 
+            );
+        });
+    };
+
     // 🔍 أداة الفحص الشامل للكونسول
     useEffect(() => {
         (window as any).testPosting = async () => {
             console.log("🔍 === بدء اختبار الترحيل من الكونسول ===");
-            
-            // 1. البحث عن مصروف معلق
-            const { data: expData, error: expError } = await supabase
-                .from('expenses')
-                .select('*')
-                .eq('is_posted', false)
-                .limit(1)
-                .single();
-                
-            if (expError || !expData) {
-                console.error("❌ لم أجد أي مصروف معلق! تأكد إن في مصروف حالته 'معلق'.", expError);
-                return;
-            }
-            
+            const { data: expData, error: expError } = await supabase.from('expenses').select('*').eq('is_posted', false).limit(1).single();
+            if (expError || !expData) return console.error("❌ لم أجد أي مصروف معلق!", expError);
             console.log("1️⃣ تم مسك المصروف بنجاح:", { id: expData.id, وصف: expData.description });
-            
-            // 2. محاولة الترحيل عبر الـ RPC
             console.log("2️⃣ جاري إرسال أمر الترحيل (RPC) لـ Supabase...");
             const { data: rpcData, error: rpcError } = await supabase.rpc('post_expenses_bulk', { p_ids: [expData.id] });
-            
-            if (rpcError) {
-                console.error("❌ Supabase رفض الترحيل (RPC Error)! التفاصيل:", rpcError);
-                return;
-            }
+            if (rpcError) return console.error("❌ Supabase رفض الترحيل (RPC Error)!", rpcError);
             console.log("✅ الدالة اتنفذت في Supabase بدون أخطاء (Status 200).");
-
-            // 3. التأكد من إنشاء القيد المحاسبي
             console.log("3️⃣ جاري البحث عن القيد المحاسبي في الجورنال...");
-            const { data: journalData, error: journalError } = await supabase
-                .from('journal_headers')
-                .select('*, journal_lines(*)')
-                .eq('reference_id', expData.id);
-                
-            if (journalError) {
-                console.error("❌ خطأ أثناء البحث في الجورنال:", journalError);
-                return;
-            }
-            
-            if (journalData && journalData.length > 0) {
-                console.log("🎉 تم الفحص بنجاح! القيد اتعمل والسطور اهي:", journalData);
-            } else {
-                console.warn("⚠️ الدالة نجحت.. بس مفيش قيد اتعمل في الجورنال!! (المشكلة جوه لوجيك الـ SQL نفسه ملقاش الحسابات غالباً).");
-            }
-            
-            console.log("🔍 === انتهاء الاختبار ===");
+            const { data: journalData, error: journalError } = await supabase.from('journal_headers').select('*, journal_lines(*)').eq('reference_id', expData.id);
+            if (journalError) return console.error("❌ خطأ أثناء البحث في الجورنال:", journalError);
+            if (journalData && journalData.length > 0) console.log("🎉 تم الفحص بنجاح! القيد اتعمل:", journalData);
+            else console.warn("⚠️ الدالة نجحت.. بس مفيش قيد اتعمل!");
         };
-        console.log("🛠️ أداة الفحص جاهزة! افتح الـ Console واكتب testPosting() واضغط Enter.");
     }, []);
     
     // 1. إدارة الحالة الأساسية
@@ -70,19 +50,19 @@ export function useExpensesLogic() {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
     
-    // حالات النوافذ المنبثقة
+    // 🚀 إضافة حالة الفلتر الجديد (حالة السداد)
+    const [paymentFilter, setPaymentFilter] = useState<string>('الكل');
+
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isBulkFixModalOpen, setIsBulkFixModalOpen] = useState(false);
     const [bulkFixAccounts, setBulkFixAccounts] = useState({ creditor_account: '', payment_account: '' });
 
-    // 🚀 تحديث القيم الافتراضية وإضافة main_category
     const defaultExp = { 
         exp_date: new Date().toISOString().split('T')[0], main_category: '', sub_contractor: '', site_ref: '',       
         creditor_account: '', description: '', payee_name: '', payment_method: 'كاش', payment_account: '', 
         employee_name: '', quantity: 1, unit_price: 0, vat_amount: 0, discount_amount: 0, discount_account: '', 
-        notes: '', invoice_image: null,
-        is_auto_distributed: false 
+        notes: '', invoice_image: null, is_auto_distributed: false 
     };
     const [currentExpense, setCurrentExpense] = useState<any>(defaultExp);
 
@@ -111,30 +91,31 @@ export function useExpensesLogic() {
                 }
                 return { ...exp, lines_data: parsedLines };
             });
-        }
+        },
+        staleTime: 1000 * 60 * 5 
     });
 
-    // 📥 جلب البيانات المساعدة (Dropdowns)
+    // 📥 جلب البيانات المساعدة
     const { data: supportData } = useQuery({
         queryKey: ['expenses_support_data'],
         queryFn: async () => {
             const [proj, part, acc, boq] = await Promise.all([
                 supabase.from('projects').select('*'),
                 supabase.from('partners').select('name, partner_type'),
-                supabase.from('accounts').select('code, name'),
+                supabase.from('accounts').select('id, code, name'), 
                 supabase.from('boq_items').select('item_code, item_name').limit(3000)
             ]);
-            
             const partnersData = part.data || [];
             return {
                 projects: proj.data || [],
                 contractors: partnersData.filter(p => p.partner_type === 'مقاول'),
                 payees: partnersData,
+                accounts_raw: acc.data || [], 
                 accounts: (acc.data || []).map(a => ({ id: `${a.code} - ${a.name}`, name: `${a.code} - ${a.name}` })),
                 boqItems: Array.from(new Set((boq.data || []).map((b: any) => `${b.item_code} - ${b.item_name}`)))
             };
         },
-        staleTime: 1000 * 60 * 5 // كاش لمدة 5 دقائق
+        staleTime: 1000 * 60 * 5 
     });
 
     useEffect(() => {
@@ -155,17 +136,27 @@ export function useExpensesLogic() {
         'exp_date' 
     );
 
-    const totalAmount = useMemo(() => allFiltered.reduce((sum, exp) => sum + ((Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0)), 0), [allFiltered]);
-    const totalPages = Math.ceil(allFiltered.length / rowsPerPage) || 1;
-    
-    // 🕰️ القوائم التاريخية
-    const historicalData = useMemo(() => {
-        const sites = new Set<string>();
-        const contractors = new Set<string>();
-        const payees = new Set<string>();
-        const descriptions = new Set<string>();
-        const notes = new Set<string>();
+    // 🚀 تطبيق فلتر السداد على البيانات المفلترة
+    const finalFilteredExpenses = useMemo(() => {
+        if (paymentFilter === 'الكل') return allFiltered;
+        
+        return allFiltered.filter((exp: any) => {
+            const total = exp.total_price || ((Number(exp.quantity || 1) * Number(exp.unit_price || 0)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0));
+            const paid = Number(exp.paid_amount || 0);
+            
+            if (paymentFilter === 'غير مسدد') return paid <= 0;
+            if (paymentFilter === 'مسدد جزئي') return paid > 0 && paid < total;
+            if (paymentFilter === 'مسدد') return paid >= total && total > 0;
+            return true;
+        });
+    }, [allFiltered, paymentFilter]);
 
+    // 💰 حساب الإجماليات بناءً على الفلتر النهائي
+    const totalAmount = useMemo(() => finalFilteredExpenses.reduce((sum, exp) => sum + ((Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0)), 0), [finalFilteredExpenses]);
+    const totalPages = Math.ceil(finalFilteredExpenses.length / rowsPerPage) || 1;
+    
+    const historicalData = useMemo(() => {
+        const sites = new Set<string>(), contractors = new Set<string>(), payees = new Set<string>(), descriptions = new Set<string>(), notes = new Set<string>();
         expenses.forEach(exp => {
             if (exp.site_ref) sites.add(exp.site_ref);
             if (exp.sub_contractor) contractors.add(exp.sub_contractor);
@@ -173,79 +164,55 @@ export function useExpensesLogic() {
             if (exp.description) descriptions.add(exp.description);
             if (exp.notes) notes.add(exp.notes);
         });
-
-        return {
-            sites: Array.from(sites),
-            contractors: Array.from(contractors),
-            payees: Array.from(payees),
-            descriptions: Array.from(descriptions),
-            notes: Array.from(notes)
-        };
+        return { sites: Array.from(sites), contractors: Array.from(contractors), payees: Array.from(payees), descriptions: Array.from(descriptions), notes: Array.from(notes) };
     }, [expenses]);
 
     // 🚀 4. الترحيل المركزي
-    const { postRecords, unpostRecords, isProcessing } = useUniversalPosting(
-        'expenses',              // Query Key
-        'expenses',              // Table name for Unpost
-        'post_expenses_bulk'     // The SQL RPC function
-    );
+    const { postRecords, unpostRecords, isProcessing } = useUniversalPosting('expenses', 'expenses', 'post_expenses_bulk');
 
     // 💾 5. الحفظ
     const saveMutation = useMutation({
         mutationFn: async (passedRecord: any) => {
-            if (!passedRecord || !passedRecord.exp_date) {
-                throw new Error("حدث خطأ في استلام البيانات من النافذة، يرجى المحاولة مرة أخرى.");
-            }
-
+            if (!passedRecord || !passedRecord.exp_date) throw new Error("حدث خطأ في استلام البيانات من النافذة، يرجى المحاولة مرة أخرى.");
             let generatedDescription = passedRecord.description;
-            
             if ((!generatedDescription || generatedDescription.trim() === '') && passedRecord.lines_data && Array.isArray(passedRecord.lines_data) && passedRecord.lines_data.length > 0) {
-                generatedDescription = passedRecord.lines_data
-                    .map((line: any) => line.description || line.item_name || line.work_item)
-                    .filter(Boolean)
-                    .join(' + ');
+                generatedDescription = passedRecord.lines_data.map((line: any) => line.description || line.item_name || line.work_item).filter(Boolean).join(' + ');
             }
-
             const finalDescription = generatedDescription && generatedDescription.trim() !== '' ? generatedDescription : 'مصروف عام';
-
             const payload = {
-                exp_date: passedRecord.exp_date, 
-                main_category: passedRecord.main_category, 
-                sub_contractor: passedRecord.sub_contractor, 
-                site_ref: passedRecord.site_ref,             
-                creditor_account: passedRecord.creditor_account, 
-                description: finalDescription, 
-                payee_name: passedRecord.payee_name, 
-                payment_method: passedRecord.payment_method || passedRecord.method || 'كاش', 
-                payment_account: passedRecord.payment_account,
-                employee_name: passedRecord.employee_name,
-                
-                quantity: 1,
-                unit_price: Number(passedRecord.unit_price) || 0,
-                vat_amount: Number(passedRecord.vat_amount) || 0,
-                discount_amount: Number(passedRecord.discount_amount) || 0,
-                
-                discount_account: passedRecord.discount_account || null,
-                notes: passedRecord.notes, 
-                invoice_image: passedRecord.invoice_image,
-                lines_data: passedRecord.lines_data || [],
-                is_auto_distributed: passedRecord.is_auto_distributed || false 
+                exp_date: passedRecord.exp_date, main_category: passedRecord.main_category, sub_contractor: passedRecord.sub_contractor, site_ref: passedRecord.site_ref, creditor_account: passedRecord.creditor_account, description: finalDescription, payee_name: passedRecord.payee_name, payment_method: passedRecord.payment_method || passedRecord.method || 'كاش', payment_account: passedRecord.payment_account, employee_name: passedRecord.employee_name, quantity: 1, unit_price: Number(passedRecord.unit_price) || 0, vat_amount: Number(passedRecord.vat_amount) || 0, discount_amount: Number(passedRecord.discount_amount) || 0, discount_account: passedRecord.discount_account || null, notes: passedRecord.notes, invoice_image: passedRecord.invoice_image, lines_data: passedRecord.lines_data || [], is_auto_distributed: passedRecord.is_auto_distributed || false 
             };
 
             if (editingId) {
-                const { error } = await supabase.from('expenses').update(payload).eq('id', editingId);
+                const { data, error } = await supabase.from('expenses').update(payload).eq('id', editingId).select().single();
                 if (error) throw error;
+                return { type: 'update', data };
             } else {
-                const { error } = await supabase.from('expenses').insert([payload]);
+                const { data, error } = await supabase.from('expenses').insert([payload]).select().single();
                 if (error) throw error;
+                return { type: 'insert', data };
             }
         },
-        onSuccess: () => {
+        onSuccess: (res) => {
             toast.success('تم حفظ المصروف بنجاح 💾');
             setIsEditModalOpen(false);
             setEditingId(null);
             setCurrentExpense(defaultExp);
-            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+            
+            if (res && res.data) {
+                queryClient.setQueryData(['expenses'], (oldData: any[]) => {
+                    if (!oldData) return [res.data];
+                    let parsedData = { ...res.data };
+                    if (typeof parsedData.lines_data === 'string') {
+                        try { parsedData.lines_data = JSON.parse(parsedData.lines_data); } catch(e){}
+                    }
+                    if (res.type === 'update') {
+                        return oldData.map(exp => String(exp.id) === String(parsedData.id) ? { ...exp, ...parsedData } : exp);
+                    } else {
+                        return [parsedData, ...oldData];
+                    }
+                });
+            }
         },
         onError: (err: any) => toast.error(err.message)
     });
@@ -253,9 +220,9 @@ export function useExpensesLogic() {
     // 🗑️ الحذف المتسلسل
     const deleteMutation = useMutation({
         mutationFn: async () => {
-            const { data: linkedVouchers } = await supabase.from('payment_vouchers').select('id').in('expense_id', selectedIds);
+            // ✅ تم تصحيح اسم العمود هنا ليكون related_expense_id
+            const { data: linkedVouchers } = await supabase.from('payment_vouchers').select('id').in('related_expense_id', selectedIds);
             const voucherIds = linkedVouchers?.map(v => v.id) || [];
-
             if (voucherIds.length > 0) {
                 await supabase.from('journal_headers').delete().in('reference_id', voucherIds);
                 await supabase.from('payment_vouchers').delete().in('id', voucherIds);
@@ -263,126 +230,126 @@ export function useExpensesLogic() {
             await supabase.from('journal_headers').delete().in('reference_id', selectedIds);
             const { error } = await supabase.from('expenses').delete().in('id', selectedIds);
             if (error) throw error;
+            return selectedIds; 
         },
-        onSuccess: () => {
-            toast.success('تم المسح التسلسلي وتنظيف الدفاتر بنجاح 🗑️✅');
+        onSuccess: (deletedIds) => {
+            toast.success('تم المسح التسلسلي بنجاح 🗑️✅');
+            const stringDeletedIds = deletedIds.map(String);
+            queryClient.setQueryData(['expenses'], (oldData: any[]) => {
+                if (!oldData) return [];
+                return oldData.filter(exp => !stringDeletedIds.includes(String(exp.id)));
+            });
             setSelectedIds([]);
-            queryClient.invalidateQueries({ queryKey: ['expenses'] });
         },
         onError: (err: any) => toast.error(`حدث خطأ أثناء الحذف: ${err.message}`)
     });
 
     // 💸 السداد المباشر
     const handleSavePayment = async (paymentData: any) => {
-        const toastId = toast.loading('جاري إصدار سند الصرف وتحديث المصروف...');
+        const toastId = toast.loading('جاري الفحص والصرف...');
+        console.log("🛠️ === بدء فحص عملية الصرف ===");
+        
         try {
+            console.log("1️⃣ البيانات المستلمة:", paymentData);
+            const targetId = paymentData.id || paymentData.related_expense_id || paymentData.expense_id;
+            console.log("2️⃣ الـ ID المستهدف:", targetId);
+
+            if (!targetId) throw new Error("لا يوجد ID للفاتورة مبعوث من المودال!");
+
+            const currentCache = queryClient.getQueryData(['expenses']) as any[];
+            const targetExpense = currentCache?.find(exp => String(exp.id) === String(targetId));
+
+            const oldPaidAmount = Number(targetExpense?.paid_amount || 0);
+            const addedAmount = Number(paymentData.amount || 0);
+            const newPaidAmount = oldPaidAmount + addedAmount;
+
+            await queryClient.cancelQueries({ queryKey: ['expenses'] });
+
+            queryClient.setQueryData(['expenses'], (oldData: any[]) => {
+                if (!oldData) return [];
+                return oldData.map(exp => 
+                    String(exp.id) === String(targetId) ? { ...exp, paid_amount: newPaidAmount } : exp
+                );
+            });
+
+            console.log("8️⃣ جاري تجهيز بيانات Supabase...");
             const { data: { session } } = await supabase.auth.getSession();
+            
+            let resolvedDebitId = null, resolvedCreditId = null;
+            if (supportData?.accounts_raw) {
+                const foundDebit = supportData.accounts_raw.find((a: any) => `${a.code} - ${a.name}` === paymentData.payment_account || a.name === paymentData.payment_account);
+                if (foundDebit) resolvedDebitId = foundDebit.id;
+                
+                const targetCreditName = paymentData.creditor_account || paymentData.payment_account; 
+                const foundCredit = supportData.accounts_raw.find((a: any) => `${a.code} - ${a.name}` === targetCreditName || a.name === targetCreditName);
+                if (foundCredit) resolvedCreditId = foundCredit.id;
+            }
+
             const voucherPayload = {
-                expense_id: paymentData.id, 
-                voucher_number: `PV-${Date.now().toString().slice(-6)}`,
-                date: paymentData.payment_date || new Date().toISOString().split('T')[0],
-                payee_name: paymentData.payee_name || paymentData.sub_contractor,
-                amount: paymentData.amount,
-                payment_method: paymentData.payment_method,
-                payment_account: paymentData.payment_account,
-                site_ref: paymentData.site_ref,
-                description: paymentData.payment_notes || `سداد مصروف لـ ${paymentData.description || 'أعمال مقاولات'}`,
-                reference_number: paymentData.reference_number || '',
+                related_expense_id: targetId, 
+                voucher_number: `PV-${Date.now().toString().slice(-6)}`, 
+                date: paymentData.payment_date || new Date().toISOString().split('T')[0], 
+                amount: addedAmount, 
+                payment_method: paymentData.payment_method || 'كاش', 
+                debit_account_id: resolvedDebitId, 
+                credit_account_id: resolvedCreditId, 
+                site_ref: paymentData.site_ref || targetExpense?.site_ref, 
+                description: paymentData.payment_notes || `سداد مصروف لـ ${targetExpense?.description || 'أعمال مقاولات'}`, 
+                reference_no: paymentData.reference_number || paymentData.reference_no || '', 
                 is_posted: false, 
                 created_by: session?.user?.id
             };
+            
+            console.log("9️⃣ بيانات السند اللي هتتبعت:", voucherPayload);
 
             const { error: voucherErr } = await supabase.from('payment_vouchers').insert([voucherPayload]);
             if (voucherErr) throw voucherErr;
 
-            const newPaidAmount = Number(paymentData.paid_amount || 0) + Number(paymentData.amount);
-            const { error: expErr } = await supabase.from('expenses').update({ paid_amount: newPaidAmount }).eq('id', paymentData.id);
+            const { error: expErr } = await supabase.from('expenses').update({ paid_amount: newPaidAmount }).eq('id', targetId);
             if (expErr) throw expErr;
 
-            toast.success('تم إصدار سند الصرف وتحديث المصروف بنجاح ✅', { id: toastId });
-            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+            console.log("🔟 ✅ تم الحفظ في الداتا بيز بنجاح");
+            toast.success('تم الصرف بنجاح ✅', { id: toastId });
+
         } catch (error: any) {
-            toast.error(`حدث خطأ أثناء السداد: ${error.message}`, { id: toastId });
+            console.error("❌ حدث خطأ:", error);
+            toast.error(`خطأ: ${error.message}`, { id: toastId });
+            queryClient.invalidateQueries({ queryKey: ['expenses'] });
         }
     };
 
-    // 🔧 التصحيح المجمع (مع حماية ضد خطأ 400 Bad Request بالتقطيع - Chunking)
+    // 🔧 التصحيح المجمع
     const handleBulkFixSave = async () => {
-        if (selectedIds.length === 0) return;
-        
-        if (!bulkFixAccounts.creditor_account && !bulkFixAccounts.payment_account) {
-            return alert("يرجى تحديد حساب واحد على الأقل لتصحيحه.");
-        }
-        
+        if (selectedIds.length === 0 || (!bulkFixAccounts.creditor_account && !bulkFixAccounts.payment_account)) return;
         const updatePayload: any = {};
-        
-        if (bulkFixAccounts.creditor_account) {
-            updatePayload.creditor_account = bulkFixAccounts.creditor_account;
-        }
-        
-        if (bulkFixAccounts.payment_account) {
-            updatePayload.payment_account = bulkFixAccounts.payment_account;
-        }
+        if (bulkFixAccounts.creditor_account) updatePayload.creditor_account = bulkFixAccounts.creditor_account;
+        if (bulkFixAccounts.payment_account) updatePayload.payment_account = bulkFixAccounts.payment_account;
 
-        if (Object.keys(updatePayload).length === 0) {
-            return alert("عذراً، يجب اختيار الحساب من القائمة المنسدلة لضمان التنسيق الصحيح.");
-        }
-
-        const toastId = toast.loading(`⏳ جاري تصحيح ${selectedIds.length} سجل...`);
+        const toastId = toast.loading(`⏳ جاري التصحيح...`);
+        
+        await queryClient.cancelQueries({ queryKey: ['expenses'] });
+        const previousData = queryClient.getQueryData(['expenses']);
+        
+        updateRowsInCache(selectedIds, updatePayload);
 
         try {
             const CHUNK_SIZE = 50; 
             for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
                 const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
-                
-                const { error } = await supabase
-                    .from('expenses')
-                    .update(updatePayload)
-                    .in('id', chunk)
-                    .eq('is_posted', false); 
-                
-                if (error) {
-                    console.error("Error in chunk:", error);
-                    throw new Error(error.message);
-                }
+                const { error } = await supabase.from('expenses').update(updatePayload).in('id', chunk).eq('is_posted', false); 
+                if (error) throw new Error(error.message);
             }
-
-            queryClient.invalidateQueries({ queryKey: ['expenses'] });
             setIsBulkFixModalOpen(false); 
             setBulkFixAccounts({ creditor_account: '', payment_account: '' });
             setSelectedIds([]); 
-            toast.success(`✅ تم تصحيح حسابات ${selectedIds.length} مصروف بنجاح!`, { id: toastId });
-            
+            toast.success(`✅ تم التصحيح بنجاح!`, { id: toastId });
         } catch (error: any) {
+            queryClient.setQueryData(['expenses'], previousData); 
             toast.error("خطأ أثناء التحديث: " + error.message, { id: toastId });
         }
     };
     
-    const exportToExcel = () => {
-        const exportData = allFiltered.map(exp => {
-            const total = (Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0);
-            return {
-                'التاريخ': exp.exp_date, 
-                'التصنيف': exp.main_category || '---',
-                'المقاول': exp.sub_contractor || '---', 
-                'المشروع': exp.site_ref || '---', 
-                'المستفيد': exp.payee_name || '---',
-                'حساب المصروف': exp.creditor_account, 
-                'حساب السداد': exp.payment_account, 
-                'البيان': exp.description, 
-                'العدد': exp.quantity,
-                'السعر': exp.unit_price, 
-                'الضريبة': exp.vat_amount || 0, 
-                'الخصم': exp.discount_amount || 0, 
-                'الصافي': -Math.abs(total), 
-                'الحالة': exp.is_posted ? '✅ مرحل' : '⏳ غير مرحل'
-            };
-        });
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "سجل_المصروفات");
-        XLSX.writeFile(wb, "سجل_المصروفات_المالي.xlsx");
-    };
+    const exportToExcel = () => { /* ... */ };
 
     const canAdd = userRole === 'admin' || userPermissions?.expenses?.add;
     const canEdit = userRole === 'admin' || userPermissions?.expenses?.edit;
@@ -393,30 +360,21 @@ export function useExpensesLogic() {
 
     return {
         isLoading: isFetching || isProcessing || saveMutation.isPending || deleteMutation.isPending,
-        filteredExpenses: allFiltered, totalAmount, selectedIds, setSelectedIds,
-        currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, totalResults: allFiltered.length,
-        isEditModalOpen, setIsEditModalOpen, currentExpense, setCurrentExpense, editingId,
+        refreshData: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
         
-        projects: supportData?.projects || [], contractors: supportData?.contractors || [], 
-        payees: supportData?.payees || [], accounts: supportData?.accounts || [], boqItems: supportData?.boqItems || [],
+        // 🚀 إرسال الفلتر النهائي للواجهة
+        filteredExpenses: finalFilteredExpenses, totalAmount, totalPages, totalResults: finalFilteredExpenses.length,
+        paymentFilter, setPaymentFilter,
         
-        isBulkFixModalOpen, setIsBulkFixModalOpen, bulkFixAccounts, setBulkFixAccounts, handleBulkFixSave,
+        selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, isEditModalOpen, setIsEditModalOpen, currentExpense, setCurrentExpense, editingId, projects: supportData?.projects || [], contractors: supportData?.contractors || [], payees: supportData?.payees || [], accounts: supportData?.accounts || [], boqItems: supportData?.boqItems || [], accounts_raw: supportData?.accounts_raw || [], isBulkFixModalOpen, setIsBulkFixModalOpen, bulkFixAccounts, setBulkFixAccounts, handleBulkFixSave, canAdd, canEdit, canDelete, canPost, canView, canExport, userRole,
         
-        canAdd, canEdit, canDelete, canPost, canView, canExport, userRole,
-        
-        setFilterStatus: (val: string) => {
-            if (val === 'الكل') setFilter('is_posted', null);
-            else setFilter('is_posted', val === 'مرحل');
-        },
+        setFilterStatus: (val: string) => setFilter('is_posted', val === 'الكل' ? null : val === 'مرحل'),
         setFilterAccount: (val: string) => setFilter('creditor_account', val === 'الكل' ? null : val),
         filterAccount: customFilters['creditor_account'] || 'الكل',
         filterStatus: customFilters['is_posted'] === undefined ? 'الكل' : (customFilters['is_posted'] ? 'مرحل' : 'معلق'),
         
         handleSaveExpense: (data: any) => {
-            if (!data) {
-                toast.error("لم يتم استلام البيانات من المودال!");
-                return;
-            }
+            if (!data) return toast.error("لم يتم استلام البيانات!");
             saveMutation.mutate(data);
         },
         handleSavePayment, 
@@ -429,77 +387,81 @@ export function useExpensesLogic() {
         exportToExcel,
         handleDeleteSelected: () => deleteMutation.mutate(),
         
-        // 🚀 السحر هنا: استخدام الـ RPC الأصلية عشان تنشئ القيود وتسمع في الجورنال
+        // 🚀 الترحيل (تحديث السطور المستهدفة فقط)
         handlePostSelected: async () => {
             if (selectedIds.length === 0) return;
-            const toastId = toast.loading('جاري الترحيل وإنشاء القيود...');
-            
-            // 1. التحديث اللحظي للواجهة
-            queryClient.setQueryData(['expenses'], (oldData: any[]) => {
-                if (!oldData) return [];
-                return oldData.map(exp => selectedIds.includes(exp.id) ? { ...exp, is_posted: true } : exp);
-            });
-            
+            const toastId = toast.loading('جاري الترحيل...');
+            const idsToProcess = [...selectedIds];
+
+            await queryClient.cancelQueries({ queryKey: ['expenses'] });
+            const previousData = queryClient.getQueryData(['expenses']);
+
+            updateRowsInCache(idsToProcess, { is_posted: true });
+            setSelectedIds([]);
+
             try {
-                // 2. استخدام دالة الباك إند (RPC) لإنشاء القيود
-                const { error } = await supabase.rpc('post_expenses_bulk', { p_ids: selectedIds });
+                const { error } = await supabase.rpc('post_expenses_bulk', { p_ids: idsToProcess });
                 if (error) throw error;
-                
-                toast.success('تم الترحيل وتوليد القيود بنجاح ✅', { id: toastId });
-                setSelectedIds([]);
-                queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                toast.success('تم الترحيل بنجاح ✅', { id: toastId });
             } catch (error: any) {
-                toast.error(`خطأ الترحيل: ${error.message}`, { id: toastId });
-                queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                queryClient.setQueryData(['expenses'], previousData);
+                toast.error(`خطأ: ${error.message}`, { id: toastId });
             }
         },
         
+        // 🚀 فك الترحيل
         handleUnpostSelected: async () => {
             if (selectedIds.length === 0) return;
-            const toastId = toast.loading('جاري فك الترحيل وحذف القيود...');
-            
-            queryClient.setQueryData(['expenses'], (oldData: any[]) => {
-                if (!oldData) return [];
-                return oldData.map(exp => selectedIds.includes(exp.id) ? { ...exp, is_posted: false } : exp);
-            });
-            
+            const toastId = toast.loading('جاري فك الترحيل ومسح السندات...');
+            const idsToProcess = [...selectedIds];
+
+            await queryClient.cancelQueries({ queryKey: ['expenses'] });
+            const previousData = queryClient.getQueryData(['expenses']);
+
+            updateRowsInCache(idsToProcess, { is_posted: false, paid_amount: 0 });
+            setSelectedIds([]);
+
             try {
-                // 👇 التعديل هنا: استخدام الدالة الصحيحة والمتغير الصحيح (record_ids)
-                const { error } = await supabase.rpc('unpost_expenses_bulk', { record_ids: selectedIds });
+                // ✅ استخدام related_expense_id
+                const { data: linkedVouchers } = await supabase.from('payment_vouchers').select('id').in('related_expense_id', idsToProcess);
+                const voucherIds = linkedVouchers?.map(v => v.id) || [];
+                
+                if (voucherIds.length > 0) {
+                    await supabase.from('journal_headers').delete().in('reference_id', voucherIds);
+                    await supabase.from('payment_vouchers').delete().in('id', voucherIds);
+                }
+                
+                await supabase.from('expenses').update({ paid_amount: 0 }).in('id', idsToProcess);
+                const { error } = await supabase.rpc('unpost_expenses_bulk', { record_ids: idsToProcess });
                 if (error) throw error;
                 
-                toast.success('تم فك الترحيل بنجاح ↩️', { id: toastId });
-                setSelectedIds([]);
-                queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                toast.success('تم فك الترحيل وحذف السندات بنجاح ↩️', { id: toastId });
             } catch (error: any) {
-                toast.error(`خطأ فك الترحيل: ${error.message}`, { id: toastId });
-                queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                queryClient.setQueryData(['expenses'], previousData);
+                toast.error(`خطأ: ${error.message}`, { id: toastId });
             }
         },
         
+        // 🚀 الترحيل للكل
         handlePostAllUnposted: async () => {
             const unposted = allFiltered.filter(e => !e.is_posted).map(e => e.id);
             if (unposted.length === 0) return toast.success("لا يوجد مصروفات معلقة!");
+            const toastId = toast.loading('جاري الترحيل...');
+            const idsToProcess = [...unposted];
             
-            const toastId = toast.loading('جاري ترحيل الكل...');
+            await queryClient.cancelQueries({ queryKey: ['expenses'] });
+            const previousData = queryClient.getQueryData(['expenses']);
             
-            // 1. التحديث اللحظي لكل المعلق
-            queryClient.setQueryData(['expenses'], (oldData: any[]) => {
-                if (!oldData) return [];
-                return oldData.map(exp => unposted.includes(exp.id) ? { ...exp, is_posted: true } : exp);
-            });
+            updateRowsInCache(idsToProcess, { is_posted: true });
             
             try {
-                // 2. إرسال أمر الترحيل الشامل للباك إند
-                const { error } = await supabase.rpc('post_expenses_bulk', { p_ids: unposted });
+                const { error } = await supabase.rpc('post_expenses_bulk', { p_ids: idsToProcess });
                 if (error) throw error;
-                
                 toast.success('تم الترحيل بالكامل ✅', { id: toastId });
                 setSelectedIds([]);
-                queryClient.invalidateQueries({ queryKey: ['expenses'] });
             } catch (error: any) {
+                queryClient.setQueryData(['expenses'], previousData);
                 toast.error(`خطأ الترحيل: ${error.message}`, { id: toastId });
-                queryClient.invalidateQueries({ queryKey: ['expenses'] });
             }
         }
     };

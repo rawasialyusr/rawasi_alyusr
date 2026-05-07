@@ -19,7 +19,7 @@ export default function LaborLogsDirectory() {
 
   const isOneSelected = logic.selectedIds.length === 1;
 
-  // 📋 1. تعريف أعمدة الجدول الذكي (بنفس الترتيب المنطقي للـ DB)
+  // 📋 1. تعريف أعمدة الجدول الذكي
   const columns = useMemo(() => [
     { 
       key: 'work_date', 
@@ -210,7 +210,7 @@ export default function LaborLogsDirectory() {
           .save-btn:hover { background: ${THEME.goldAccent}; color: #1e293b; }
         `}</style>
 
-        {/* 💎 منطقة الجدول الذكي (Smart Table Engine) */}
+        {/* 💎 منطقة الجدول الذكي */}
         <div className="no-print">
           {logic.isLoading ? (
             <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>
@@ -250,7 +250,7 @@ export default function LaborLogsDirectory() {
           )}
         </div>
 
-        {/* 🖨️ نسخة الطباعة القانونية (Print-Only) */}
+        {/* 🖨️ نسخة الطباعة القانونية */}
         <div className="print-only" style={{ display: 'none' }}>
           <div className="print-header">
             <div style={{ textAlign: 'right' }}>
@@ -291,7 +291,6 @@ export default function LaborLogsDirectory() {
         </div>
       </MasterPage>
 
-      {/* 🚀 تغليف المودال بـ createPortal ليكون متوسطاً 100% بدون سكرول */}
       {mounted && logic.isAddModalOpen && createPortal(
         <div 
           style={{
@@ -321,7 +320,6 @@ export default function LaborLogsDirectory() {
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                
-               {/* 📅 1. التاريخ والعامل */}
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px', zIndex: 100 }}>
                  <div>
                     <label className="modal-label">📅 التاريخ</label>
@@ -342,7 +340,6 @@ export default function LaborLogsDirectory() {
                  />
                </div>
 
-               {/* 📍 2. الموقع والبند والوحدة */}
                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr', gap: '20px', zIndex: 90 }}>
                  <SmartCombo 
                    label="📍 الموقع / العمارة" 
@@ -374,7 +371,6 @@ export default function LaborLogsDirectory() {
                  </div>
                </div>
 
-               {/* ⭐ 3. المهارة ووصف الإنتاج والطريحة */}
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '20px' }}>
                  <div>
                     <label className="modal-label">⭐ مستوى المهارة</label>
@@ -408,7 +404,6 @@ export default function LaborLogsDirectory() {
                  </div>
                </div>
 
-               {/* 📈 4. الإنتاجية، الإنجاز، اليومية */}
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                  <div>
                     <label className="modal-label">📈 الإنتاجية</label>
@@ -443,7 +438,6 @@ export default function LaborLogsDirectory() {
                  </div>
                </div>
 
-               {/* ⏱️ 5. الحضور، المقاول، الملاحظات */}
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 2fr', gap: '20px' }}>
                  <div>
                     <label className="modal-label">⏱️ الحضور</label>
@@ -479,7 +473,6 @@ export default function LaborLogsDirectory() {
                  </div>
                </div>
 
-               {/* 💾 أزرار الحفظ والإلغاء */}
                <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
                  <button 
                    onClick={logic.handleSaveLog} 

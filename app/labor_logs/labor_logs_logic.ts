@@ -10,6 +10,19 @@ export function useLaborLogsLogic() {
     const queryClient = useQueryClient(); 
     const { showToast } = useToast();
 
+    // 🎯 دالة سحرية مساعدة: لتحديث سطر في الكاش بدقة شديدة بدون مسح باقي البيانات
+    const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
+        queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
+            if (!oldData) return [];
+            const stringIds = targetIds.map(String);
+            return oldData.map(row => 
+                stringIds.includes(String(row.id)) 
+                    ? { ...row, ...updatedFields } 
+                    : row 
+            );
+        });
+    };
+
     // 💎 الحسابات الثابتة حسب الميثاق
     const DEBIT_ACCOUNT_ID = '70d181ba-6385-4c1e-b0fc-d5b1f800dd2c'; 
     const CREDIT_ACCOUNT_ID = '39f878cd-dc58-4a2a-a199-50f6fca983d4'; 
@@ -24,7 +37,6 @@ export function useLaborLogsLogic() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    // 🟢 1. إضافة الحقول (unit, skill_level, production_desc)
     const defaultLog = { 
         work_date: new Date().toISOString().split('T')[0], 
         sub_contractor: '', worker_name: '', site_ref: '', work_item: '', 
@@ -37,28 +49,23 @@ export function useLaborLogsLogic() {
     
     const [currentLog, setCurrentLog] = useState<any>(defaultLog);
 
-    // 🚀 1. سحب البيانات مرة واحدة مع حفظها في الكاش لمدة 5 دقائق
+    // 🚀 سحب البيانات مرة واحدة مع حفظها في الكاش لمدة 5 دقائق
     const { data: logs = [], isLoading: isLogsLoading } = useQuery({
         queryKey: ['labor_logs'],
         queryFn: () => fetchAllSupabaseData(supabase, 'labor_daily_logs'),
-        staleTime: 1000 * 60 * 5, // كاش 5 دقائق
+        staleTime: 1000 * 60 * 5, 
     });
 
-    // 🚀 2. سحب بيانات المقاولين والعمال مع كاش لمدة ساعة
     const { data: partners = [], isLoading: isPartnersLoading } = useQuery({
         queryKey: ['partners'],
         queryFn: () => fetchAllSupabaseData(supabase, 'partners'),
-        staleTime: 1000 * 60 * 60, // كاش ساعة كاملة
+        staleTime: 1000 * 60 * 60, 
     });
 
-    // 🚀 3. الحساب الذكي للإحصائيات بدون Double Fetching (صاروخي)
     const stats = useMemo(() => {
         if (!logs || logs.length === 0) return { sum: 0, attendance: 0, count: 0 };
-        
-        // حساب المجموع مباشرة من البيانات المحملة مسبقاً
         const sum = logs.reduce((acc: number, row: any) => acc + Number(row.daily_wage || 0), 0);
         const attendance = logs.reduce((acc: number, row: any) => acc + Number(row.attendance_value || 0), 0);
-        
         return { sum, attendance, count: logs.length };
     }, [logs]);
 
@@ -108,22 +115,36 @@ export function useLaborLogsLogic() {
 
     const totalPages = Math.ceil(allFiltered.length / rowsPerPage) || 1;
 
+    // 💾 التحديث الذكي: إرجاع السطر المعدل فقط وإضافته للكاش (بدون ريفرش)
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
             if (editingId) {
-                const { error } = await supabase.from('labor_daily_logs').update(payload).eq('id', editingId);
+                const { data, error } = await supabase.from('labor_daily_logs').update(payload).eq('id', editingId).select().single();
                 if (error) throw error;
+                return { type: 'update', data };
             } else {
-                const { error } = await supabase.from('labor_daily_logs').insert([payload]);
+                const { data, error } = await supabase.from('labor_daily_logs').insert([payload]).select().single();
                 if (error) throw error;
+                return { type: 'insert', data };
             }
         },
-        onSuccess: () => {
+        onSuccess: (res) => {
             showToast('تم الحفظ بنجاح 🚀', 'success');
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
             setIsAddModalOpen(false);
             setEditingId(null);
             setCurrentLog(defaultLog);
+            
+            // 🚀 التحديث اللحظي للكاش (سطر واحد فقط)
+            if (res && res.data) {
+                queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
+                    if (!oldData) return [res.data];
+                    if (res.type === 'update') {
+                        return oldData.map(log => String(log.id) === String(res.data.id) ? { ...log, ...res.data } : log);
+                    } else {
+                        return [res.data, ...oldData];
+                    }
+                });
+            }
         },
         onError: (err: any) => showToast(`فشل الحفظ: ${err.message}`, 'error')
     });
@@ -131,7 +152,6 @@ export function useLaborLogsLogic() {
     const handleSaveLog = () => {
         if (!currentLog.worker_name) return showToast('يجب إدخال اسم العامل!', 'error');
         
-        // 🟢 إرسال كافة الحقول للداتا بيز
         const payload = {
             work_date: currentLog.work_date, 
             sub_contractor: currentLog.sub_contractor || null,
@@ -155,29 +175,34 @@ export function useLaborLogsLogic() {
         saveMutation.mutate(payload);
     };
 
+    // 🗑️ الحذف اللحظي (إزالة السطر من الكاش فوراً)
     const deleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
             const { error } = await supabase.from('labor_daily_logs').delete().in('id', ids);
             if (error) throw error;
+            return ids; // تمرير الـ IDs لدالة onSuccess
         },
-        onSuccess: () => {
+        onSuccess: (deletedIds) => {
             showToast('تم الحذف بنجاح 🗑️', 'success');
             setSelectedIds([]);
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
+            
+            // 🚀 مسح السطور من الكاش بدون ريفرش
+            const stringDeletedIds = deletedIds.map(String);
+            queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
+                if (!oldData) return [];
+                return oldData.filter(log => !stringDeletedIds.includes(String(log.id)));
+            });
         },
         onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, 'error')
     });
 
-    // 🚀🚀 الترحيل الذكي والسريع باستخدام الـ RPC 🚀🚀
+    // 🚀 الترحيل الذكي والسريع
     const postMutation = useMutation({
         mutationFn: async (idsToPost: string[]) => {
             if (!idsToPost || idsToPost.length === 0) throw new Error('لا يوجد سجلات للترحيل');
 
-            // 1. التحديث اللحظي للواجهة (Optimistic Update)
-            queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
-                if (!oldData) return [];
-                return oldData.map(log => idsToPost.includes(log.id) ? { ...log, is_posted: true } : log);
-            });
+            // 1. التحديث اللحظي للواجهة 
+            updateRowsInCache(idsToPost, { is_posted: true });
 
             // 2. إرسال أمر الترحيل للداتا بيز
             const { error } = await supabase.rpc('post_labor_logs_bulk', { p_ids: idsToPost });
@@ -186,33 +211,30 @@ export function useLaborLogsLogic() {
         onSuccess: () => {
             showToast('تم الترحيل وسماع كشف الحساب بنجاح ✅', 'success');
             setSelectedIds([]);
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
+            // 🛑 ألغينا الـ invalidateQueries عشان الشاشة ماترمش وتعتمد على الكاش اللحظي
         },
         onError: (err: any) => {
             showToast(`فشل الترحيل: ${err.message}`, 'error');
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] }); // إرجاع الحالة في حال الفشل
+            queryClient.invalidateQueries({ queryKey: ['labor_logs'] }); // ريفرش فقط في حالة الخطأ لاسترجاع الحالة الأصلية
         }
     });
 
-    // ⏸️ فك الترحيل الذكي والسريع باستخدام الـ RPC ⏸️
+    // ⏸️ فك الترحيل الذكي والسريع
     const unpostMutation = useMutation({
         mutationFn: async (idsToSuspend: string[]) => {
             if (!idsToSuspend || idsToSuspend.length === 0) throw new Error('لا يوجد سجلات للتعليق');
 
             // 1. التحديث اللحظي للواجهة
-            queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {
-                if (!oldData) return [];
-                return oldData.map(log => idsToSuspend.includes(log.id) ? { ...log, is_posted: false } : log);
-            });
+            updateRowsInCache(idsToSuspend, { is_posted: false });
 
             // 2. إرسال أمر فك الترحيل للداتا بيز
-            const { error } = await supabase.rpc('unpost_labor_logs_bulk', { p_ids: idsToSuspend });
+            const { error } = await supabase.rpc('unpost_labor_logs_bulk', { record_ids: idsToSuspend });
             if (error) throw error;
         },
         onSuccess: () => {
             showToast('تم إلغاء الترحيل وتطهير الحسابات بنجاح ⏸️', 'warning');
             setSelectedIds([]);
-            queryClient.invalidateQueries({ queryKey: ['labor_logs'] });
+            // 🛑 ألغينا الـ invalidateQueries هنا كمان
         },
         onError: (err: any) => {
             showToast(`عذراً: ${err.message}`, 'error');
