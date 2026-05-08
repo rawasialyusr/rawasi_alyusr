@@ -23,42 +23,43 @@ export default function ViolationsPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   
-  // 🚀 حالة الترقيم المحلية للجدول الذكي لضبط "تحديد الكل"
+  // 🚀 الترقيم المحلي للجدول
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 50;
 
   useEffect(() => { setMounted(true); }, []);
 
-  // 🚀 استخراج العناصر المعروضة في الصفحة الحالية لزر "تحديد الكل"
-  const currentVisibleIds = useMemo(() => {
-      return logic.data
-          .slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
-          .map((v: any) => String(v.id));
-  }, [logic.data, currentPage, rowsPerPage]);
+  // 🚀 السحر هنا: استخراج معرفات *كل* السجلات المفلترة (وليس الصفحة الحالية فقط)
+  const allFilteredIds = useMemo(() => {
+      return logic.data.map((v: any) => String(v.id));
+  }, [logic.data]);
 
-  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.state.selectedIds.includes(id));
+  // التحقق مما إذا كان قد تم تحديد جميع السجلات المفلترة فعلاً
+  const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id: string) => logic.state.selectedIds.includes(id));
 
   // تعريف الأعمدة مع الالتزام بحراس الرندر (Render Guards)
   const columns = useMemo(() => [
     {
-      header: (
+      key: 'select',
+      label: (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <input 
                   type="checkbox" 
                   className="custom-checkbox"
-                  checked={isAllVisibleSelected}
-                  title="تحديد كل الصفحة"
+                  checked={isAllSelected}
+                  title="تحديد كل السجلات المفلترة عبر الصفحات"
                   onChange={() => {
-                      if (isAllVisibleSelected) {
-                          logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                      if (isAllSelected) {
+                          // إلغاء تحديد السجلات المفلترة الحالية فقط من القائمة الكلية
+                          logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
                       } else {
-                          logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...currentVisibleIds])]);
+                          // إضافة كل السجلات المفلترة للقائمة المحددة (مع منع التكرار)
+                          logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...allFilteredIds])]);
                       }
                   }}
               />
           </div>
       ), 
-      accessor: 'id',
       render: (row: any) => {
         if (!row) return null;
         const isSelected = logic.state.selectedIds.includes(String(row.id));
@@ -79,43 +80,30 @@ export default function ViolationsPage() {
       }
     },
     { 
+      key: 'date',
       header: 'التاريخ', 
-      accessor: 'date', 
-      render: (row: any) => {
-        if (!row) return null; 
-        return <span style={{ color: '#64748b', fontWeight: 900 }}>{row.date}</span>;
-      }
+      render: (row: any) => row?.date ? <span style={{ color: '#64748b', fontWeight: 900 }}>{row.date}</span> : null
     },
     { 
+      key: 'emp_name',
       header: 'الموظف / العامل', 
-      accessor: 'emp_name', 
-      render: (row: any) => {
-        if (!row) return null;
-        return <b style={{ color: THEME.primary }}>{row.emp_name}</b>;
-      }
+      render: (row: any) => row?.emp_name ? <b style={{ color: THEME.primary }}>{row.emp_name}</b> : null
     },
     { 
+      key: 'profession',
       header: 'المهنة', 
-      accessor: 'profession', 
-      render: (row: any) => {
-        if (!row) return null;
-        return <span style={{ fontSize: '12px', fontWeight: 700 }}>{row.profession || '---'}</span>;
-      }
+      render: (row: any) => <span style={{ fontSize: '12px', fontWeight: 700 }}>{row?.profession || '---'}</span>
     },
     { 
+      key: 'reason',
       header: 'نوع المخالفة', 
-      accessor: 'reason', 
-      render: (row: any) => {
-        if (!row) return null;
-        return <span style={{ color: THEME.ruby, fontWeight: 800 }}>{row.reason}</span>;
-      }
+      render: (row: any) => row?.reason ? <span style={{ color: THEME.ruby, fontWeight: 800 }}>{row.reason}</span> : null
     },
     { 
+      key: 'image_url',
       header: 'الدليل 📸', 
-      accessor: 'image_url', 
       render: (row: any) => {
-        if (!row) return null;
-        return row.image_url ? (
+        return row?.image_url ? (
           <img src={row.image_url} alt="دليل" style={{width:'45px', height:'45px', borderRadius:'10px', border:'2px solid #e2e8f0', objectFit: 'cover'}} />
         ) : (
           <span style={{color: '#94a3b8', fontSize: '11px', fontWeight: 800}}>لا يوجد</span>
@@ -123,16 +111,13 @@ export default function ViolationsPage() {
       } 
     },
     { 
+      key: 'amount',
       header: 'الغرامة 💰', 
-      accessor: 'amount', 
-      render: (row: any) => {
-        if (!row) return null;
-        return <span style={{ fontWeight: 900, color: THEME.ruby, fontSize: '15px' }}>{formatCurrency(row.amount)}</span>;
-      }
+      render: (row: any) => <span style={{ fontWeight: 900, color: THEME.ruby, fontSize: '15px' }}>{formatCurrency(row?.amount || 0)}</span>
     },
     {
+      key: 'is_posted',
       header: 'الحالة',
-      accessor: 'is_posted',
       render: (row: any) => {
         if (!row) return null;
         return row.is_posted ? 
@@ -141,8 +126,8 @@ export default function ViolationsPage() {
       }
     },
     {
+      key: 'actions',
       header: 'تعديل',
-      accessor: 'actions',
       render: (row: any) => {
         if (!row) return null;
         return (
@@ -152,7 +137,7 @@ export default function ViolationsPage() {
         );
       }
     }
-  ], [can, logic.actions, isAllVisibleSelected, currentVisibleIds, logic.state.selectedIds]);
+  ], [can, logic.actions, isAllSelected, allFilteredIds, logic.state.selectedIds]);
 
   // جسر الترحيل للأكشنز عبر SidebarManager
   const sidebarActions = useMemo(() => (
@@ -181,6 +166,7 @@ export default function ViolationsPage() {
     </div>
   ), [logic.state.selectedIds, logic.actions]);
 
+  // دوال الكاميرا المتقدمة
   const startCamera = async () => {
     setIsCameraOpen(true);
     try {
@@ -234,7 +220,7 @@ export default function ViolationsPage() {
                           key={type} 
                           onClick={() => {
                               logic.actions.setFilterStatus(type);
-                              setCurrentPage(1); // العودة للصفحة الأولى عند الفلترة
+                              setCurrentPage(1);
                           }} 
                           className={`filter-btn ${logic.state.filterStatus === type ? 'active' : ''}`}
                         >
@@ -247,7 +233,7 @@ export default function ViolationsPage() {
               }
               onSearch={(val) => {
                   logic.actions.setGlobalSearch(val);
-                  setCurrentPage(1); // العودة للصفحة الأولى عند البحث
+                  setCurrentPage(1);
               }} 
               watchDeps={[logic.state.selectedIds, logic.totals.totalSum, logic.state.filterStatus]}
             />
@@ -281,7 +267,6 @@ export default function ViolationsPage() {
                   totalItems={logic.data.length}
                   rowsPerPage={rowsPerPage}
                   onPageChange={setCurrentPage}
-                  // أزلنا onRowsChange لتثبيت 50 سطر كما هو مطلوب أو يمكنك إضافتها إذا أردت
               />
             )}
         </MasterPage>

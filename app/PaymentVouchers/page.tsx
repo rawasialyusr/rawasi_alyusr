@@ -24,14 +24,13 @@ export default function PaymentVouchersPage() {
 
   useEffect(() => setMounted(true), []);
 
-  // 🚀 استخراج العناصر المعروضة في الصفحة الحالية
-  const currentVisibleIds = useMemo(() => {
-    return logic.data
-      .slice((logic.state.currentPage - 1) * logic.state.rowsPerPage, logic.state.currentPage * logic.state.rowsPerPage)
-      .map((v: any) => v.id);
-  }, [logic.data, logic.state.currentPage, logic.state.rowsPerPage]);
+  // 🚀 التعديل هنا: استخراج *جميع* العناصر المفلترة (وليس الصفحة الحالية فقط) لتحديد الكل
+  const allFilteredIds = useMemo(() => {
+    return logic.data.map((v: any) => String(v.id));
+  }, [logic.data]);
 
-  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every(id => logic.state.selectedIds.includes(id));
+  // التحقق مما إذا كانت كل العناصر المفلترة محددة
+  const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id: string) => logic.state.selectedIds.includes(id));
 
   // 🚀 مصفوفة الأعمدة للجدول
   const voucherColumns = useMemo(() => [
@@ -41,13 +40,15 @@ export default function PaymentVouchersPage() {
               <input 
                   type="checkbox" 
                   className="custom-checkbox"
-                  checked={isAllVisibleSelected}
-                  title="تحديد كل الصفحة"
+                  checked={isAllSelected}
+                  title="تحديد كل السجلات المفلترة"
                   onChange={() => {
-                      if (isAllVisibleSelected) {
-                          logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                      if (isAllSelected) {
+                          // إلغاء تحديد جميع السجلات المفلترة
+                          logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
                       } else {
-                          logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...currentVisibleIds])]);
+                          // تحديد جميع السجلات المفلترة
+                          logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...allFilteredIds])]);
                       }
                   }}
               />
@@ -56,7 +57,7 @@ export default function PaymentVouchersPage() {
       accessor: 'id',
       render: (row: any) => {
         if (!row) return null;
-        const isSelected = logic.state.selectedIds.includes(row.id);
+        const isSelected = logic.state.selectedIds.includes(String(row.id));
         return (
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
               <input 
@@ -65,8 +66,8 @@ export default function PaymentVouchersPage() {
                   checked={isSelected} 
                   onChange={(e) => {
                       e.stopPropagation();
-                      if (isSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((i:any) => i !== row.id)); 
-                      else logic.actions.setSelectedIds([...logic.state.selectedIds, row.id]); 
+                      if (isSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((i:any) => i !== String(row.id))); 
+                      else logic.actions.setSelectedIds([...logic.state.selectedIds, String(row.id)]); 
                   }} 
               />
           </div>
@@ -128,7 +129,7 @@ export default function PaymentVouchersPage() {
         );
       }
     }
-  ], [logic.state.selectedIds, isAllVisibleSelected, currentVisibleIds, logic.actions]); 
+  ], [logic.state.selectedIds, isAllSelected, allFilteredIds, logic.actions]); 
 
   // 🚀 القائمة الجانبية للأزرار الإجرائية
   const sidebarActions = useMemo(() => {

@@ -19,14 +19,13 @@ export default function LaborLogsDirectory() {
 
   const isOneSelected = logic.selectedIds.length === 1;
 
-  // 🚀 استخراج العناصر الحالية لتحديد الكل بأمان تام
-  const currentVisibleIds = useMemo(() => {
-    return logic.filteredLogs
-      .slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage)
-      .map((v: any) => String(v.id));
-  }, [logic.filteredLogs, logic.currentPage, logic.rowsPerPage]);
+  // 🚀 التعديل هنا: استخراج *جميع* العناصر المفلترة (وليس الصفحة الحالية فقط) لتحديد الكل
+  const allFilteredIds = useMemo(() => {
+    return logic.filteredLogs.map((v: any) => String(v.id));
+  }, [logic.filteredLogs]);
 
-  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
+  // التحقق مما إذا كانت كل العناصر المفلترة محددة
+  const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id: string) => logic.selectedIds.includes(id));
 
   // 📋 تعريف أعمدة الجدول
   const columns = useMemo(() => [
@@ -37,13 +36,15 @@ export default function LaborLogsDirectory() {
               <input 
                   type="checkbox" 
                   className="custom-checkbox"
-                  checked={isAllVisibleSelected}
-                  title="تحديد كل الصفحة"
+                  checked={isAllSelected}
+                  title="تحديد كل السجلات المفلترة"
                   onChange={() => {
-                      if (isAllVisibleSelected) {
-                          logic.setSelectedIds(logic.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                      if (isAllSelected) {
+                          // إلغاء تحديد جميع السجلات المفلترة
+                          logic.setSelectedIds(logic.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
                       } else {
-                          logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
+                          // تحديد جميع السجلات المفلترة
+                          logic.setSelectedIds([...new Set([...logic.selectedIds, ...allFilteredIds])]);
                       }
                   }}
               />
@@ -120,7 +121,7 @@ export default function LaborLogsDirectory() {
         );
       }
     }
-  ], [logic.selectedIds, isAllVisibleSelected, currentVisibleIds, logic]); 
+  ], [logic.selectedIds, isAllSelected, allFilteredIds, logic]); 
 
   const sidebarActions = useMemo(() => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -254,7 +255,6 @@ export default function LaborLogsDirectory() {
         </div>
       </MasterPage>
 
-      {/* 🚀 المودال مع الحقول المكتملة بناءً على الاسكيما */}
       {mounted && logic.isAddModalOpen && createPortal(
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(67, 52, 46, 0.5)', backdropFilter: 'blur(12px)', zIndex: 999999, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '5vh', paddingBottom: '5vh', overflowY: 'auto' }} onClick={() => logic.setIsAddModalOpen(false)}>
           <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ background: 'white', padding: '35px', borderRadius: '24px', width: '100%', maxWidth: '900px', direction: 'rtl', boxShadow: '0 40px 100px rgba(0,0,0,0.5)', margin: 'auto' }}>
@@ -325,7 +325,6 @@ export default function LaborLogsDirectory() {
 
                {/* الصف الخامس (ملاحظات ومقاول) */}
                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr', gap: '20px', zIndex: 80 }}>
-                 {/* 🚀 التعديل هنا: منع إدخال أي نصوص حرة في المقاول الباطن والإجبار على اختيار من شركاء العمل */}
                  <SmartCombo 
                     label="🏗️ المقاول الباطن (اختياري)" 
                     table="partners" 

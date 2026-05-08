@@ -152,10 +152,13 @@ export function usePaymentVouchersLogic() {
         mutationFn: async (voucherData: any) => {
             if (!voucherData.debit_account_id) throw new Error("يرجى تحديد الحساب المدين.");
             if (!voucherData.credit_account_id) throw new Error("يرجى تحديد الحساب الدائن.");
-            if (!voucherData.amount || voucherData.amount <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر.");
+            if (!voucherData.amount || Number(voucherData.amount) <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر.");
 
             let payload = { ...voucherData };
             payload.partner_id = payload.payee_id;
+            
+            // 🚀 الحل المحاسبي القاطع: نأخذ الرقم كـ Float ونثبته على منزلتين عشريتين (هللات) عشان مايطيرش
+            payload.amount = parseFloat(Number(payload.amount).toFixed(2));
             
             delete payload.payee_id; delete payload.payee_name; delete payload.debit_account_name;
             delete payload.credit_account_name; delete payload.payee; delete payload.credit_account; delete payload.debit_account;
@@ -225,7 +228,6 @@ export function usePaymentVouchersLogic() {
             const CHUNK_SIZE = 50; 
             for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
                 const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
-                // التعديل للسندات غير المرحلة فقط
                 const { error } = await supabase.from('payment_vouchers').update(updatePayload).in('id', chunk).eq('is_posted', false); 
                 if (error) throw new Error(error.message);
             }
@@ -247,14 +249,16 @@ export function usePaymentVouchersLogic() {
         state: {
             globalSearch, filterStatus, dateRange, selectedIds, currentPage, rowsPerPage,
             isEditModalOpen, currentVoucher, partnerBalance, isBalanceLoading,
-            isBulkFixModalOpen, bulkFixAccounts // 🚀 إرسال الـ State للواجهة
+            isBulkFixModalOpen, bulkFixAccounts
         },
         actions: {
             setGlobalSearch, setFilterStatus, setSelectedIds, setCurrentPage, setRowsPerPage,
-            setIsEditModalOpen, setCurrentVoucher, setIsBulkFixModalOpen, setBulkFixAccounts, // 🚀 إرسال الأكشن للواجهة
+            setIsEditModalOpen, setCurrentVoucher, setIsBulkFixModalOpen, setBulkFixAccounts,
             handleAddNew: () => {
                 setCurrentVoucher({ 
-                    date: new Date().toISOString().split('T')[0], payment_method: 'نقدي', amount: 0,
+                    date: new Date().toISOString().split('T')[0], 
+                    payment_method: 'نقدي', 
+                    amount: '', // 🚀 السر هنا: خلينها string فاضي عشان المتصفح يسمحلك تكتب الكسور براحتك من غير ما يمسح النقطة (.)
                     debit_account_id: '', debit_account_name: '', credit_account_id: '', credit_account_name: '',
                     payee_id: '', payee_name: '', is_posted: false, status: 'مسودة'
                 });
@@ -284,7 +288,7 @@ export function usePaymentVouchersLogic() {
             },
             handlePostSelected: () => postRecords(selectedIds),
             handleUnpostSelected: () => unpostRecords(selectedIds),
-            handleBulkFixSave, // 🚀 إرسال الأكشن للواجهة
+            handleBulkFixSave,
             exportToExcel: () => {}
         }
     };

@@ -26,7 +26,7 @@ export function useViolationsLogic() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState<any>(null);
 
-    // 📥 1. جلب المخالفات
+    // 📥 1. جلب المخالفات مع الحسابات الثابتة
     const { data: violations = [], isLoading: isFetching } = useQuery({
         queryKey: ['violations'], 
         queryFn: async () => {
@@ -35,7 +35,9 @@ export function useViolationsLogic() {
                 .select(`
                     *,
                     partner:partners!partner_id(partner_type, name),
-                    project:projects!project_id(Property)
+                    project:projects!project_id(Property),
+                    debit_acc:accounts!violations_debit_account_id_fkey(name),
+                    credit_acc:accounts!violations_credit_account_id_fkey(name)
                 `)
                 .order('created_at', { ascending: false });
             if (error) throw error;
@@ -61,40 +63,36 @@ export function useViolationsLogic() {
         return { displayedViolations: result, totalSum: sum, totalCount: result.length };
     }, [violations, deferredSearch, filterStatus]);
 
-    // 🚀 3. الترحيل المركزي للباك إند
+    // 🚀 3. الترحيل المركزي (RPC)
     const postMutation = useMutation({
         mutationFn: async (idsToPost: string[]) => {
             if (!idsToPost || idsToPost.length === 0) throw new Error('لا يوجد سجلات للترحيل');
-            
-            // 1. أخذ نسخة من الداتا لتأمين التراجع
             const previousData = queryClient.getQueryData(['violations']);
-            
-            // 2. التحديث اللحظي للواجهة 🚀
             updateRowsInCache(idsToPost, { is_posted: true });
 
-            // 3. نداء الباك إند
             const { error } = await supabase.rpc('post_violations_bulk', { p_ids: idsToPost });
             if (error) {
-                queryClient.setQueryData(['violations'], previousData); // التراجع عند الخطأ
+                queryClient.setQueryData(['violations'], previousData); 
                 throw error;
             }
         },
         onSuccess: () => {
             showToast('تم الترحيل المحاسبي بنجاح ✅', 'success');
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['violations'] });
         },
         onError: (err: any) => showToast(`فشل الترحيل: ${err.message}`, 'error')
     });
 
-    // ⏪ 4. فك الترحيل المركزي للباك إند
+    // ⏪ 4. فك الترحيل المركزي (RPC)
     const unpostMutation = useMutation({
         mutationFn: async (idsToSuspend: string[]) => {
             if (!idsToSuspend || idsToSuspend.length === 0) throw new Error('لا يوجد سجلات للتعليق');
-            
             const previousData = queryClient.getQueryData(['violations']);
             updateRowsInCache(idsToSuspend, { is_posted: false });
 
-            const { error } = await supabase.rpc('unpost_violations_bulk', { record_ids: idsToSuspend });
+            // ✅ تم تصحيح record_ids إلى p_ids هنا
+            const { error } = await supabase.rpc('unpost_violations_bulk', { p_ids: idsToSuspend });
             if (error) {
                 queryClient.setQueryData(['violations'], previousData); 
                 throw error;
@@ -103,53 +101,53 @@ export function useViolationsLogic() {
         onSuccess: () => {
             showToast('تم فك الترحيل وتطهير الحسابات ⏸️', 'warning');
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['violations'] });
         },
         onError: (err: any) => showToast(`عذراً: ${err.message}`, 'error')
     });
 
-    // 🗑️ الحذف المتسلسل الآمن عبر الباك إند
+    // 🗑️ 5. الحذف المتسلسل (RPC)
     const deleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
             const previousData = queryClient.getQueryData(['violations']);
-            const stringDeletedIds = ids.map(String);
-            
-            // مسح من الشاشة فوراً
-            queryClient.setQueryData(['violations'], (oldData: any[]) => {
-                if (!oldData) return [];
-                return oldData.filter(log => !stringDeletedIds.includes(String(log.id)));
-            });
-
-            // مسح من الداتا بيز (ومسح قيود الجورنال المرتبطة)
             const { error } = await supabase.rpc('delete_violations_bulk', { p_ids: ids });
-            if (error) {
-                queryClient.setQueryData(['violations'], previousData);
-                throw error;
-            }
+            if (error) throw error;
             return ids; 
         },
         onSuccess: () => {
             showToast('تم الحذف بنجاح 🗑️', 'success');
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['violations'] });
         },
         onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, 'error')
     });
 
-    // 📝 عمليات الحفظ
+    // 📝 6. حفظ المخالفة مع الحسابات الثابتة
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
-            const { partner, project, ...cleanPayload } = payload;
-            if (!cleanPayload.id) cleanPayload.is_posted = false;
+            const { partner, project, debit_acc, credit_acc, ...cleanPayload } = payload;
+            
+            // 💎 الحسابات الثابتة حسب طلبك
+            const FIXED_DEBIT_ID = '39f878cd-dc58-4a2a-a199-50f6fca983d4'; // رواتب وأجور مستحقة (216)
+            const FIXED_CREDIT_ID = '25998af5-dca4-4512-8f1a-3d0f9c6b8e98'; // إيراد خصومات وجزاءات عمالة (46)
 
-            if (cleanPayload.id) {
-                const { error } = await supabase.from('violations').update(cleanPayload).eq('id', cleanPayload.id);
+            const finalPayload = {
+                ...cleanPayload,
+                debit_account_id: FIXED_DEBIT_ID,
+                credit_account_id: FIXED_CREDIT_ID,
+                is_posted: cleanPayload.id ? cleanPayload.is_posted : false
+            };
+
+            if (finalPayload.id) {
+                const { error } = await supabase.from('violations').update(finalPayload).eq('id', finalPayload.id);
                 if (error) throw error;
             } else {
-                const { error } = await supabase.from('violations').insert([cleanPayload]);
+                const { error } = await supabase.from('violations').insert([finalPayload]);
                 if (error) throw error;
             }
         },
         onSuccess: () => {
-            showToast('تم الحفظ بنجاح 📝', 'success');
+            showToast('تم الحفظ والتوجيه المحاسبي بنجاح 📝', 'success');
             setIsEditModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['violations'] });
         },
@@ -172,8 +170,6 @@ export function useViolationsLogic() {
                 setIsEditModalOpen(true);
             },
             handleSave: () => saveMutation.mutate(editingRecord),
-            
-            // 🚀 تمرير الـ selectedIds للدوال المركزية
             handlePost: () => postMutation.mutate(selectedIds),
             handleUnpost: () => unpostMutation.mutate(selectedIds),
             handleDelete: async () => {
@@ -181,7 +177,6 @@ export function useViolationsLogic() {
                     deleteMutation.mutate(selectedIds);
                 }
             },
-            
             handleEmployeeSelect: (v: any) => setEditingRecord({ ...editingRecord, emp_name: v?.name || v, partner_id: v?.id || null, profession: v?.partner_type || '' })
         },
         state: { selectedIds, filterStatus, isEditModalOpen, editingRecord, setIsEditModalOpen, setEditingRecord }

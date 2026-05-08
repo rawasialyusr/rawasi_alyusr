@@ -1,19 +1,30 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import { useRouter } from 'next/navigation'; 
 import { useToast } from '@/lib/toast-context'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; 
-import { resolvePartnerId } from '@/lib/accounting'; // 💎 الباب الثامن: استدعاء التوجيه الذكي للذمم
 
 export function useInvoicesLogic() {
     const router = useRouter();
     const { showToast } = useToast(); 
     const queryClient = useQueryClient();
     
+    // 🎯 دالة سحرية مساعدة لتحديث الكاش لحظياً (Optimistic UI)
+    const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
+        queryClient.setQueryData(['invoices'], (oldData: any[]) => {
+            if (!oldData) return [];
+            const stringIds = targetIds.map(String);
+            return oldData.map(row => 
+                stringIds.includes(String(row.id)) ? { ...row, ...updatedFields } : row 
+            );
+        });
+    };
+
     const [permissions, setPermissions] = useState<any>({ isAdmin: false });
     
     const [globalSearch, setGlobalSearch] = useState('');
+    const deferredSearch = useDeferredValue(globalSearch); // 🚀 تأخير ذكي لمنع التقطيع
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -73,8 +84,9 @@ export function useInvoicesLogic() {
     // ⚙️ المعالجة والحسابات (Logic Filtering) 
     // =========================================================================
     const allFiltered = useMemo(() => {
+        if (!invoices) return [];
         return invoices.filter((inv: any) => {
-            const searchLower = globalSearch.toLowerCase();
+            const searchLower = (deferredSearch || '').toLowerCase();
             const matchesSearch = 
                 inv.invoice_number?.toLowerCase().includes(searchLower) || 
                 inv.client_name?.toLowerCase().includes(searchLower);
@@ -101,7 +113,7 @@ export function useInvoicesLogic() {
                 payment_display_status: paymentStatus
             };
         });
-    }, [invoices, globalSearch, dateFrom, dateTo]);
+    }, [invoices, deferredSearch, dateFrom, dateTo]);
 
     const paginatedInvoices = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -222,158 +234,81 @@ export function useInvoicesLogic() {
         }
     });
 
-    // 2. الترحيل الماسي 💎 (Sub-ledger Accounting + Smart Routing)
+    // 2. الترحيل المركزي (Backend RPC)
     const postMutation = useMutation({
         mutationFn: async () => {
-            if (!selectedIds.length) return 0;
-            const toPost = invoices.filter((inv: any) => selectedIds.includes(inv.id) && inv.status !== 'مُعتمد');
-            if (toPost.length === 0) throw new Error('ALREADY_POSTED');
+            if (!selectedIds.length) return;
+            const previousData = queryClient.getQueryData(['invoices']);
+            
+            // تحديث الكاش لحظياً
+            updateRowsInCache(selectedIds, { status: 'مُعتمد' });
 
-            const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
-
-            for (const inv of toPost) {
-                const invDate = inv.date || new Date().toISOString().split('T')[0];
-                const safePartnerId = cleanId(inv.partner_id);
-                const mainProjectId = (inv.project_ids && inv.project_ids.length > 0) ? inv.project_ids[0] : null;
-
-                const { data: header, error: headerErr } = await supabase
-                    .from('journal_headers')
-                    .insert({ entry_date: invDate, description: `فاتورة #${inv.invoice_number} | ${inv.client_name}`, status: 'posted', reference_id: inv.id })
-                    .select('id').single();
-
-                if (headerErr) throw headerErr;
-                const headerId = header.id;
-                
-                const journalLines: any[] = [];
-
-                // 💎 تم تطبيق التوجيه الذكي resolvePartnerId على جميع أطراف القيود
-                // 1️⃣ إجمالي قيمة الأعمال (العميل مدين، إيراد الشركة دائن)
-                if (Number(inv.taxable_amount) > 0) {
-                    journalLines.push(
-                        { header_id: headerId, account_id: inv.debit_account_id, debit: Number(inv.taxable_amount), credit: 0, partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `قيمة أعمال منجزة - فاتورة ${inv.invoice_number}` },
-                        { header_id: headerId, account_id: inv.credit_account_id, debit: 0, credit: Number(inv.taxable_amount), partner_id: resolvePartnerId(inv.credit_account_id, safePartnerId), project_id: mainProjectId, notes: `إيراد أعمال - فاتورة ${inv.invoice_number}` }
-                    );
-                }
-
-                // 2️⃣ خصم الخامات (العميل دائن، حساب الخامات مدين)
-                if (Number(inv.materials_discount) > 0) {
-                    journalLines.push(
-                        { header_id: headerId, account_id: inv.debit_account_id, debit: 0, credit: Number(inv.materials_discount), partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `استقطاع خامات موردة - فاتورة ${inv.invoice_number}` },
-                        { header_id: headerId, account_id: inv.materials_acc_id, debit: Number(inv.materials_discount), credit: 0, partner_id: resolvePartnerId(inv.materials_acc_id, safePartnerId), project_id: mainProjectId, notes: `تسوية خامات - فاتورة ${inv.invoice_number}` }
-                    );
-                }
-
-                // 3️⃣ ضريبة القيمة المضافة (العميل مدين، حساب مصلحة الزكاة دائن)
-                if (!inv.skip_zatca && Number(inv.tax_amount) > 0) {
-                    journalLines.push(
-                        { header_id: headerId, account_id: inv.debit_account_id, debit: Number(inv.tax_amount), credit: 0, partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `ضريبة قيمة مضافة 15% - فاتورة ${inv.invoice_number}` },
-                        { header_id: headerId, account_id: inv.tax_acc_id, debit: 0, credit: Number(inv.tax_amount), partner_id: resolvePartnerId(inv.tax_acc_id, safePartnerId), project_id: mainProjectId, notes: `مخرجات ضريبة - فاتورة ${inv.invoice_number}` }
-                    );
-                }
-
-                // 4️⃣ ضمان الأعمال (العميل دائن، حساب التأمينات المحتجزة مدين)
-                if (Number(inv.guarantee_amount) > 0) {
-                    journalLines.push(
-                        { header_id: headerId, account_id: inv.debit_account_id, debit: 0, credit: Number(inv.guarantee_amount), partner_id: resolvePartnerId(inv.debit_account_id, safePartnerId), project_id: mainProjectId, notes: `استقطاع ضمان أعمال (${inv.guarantee_percent || 0}%) - فاتورة ${inv.invoice_number}` },
-                        { header_id: headerId, account_id: inv.guarantee_acc_id, debit: Number(inv.guarantee_amount), credit: 0, partner_id: resolvePartnerId(inv.guarantee_acc_id, safePartnerId), project_id: mainProjectId, notes: `تأمينات محتجزة - فاتورة ${inv.invoice_number}` }
-                    );
-                }
-
-                // 🛡️ التوازن المحاسبي
-                const totalDebits = journalLines.reduce((sum, l) => sum + l.debit, 0);
-                const totalCredits = journalLines.reduce((sum, l) => sum + l.credit, 0);
-                if (Math.abs(totalDebits - totalCredits) > 0.01) {
-                    await supabase.from('journal_headers').delete().eq('id', headerId);
-                    throw new Error(`القيد غير متزن للفاتورة ${inv.invoice_number} - المبالغ غير صحيحة.`);
-                }
-
-                const { error: jErr } = await supabase.from('journal_lines').insert(journalLines);
-                if (jErr) {
-                    await supabase.from('journal_headers').delete().eq('id', headerId);
-                    throw jErr;
-                }
+            const { error } = await supabase.rpc('post_invoices_bulk', { p_ids: selectedIds });
+            if (error) {
+                queryClient.setQueryData(['invoices'], previousData);
+                throw error;
             }
-            await supabase.from('invoices').update({ status: 'مُعتمد' }).in('id', selectedIds);
-            return toPost.length;
+        },
+        onSuccess: () => {
+            showToast("تم الاعتماد والترحيل بنجاح ✅", "success");
+            setSelectedIds([]);
         },
         onError: (err: any) => {
-            if (err.message === 'ALREADY_POSTED') showToast("الفواتير المختارة مُرحلة بالفعل! ⚠️", "warning");
-            else showToast(`حدث خطأ أثناء الترحيل: ${err.message}`, "error");
-        },
-        onSuccess: (count) => {
-            if (count > 0) {
-                setSelectedIds([]);
-                showToast(`✅ تم الترحيل وإنشاء القيود لـ ${count} فاتورة!`, "success");
-                queryClient.invalidateQueries({ queryKey: ['invoices'] });
-            }
+            showToast(`خطأ في الترحيل: ${err.message}`, "error");
         }
     });
 
-    // 3. المسح المتسلسل (Deep Cascade Unposting)
+    // 3. فك الترحيل المركزي (Backend RPC)
     const unpostMutation = useMutation({
         mutationFn: async () => {
             if (!selectedIds.length) return;
-            const { data: invoiceHeaders } = await supabase.from('journal_headers').select('id').in('reference_id', selectedIds);
-            if (invoiceHeaders?.length) {
-                const headerIds = invoiceHeaders.map(h => h.id);
-                await supabase.from('journal_lines').delete().in('header_id', headerIds);
-                await supabase.from('journal_headers').delete().in('id', headerIds);
+            const previousData = queryClient.getQueryData(['invoices']);
+            
+            // تحديث الكاش لحظياً
+            updateRowsInCache(selectedIds, { status: 'معلق' });
+
+            const { error } = await supabase.rpc('unpost_invoices_bulk', { p_ids: selectedIds });
+            if (error) {
+                queryClient.setQueryData(['invoices'], previousData);
+                throw error;
             }
-            const { data: receipts } = await supabase.from('receipt_vouchers').select('id').in('invoice_id', selectedIds);
-            if (receipts?.length) {
-                const receiptIds = receipts.map(r => r.id);
-                const { data: receiptHeaders } = await supabase.from('journal_headers').select('id').in('reference_id', receiptIds);
-                if (receiptHeaders?.length) {
-                    const rHeaderIds = receiptHeaders.map(h => h.id);
-                    await supabase.from('journal_lines').delete().in('header_id', rHeaderIds);
-                    await supabase.from('journal_headers').delete().in('id', rHeaderIds);
-                }
-                await supabase.from('receipt_vouchers').delete().in('id', receiptIds);
-            }
-            await supabase.from('invoices').update({ status: 'معلق', paid_amount: 0 }).in('id', selectedIds);
         },
-        onError: () => showToast("حدث خطأ أثناء التراجع عن الترحيل! ❌", "error"),
         onSuccess: () => {
+            showToast("تم إلغاء الترحيل وتطهير القيود ⏸️", "warning");
             setSelectedIds([]);
-            showToast("تم إلغاء الترحيل بنجاح 🔴", "success");
-            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        },
+        onError: (err: any) => {
+            showToast(`خطأ: ${err.message}`, "error");
         }
     });
 
-    // 4. الحذف (Delete)
+    // 4. الحذف النهائي (Backend RPC)
     const deleteMutation = useMutation({
         mutationFn: async () => {
             if (!selectedIds.length) return;
-            const { data: headers } = await supabase.from('journal_headers').select('id').in('reference_id', selectedIds);
-            if (headers?.length) {
-                const headerIds = headers.map(h => h.id);
-                await supabase.from('journal_lines').delete().in('header_id', headerIds);
-                await supabase.from('journal_headers').delete().in('id', headerIds);
+            const previousData = queryClient.getQueryData(['invoices']);
+            
+            // مسح من الكاش لحظياً
+            queryClient.setQueryData(['invoices'], (old: any[]) => 
+                old?.filter(inv => !selectedIds.includes(String(inv.id)))
+            );
+
+            const { error } = await supabase.rpc('delete_invoices_bulk', { p_ids: selectedIds });
+            if (error) {
+                queryClient.setQueryData(['invoices'], previousData);
+                throw error;
             }
-            await supabase.from('invoices').delete().in('id', selectedIds);
         },
-        onError: () => showToast("حدث خطأ أثناء الحذف! ❌", "error"),
         onSuccess: () => {
+            showToast("تم الحذف النهائي وكافة القيود المرتبطة 🗑️", "success");
             setSelectedIds([]);
-            showToast("تم الحذف النهائي بنجاح 🗑️", "success");
-            queryClient.invalidateQueries({ queryKey: ['invoices'] });
-        }
-    });
-
-    // 5. حالة الختم (Toggle Stamp)
-    const toggleStampMutation = useMutation({
-        mutationFn: async ({ id, currentStatus }: { id: string, currentStatus: boolean }) => {
-            const { error } = await supabase.from('invoices').update({ is_stamped: !currentStatus }).eq('id', id);
-            if (error) throw error;
         },
-        onError: () => showToast("حدث خطأ أثناء محاولة ختم الفاتورة! ❌", "error"),
-        onSuccess: () => {
-            showToast("تم تحديث حالة الختم بنجاح ✨", "success");
-            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        onError: (err: any) => {
+            showToast(`خطأ في الحذف: ${err.message}`, "error");
         }
     });
 
-    // 6. السداد الفوري
+    // 5. السداد الفوري
     const payMutation = useMutation({
         mutationFn: async (receiptData: any) => {
             const autoNumber = `RV-${Date.now()}`;
@@ -401,6 +336,8 @@ export function useInvoicesLogic() {
             if (dataToSave.invoice_id) {
                 const { data: invData } = await supabase.from('invoices').select('paid_amount').eq('id', dataToSave.invoice_id).single();
                 const newPaid = Number(invData?.paid_amount || 0) + finalAmount;
+                
+                updateRowsInCache([dataToSave.invoice_id], { paid_amount: newPaid });
                 await supabase.from('invoices').update({ paid_amount: newPaid }).eq('id', dataToSave.invoice_id);
             }
         },
@@ -412,11 +349,10 @@ export function useInvoicesLogic() {
             setIsReceiptModalOpen(false);
             setSelectedInvoiceForPay(null);
             showToast("تم السداد وتحديث الفاتورة بنجاح ✅", "success");
-            queryClient.invalidateQueries({ queryKey: ['invoices'] });
         }
     });
 
-    const isSaving = saveMutation.isPending || postMutation.isPending || unpostMutation.isPending || deleteMutation.isPending || toggleStampMutation.isPending || payMutation.isPending;
+    const isSaving = saveMutation.isPending || postMutation.isPending || unpostMutation.isPending || deleteMutation.isPending || payMutation.isPending;
     const isLoading = isInvLoading || isProjLoading || isSaving;
 
     return {
@@ -426,20 +362,16 @@ export function useInvoicesLogic() {
         isLoading,
         isSaving,
         permissions,
-        handleToggleStamp: (id: string, currentStatus: boolean) => {
-            if (!permissions.isAdmin) return showToast("🚫 عذراً، هذه الصلاحية مخصصة للمدير العام فقط!", "error");
-            toggleStampMutation.mutate({ id, currentStatus });
-        },
         handlePayInvoice,
         isReceiptModalOpen, setIsReceiptModalOpen,
         selectedInvoiceForPay, setSelectedInvoiceForPay, 
         handleOpenPaymentModal,
-        globalSearch, setGlobalSearch,
-        dateFrom, setDateFrom,
-        dateTo, setDateTo,
+        globalSearch, setGlobalSearch: (v: string) => { setGlobalSearch(v); setCurrentPage(1); },
+        dateFrom, setDateFrom: (v: string) => { setDateFrom(v); setCurrentPage(1); },
+        dateTo, setDateTo: (v: string) => { setDateTo(v); setCurrentPage(1); },
         selectedIds, setSelectedIds,
         currentPage, setCurrentPage,
-        rowsPerPage, setRowsPerPage,
+        rowsPerPage, setRowsPerPage: (v: number) => { setRowsPerPage(v); setCurrentPage(1); },
         kpis,
         isEditModalOpen, setIsEditModalOpen,
         currentRecord, setCurrentRecord,
@@ -448,7 +380,7 @@ export function useInvoicesLogic() {
         handlePostSelected: () => postMutation.mutate(), 
         handleUnpostSelected: () => unpostMutation.mutate(), 
         handleDeleteSelected: () => {
-            if (!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي؟")) return;
+            if (!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي للفواتير والقيود التابعة لها؟")) return;
             deleteMutation.mutate();
         },
         handleSavePayment: (record: any) => payMutation.mutate(record), 

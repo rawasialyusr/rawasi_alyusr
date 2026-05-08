@@ -10,7 +10,6 @@ import MasterPage from '@/components/MasterPage';
 
 // 🧱 المكونات
 import RawasiSmartTable from '@/components/rawasismarttable';
-import PaginationPanel from '@/components/PaginationPanel'; 
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
 import InvoiceAgingDashboard from '@/components/InvoiceAgingDashboard';
 import SmartCombo from '@/components/SmartCombo'; 
@@ -21,16 +20,7 @@ import InvoicePrintModal from './InvoicePrintModal';
 import ReceiptVoucherModal from '@/app/ReceiptVouchers/ReceiptVoucherModal';
 
 export default function InvoicesPage() {
-  const {
-    invoices, allFiltered, projects, isLoading, permissions, handleToggleStamp,
-    globalSearch, setGlobalSearch, setDateFrom, setDateTo,
-    selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage,
-    handlePostSelected, handleDeleteSelected, handleUnpostSelected,
-    handleSave, handleAddNew, handleEdit, isEditModalOpen, setIsEditModalOpen, currentRecord, setCurrentRecord,
-    isReceiptModalOpen, setIsReceiptModalOpen, selectedInvoiceForPay, setSelectedInvoiceForPay, handleOpenPaymentModal,
-    handleSavePayment 
-  } = useInvoicesLogic(); 
-
+  const logic = useInvoicesLogic(); 
   const { can, loading: permsLoading } = usePermissions();
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -41,50 +31,75 @@ export default function InvoicesPage() {
     setMounted(true);
   }, []);
 
-  // 💎 تأمين البيانات بالكامل داخل useMemo حسب معايير الميثاق الماسي
-  const dataToProcess = useMemo(() => {
-      return (allFiltered?.length > 0 ? allFiltered : invoices) || [];
-  }, [allFiltered, invoices]);
-
+  // 💎 حساب إحصائيات أعمار الديون
   const result = useMemo(() => {
-      return getInvoiceSummaryAndAging(dataToProcess.filter((i:any)=> i?.status !== 'مسودة'));
-  }, [dataToProcess]);
+      return getInvoiceSummaryAndAging(logic.allFiltered.filter((i:any)=> i?.status !== 'مسودة'));
+  }, [logic.allFiltered]);
+
+  // 🚀 استخراج العناصر الحالية لتحديد الكل بأمان
+  const currentVisibleIds = useMemo(() => {
+    return logic.allFiltered
+      .slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage)
+      .map((v: any) => String(v.id));
+  }, [logic.allFiltered, logic.currentPage, logic.rowsPerPage]);
+
+  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
 
   // =========================================================================
-  // 💎 أعمدة الجدول
+  // 💎 أعمدة الجدول (متوافقة مع RawasiSmartTable)
   // =========================================================================
-  const invoiceColumns = [
+  const invoiceColumns = useMemo(() => [
     {
-      header: 'تحديد',
-      accessor: 'id',
+      key: 'select',
+      label: (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox"
+                  checked={isAllVisibleSelected}
+                  title="تحديد كل الصفحة"
+                  onChange={() => {
+                      if (isAllVisibleSelected) {
+                          logic.setSelectedIds(logic.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                      } else {
+                          logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
+                      }
+                  }}
+              />
+          </div>
+      ), 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر (Render Guard)
+        if (!row) return null;
+        const isSelected = logic.selectedIds.includes(String(row.id));
         return (
-          // 🚀 السر هنا: onClick مع stopPropagation يمنع البابلينج تماماً
-          <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-block' }}>
-              <input type="checkbox" className="custom-checkbox" checked={selectedIds.includes(row.id)} 
-                onChange={(e) => {
-                  e.stopPropagation(); 
-                  setSelectedIds(prev => prev.includes(row.id) ? prev.filter(x => x !== row.id) : [...prev, row.id]);
-                }} 
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
+              <input 
+                  type="checkbox" 
+                  className="custom-checkbox" 
+                  checked={isSelected} 
+                  onChange={(e) => {
+                      e.stopPropagation();
+                      if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
+                      else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
+                  }} 
               />
           </div>
         );
       }
     },
     { 
-      header: 'رقم الفاتورة', 
-      accessor: 'invoice_number', 
+      key: 'invoice_number',
+      label: 'رقم الفاتورة', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null;
         return <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px', letterSpacing: '0.5px' }}>#{row.invoice_number}</b>;
       } 
     },
     { 
-      header: 'تاريخ الفاتورة', 
-      accessor: 'date', 
+      key: 'date',
+      label: 'التاريخ', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null;
         return (
           <span style={{ fontSize: '12px', fontWeight: 900, color: '#0284c7', background: 'rgba(2, 132, 199, 0.1)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
             {row.date ? new Date(row.date).toLocaleDateString('ar-EG') : '---'}
@@ -93,18 +108,18 @@ export default function InvoicesPage() {
       }
     },
     { 
-      header: 'العميل', 
-      accessor: 'client_name', 
+      key: 'client_name',
+      label: 'العميل', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null; 
         return <span style={{fontWeight: 800, color: '#1e293b'}}>{row.client_name || '---'}</span>;
       } 
     },
     {
-      header: 'حالة الاعتماد',
-      accessor: 'status',
+      key: 'status',
+      label: 'الاعتماد',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null; 
         const isApproved = row.status === 'مُعتمد';
         return (
           <div className={`approval-glass-badge ${isApproved ? 'approved' : 'pending'}`}>
@@ -115,10 +130,10 @@ export default function InvoicesPage() {
       }
     },
     {
-      header: 'مهلة السداد',
-      accessor: 'due_date',
+      key: 'due_date',
+      label: 'مهلة السداد',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         if (paid >= total && total > 0) return <span className="deadline-badge paid">✅ مكتمل</span>;
@@ -137,10 +152,10 @@ export default function InvoicesPage() {
       }
     },
     {
-      header: 'حالة السداد',
-      accessor: 'paid_amount',
+      key: 'paid_amount',
+      label: 'حالة السداد',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         
@@ -150,10 +165,10 @@ export default function InvoicesPage() {
       }
     },
     { 
-      header: 'الصافي', 
-      accessor: 'total_amount', 
+      key: 'total_amount',
+      label: 'الصافي', 
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         let textColor = '#dc2626'; 
@@ -165,10 +180,10 @@ export default function InvoicesPage() {
       } 
     },
     {
-      header: 'الإجراءات',
-      accessor: 'id',
+      key: 'actions',
+      label: 'الإجراءات',
       render: (row: any) => {
-        if (!row) return null; // 🛡️ حارس الرندر
+        if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         const balance = total - paid;
@@ -180,50 +195,55 @@ export default function InvoicesPage() {
             {needsPayment && (
               <button onClick={(e) => {
                   e.stopPropagation(); 
-                  let propertyName = '';
-                  if (row.project_ids && row.project_ids.length > 0 && projects) propertyName = projects.filter((p: any) => row.project_ids.includes(p.id)).map((p: any) => p.Property || p.property_name || p.project_name || p.name).join('، ');
-                  setSelectedInvoiceForPay({ ...row, id: undefined, invoice_id: row.id, invoice_number: row.invoice_number, client_name: row.client_name, partner_id: row.partner_id, amount: balance, total_amount: balance, property_name: propertyName, project_name: propertyName, description: `سداد دفعة من فاتورة #${row.invoice_number} ${propertyName ? `- عقار: ${propertyName}` : ''}` });
-                  setIsReceiptModalOpen(true);
+                  logic.handleOpenPaymentModal(row); // 🚀 استخدام الدالة المجهزة في اللوجيك
                 }} className="btn-glass-pay">💰 سداد</button>
             )}
           </div>
         );
       }
     }
-  ];
+  ], [logic.selectedIds, isAllVisibleSelected, currentVisibleIds, logic]);
 
   // =========================================================================
   // 🎛️ أزرار السايد بار
   // =========================================================================
-  const sidebarActions = (
+  const sidebarActions = useMemo(() => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="invoices" action="create">
-        <button className="btn-main-glass gold" onClick={handleAddNew}>
+        <button className="btn-main-glass gold" onClick={logic.handleAddNew}>
           ➕ إنشاء فاتورة جديدة
         </button>
       </SecureAction>
 
-      {selectedIds.length > 0 && (
-        <>
-          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({selectedIds.length})</p>
+      {logic.selectedIds.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
+          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
           <SecureAction module="invoices" action="post">
-            <button className="btn-main-glass blue" onClick={handlePostSelected}>🚀 اعتماد وترحيل</button>
+            <button className="btn-main-glass blue" onClick={logic.handlePostSelected} disabled={logic.isSaving}>
+              {logic.isSaving ? '⏳ جاري الترحيل...' : '🚀 اعتماد وترحيل'}
+            </button>
           </SecureAction>
           <SecureAction module="invoices" action="post">
-            <button className="btn-main-glass yellow" onClick={handleUnpostSelected}>🔴 تعليق الفاتورة</button>
+            <button className="btn-main-glass yellow" onClick={logic.handleUnpostSelected} disabled={logic.isSaving}>
+              🔴 تعليق الفاتورة
+            </button>
           </SecureAction>
-          {selectedIds.length === 1 && (
+          {logic.selectedIds.length === 1 && (
             <SecureAction module="invoices" action="edit">
-              <button className="btn-main-glass white" onClick={() => handleEdit(dataToProcess.find((i:any) => i.id === selectedIds[0]))}>📝 تعديل البيانات</button>
+              <button className="btn-main-glass white" onClick={() => logic.handleEdit(logic.allFiltered.find((i:any) => String(i.id) === logic.selectedIds[0]))}>
+                📝 تعديل البيانات
+              </button>
             </SecureAction>
           )}
           <SecureAction module="invoices" action="delete">
-            <button className="btn-main-glass red" onClick={handleDeleteSelected}>🗑️ حذف نهائي</button>
+            <button className="btn-main-glass red" onClick={logic.handleDeleteSelected} disabled={logic.isSaving}>
+              🗑️ حذف نهائي
+            </button>
           </SecureAction>
-        </>
+        </div>
       )}
     </div>
-  );
+  ), [logic.selectedIds, logic]);
 
   return (
     <MasterPage 
@@ -234,8 +254,8 @@ export default function InvoicesPage() {
       <RawasiSidebarManager 
         summary={
           <div className="summary-glass-card">
-            <span>إجمالي المديونية 💼</span>
-            <div className="val">{formatCurrency(result.totalRemaining)}</div>
+            <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي المديونية 💼</span>
+            <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.goldAccent, marginTop:'5px'}}>{formatCurrency(result.totalRemaining)}</div>
           </div>
         }
         actions={sidebarActions}
@@ -248,30 +268,44 @@ export default function InvoicesPage() {
                     displayCol="name"
                     placeholder="ابحث عن عميل محدد..."
                     enableClear={true}
-                    onSelect={(item:any) => setGlobalSearch(item?.name || '')}
+                    onSelect={(item:any) => logic.setGlobalSearch(item?.name || '')}
                 />
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '10px 0' }} />
                 <InvoiceAgingDashboard aging={result.aging} />
             </div>
         }
-        onSearch={setGlobalSearch}
-        onDateFilter={(start, end) => { setDateFrom(start); setDateTo(end); }}
-        watchDeps={[selectedIds, sidebarActions, result]}
+        onSearch={logic.setGlobalSearch}
+        onDateFilter={(start, end) => { logic.setDateFrom(start); logic.setDateTo(end); }}
+        watchDeps={[logic.selectedIds, logic.allFiltered.length, result.totalRemaining]}
       />
 
-      {( (isLoading || permsLoading) && invoices.length === 0 ) ? (
+      <style>{`
+        .custom-checkbox { width: 20px; height: 20px; accent-color: ${THEME.goldAccent}; cursor: pointer; transition: 0.1s; }
+        .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-main-glass.gold { background: linear-gradient(135deg, rgba(197, 160, 89, 0.9), rgba(151, 115, 50, 1)); color: white; }
+        .btn-main-glass.blue { background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(2, 132, 199, 0.9)); color: white; }
+        .btn-main-glass.green { background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(22, 163, 74, 0.9)); color: white; }
+        .btn-main-glass.yellow { background: linear-gradient(135deg, rgba(245, 158, 11, 0.8), rgba(217, 119, 6, 0.9)); color: white; }
+        .btn-main-glass.white { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
+        .btn-main-glass.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); }
+      `}</style>
+
+      {( (logic.isLoading || permsLoading) && logic.allFiltered.length === 0 ) ? (
         <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
       ) : (
-        <div className="clickable-rows">
+        <div className="clickable-rows cinematic-scroll" style={{ background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
           <RawasiSmartTable 
-              data={dataToProcess.slice((currentPage-1)*rowsPerPage, currentPage*rowsPerPage)} 
+              data={logic.allFiltered} 
               columns={invoiceColumns} 
-              title="" 
+              enablePagination={true}
+              currentPage={logic.currentPage}
+              totalItems={logic.allFiltered.length}
+              rowsPerPage={logic.rowsPerPage}
+              onPageChange={logic.setCurrentPage}
+              onRowsChange={logic.setRowsPerPage}
               onRowClick={(row:any) => { setPrintData(row); setIsPrintModalOpen(true); }}
           />
-          <div style={{ padding: '20px', display: 'flex', justifyContent: 'center' }}>
-            <PaginationPanel totalItems={dataToProcess.length} currentPage={currentPage} rowsPerPage={rowsPerPage} onPageChange={setCurrentPage} onRowsChange={setRowsPerPage} />
-          </div>
         </div>
       )}
 
@@ -279,7 +313,7 @@ export default function InvoicesPage() {
       {/* 🚀 المودالز */}
       {/* ==================================================================== */}
       
-      {mounted && isReceiptModalOpen && createPortal(
+      {mounted && logic.isReceiptModalOpen && createPortal(
         <div style={{ 
             position: 'fixed', inset: 0, zIndex: 999999999, 
             background: 'rgba(40, 24, 10, 0.85)', 
@@ -292,34 +326,34 @@ export default function InvoicesPage() {
         }}>
             <div style={{ width: '100%', maxWidth: '900px', position: 'relative' }}>
                 <ReceiptVoucherModal 
-                    isOpen={isReceiptModalOpen} 
-                    onClose={() => setIsReceiptModalOpen(false)} 
-                    record={selectedInvoiceForPay || {}} 
-                    setRecord={setSelectedInvoiceForPay}
-                    onSave={handleSavePayment} 
+                    isOpen={logic.isReceiptModalOpen} 
+                    onClose={() => logic.setIsReceiptModalOpen(false)} 
+                    record={logic.selectedInvoiceForPay || {}} 
+                    setRecord={logic.setSelectedInvoiceForPay}
+                    onSave={logic.handleSavePayment} 
                 />
             </div>
         </div>,
         document.body
       )}
 
-      {isEditModalOpen && (
+      {mounted && logic.isEditModalOpen && (
           <InvoiceFormModal 
-            isOpen={isEditModalOpen} 
-            onClose={() => setIsEditModalOpen(false)} 
-            record={currentRecord} 
-            setRecord={setCurrentRecord} 
-            onSave={handleSave} 
-            projects={projects} 
+            isOpen={logic.isEditModalOpen} 
+            onClose={() => logic.setIsEditModalOpen(false)} 
+            record={logic.currentRecord} 
+            setRecord={logic.setCurrentRecord} 
+            onSave={logic.handleSave} 
+            projects={logic.projects} 
           />
       )}
       
-      {isPrintModalOpen && (
+      {mounted && isPrintModalOpen && (
           <InvoicePrintModal 
             isOpen={true} 
             onClose={() => setIsPrintModalOpen(false)} 
             record={printData} 
-            projects={projects} 
+            projects={logic.projects} 
           />
       )}
       

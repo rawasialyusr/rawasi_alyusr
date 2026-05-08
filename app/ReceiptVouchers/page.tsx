@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
@@ -11,6 +11,7 @@ import { useReceiptVouchersLogic } from './ReceiptVouchers_logic';
 import ReceiptVoucherModal from './ReceiptVoucherModal';
 import MasterPage from '@/components/MasterPage';
 import { useSidebar } from '@/lib/SidebarContext';
+import SmartCombo from '@/components/SmartCombo';
 
 export default function ReceiptVouchersPage() {
     // 💎 نقطة الاستدعاء الواحدة (Single Source of Truth)
@@ -144,7 +145,7 @@ export default function ReceiptVouchersPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '15px' }}>
                             <span style={{ fontSize: '11px', color: THEME.brand.gold, fontWeight: 900, textAlign: 'center' }}>إجراءات جماعية ({selectedCount})</span>
                             
-                            {/* 🛡️ حماية الترحيل والإلغاء والحذف */}
+                            {/* 🛡️ حماية الترحيل والإلغاء والتصحيح المجمع */}
                             <SecureAction module="receipt_vouchers" action="post">
                                 <button onClick={logic.handlePostSelected} className="btn-main-glass white" style={{ borderColor: THEME.success, color: THEME.success }}>✅ ترحيل</button>
                             </SecureAction>
@@ -153,12 +154,13 @@ export default function ReceiptVouchersPage() {
                                 <button onClick={logic.handleUnpostSelected} className="btn-main-glass white" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>⏳ فك الترحيل</button>
                             </SecureAction>
                             
-                            <SecureAction module="receipt_vouchers" action="post">
-                                <button onClick={logic.handleRefundSelected} className="btn-main-glass white" style={{ borderColor: '#6366f1', color: '#6366f1' }}>↩️ إرجاع</button>
+                            {/* 🛠️ زر التصحيح المجمع */}
+                            <SecureAction module="receipt_vouchers" action="edit">
+                                <button onClick={() => logic.setIsBulkFixModalOpen(true)} className="btn-main-glass white" style={{ borderColor: '#8b5cf6', color: '#8b5cf6' }}>🛠️ تصحيح مجمع</button>
                             </SecureAction>
                             
                             <SecureAction module="receipt_vouchers" action="delete">
-                                <button onClick={logic.handleDeleteSelected} className="btn-main-glass white" style={{ borderColor: '#ef4444', color: '#ef4444', background: '#ef444410' }}>🗑️ حذف</button>
+                                <button onClick={logic.handleDeleteSelected} className="btn-main-glass white" style={{ borderColor: '#ef4444', color: '#ef4444', background: '#ef444410' }}>🗑️ حذف نهائي</button>
                             </SecureAction>
                         </div>
                     )}
@@ -226,7 +228,7 @@ export default function ReceiptVouchersPage() {
                 </div>
             )}
 
-            {/* 🛡️ المودال السحري بالبورتال (كما تم تصميمه من قبلك) */}
+            {/* 🛡️ مودال الإضافة والتعديل */}
             {mounted && logic.isEditModalOpen && createPortal(
                 <div style={{
                     position: 'fixed', 
@@ -259,7 +261,6 @@ export default function ReceiptVouchersPage() {
                         boxShadow: '0 50px 100px -20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.5)',
                         animation: 'modalEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards'
                     }}>
-                        {/* 💎 ربط الدالة السحرية logic.handleSave بدلاً من الدالة المحلية */}
                         <ReceiptVoucherModal 
                             isOpen={true} 
                             onClose={() => logic.setIsEditModalOpen(false)} 
@@ -268,19 +269,59 @@ export default function ReceiptVouchersPage() {
                             onSave={logic.handleSave} 
                         />
                     </div>
-                    
-                    <style>{`
-                        @keyframes modalEntrance {
-                            from { opacity: 0; transform: translateY(50px) scale(0.95); }
-                            to { opacity: 1; transform: translateY(0) scale(1); }
-                        }
-                        
-                        body { overflow: hidden; }
-                    `}</style>
                 </div>,
                 document.body
             )}
 
+            {/* 🛠️ مودال التصحيح المجمع (Bulk Fix) */}
+            {mounted && logic.isBulkFixModalOpen && createPortal(
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    background: 'rgba(44, 34, 30, 0.5)', backdropFilter: 'blur(10px)', direction: 'rtl'
+                }}>
+                    <div className="cinematic-scroll" style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '500px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', zIndex: 10 }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: THEME.brand.coffee, fontWeight: 900 }}>🛠️ التصحيح المجمع للحسابات</h3>
+                        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', fontWeight: 800 }}>
+                            سيتم تطبيق التعديلات على ({logic.selectedIds.length}) سند مسودة.
+                        </p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            <SmartCombo 
+                                label="🏦 حساب الخزينة / البنك (للتعديل)" 
+                                table="accounts" 
+                                displayCol="name" 
+                                onSelect={(v:any) => logic.setBulkFixAccounts({...logic.bulkFixAccounts, safe_bank_acc_id: v?.id, safe_bank_acc_name: v?.name})} 
+                            />
+                            <SmartCombo 
+                                label="👥 حساب العميل / الجهة (للتعديل)" 
+                                table="accounts" 
+                                displayCol="name" 
+                                onSelect={(v:any) => logic.setBulkFixAccounts({...logic.bulkFixAccounts, partner_acc_id: v?.id, partner_acc_name: v?.name})} 
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '30px' }}>
+                            <button onClick={logic.handleBulkFixSave} disabled={logic.isSaving} style={{ flex: 2, background: THEME.brand.gold, color: 'white', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', transition: '0.2s' }}>
+                                {logic.isSaving ? '⏳ جاري الحفظ...' : '💾 تطبيق التعديل'}
+                            </button>
+                            <button onClick={() => logic.setIsBulkFixModalOpen(false)} style={{ flex: 1, background: '#f1f5f9', color: '#64748b', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', transition: '0.2s' }}>
+                                إلغاء
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            <style>{`
+                @keyframes modalEntrance {
+                    from { opacity: 0; transform: translateY(50px) scale(0.95); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+                .btn-main-glass { border-radius: 12px; cursor: pointer; transition: 0.2s; font-weight: 900; }
+                .btn-main-glass:hover { transform: translateY(-2px); filter: brightness(1.05); }
+                body { overflow: hidden; }
+            `}</style>
         </MasterPage>
     );
 }
