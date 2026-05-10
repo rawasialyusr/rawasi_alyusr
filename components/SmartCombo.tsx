@@ -394,7 +394,7 @@ export default function SmartCombo({
                     <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999, background: (isMobile && isMobileBottomSheet) ? 'rgba(0,0,0,0.5)' : 'transparent', backdropFilter: (isMobile && isMobileBottomSheet) ? 'blur(5px)' : 'none' }} />
                     <div ref={listRef} className="cinematic-scroll" style={dropdownStyle}>
                         {isMobile && isMobileBottomSheet && <div style={{ width: '40px', height: '5px', background: '#cbd5e1', borderRadius: '10px', margin: '0 auto 15px auto' }} />}
-                        {results.length === 0 && search.length > 0 && !isLoading && (
+                        {(results?.length || 0) === 0 && (search?.length || 0) > 0 && !isLoading && (
                             <div style={{ padding: '15px', textAlign: 'center' }}>
                                 <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 800, margin: '0 0 10px 0' }}>❌ لا توجد نتائج لـ "<span style={{color: THEME.ruby}}>{search}</span>"</p>
                                 {allowAddNew && onAddNew && hasAddPermission && (
@@ -404,7 +404,7 @@ export default function SmartCombo({
                                 )}
                             </div>
                         )}
-                        {results.length === 0 && search.length === 0 && showRecent && recentItems.length > 0 && !isLoading && (
+                        {(results?.length || 0) === 0 && (search?.length || 0) === 0 && showRecent && (recentItems?.length || 0) > 0 && !isLoading && (
                             <div>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 900, marginBottom: '8px', padding: '0 10px' }}>⏱️ آخر الاختيارات</div>
                                 {recentItems.map((item, index) => renderListItem(item, index, true))}

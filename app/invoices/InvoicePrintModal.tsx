@@ -153,8 +153,12 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
         if (!record) return; 
         const qty = Number(record.quantity || 0);
         const price = Number(record.unit_price || 0);
+        
+        // 🚀 إضافة حساب lines_data للإجمالي في حالة وجوده
         const linesTotal = (record.lines || []).reduce((sum: number, line: any) => sum + (Number(line.quantity) * Number(line.unit_price)), 0);
-        const lineTotal = (qty * price) + linesTotal;
+        const linesDataTotal = (record.lines_data || []).reduce((sum: number, line: any) => sum + (Number(line.total_price) || (Number(line.quantity || 0) * Number(line.unit_price || 0))), 0);
+        
+        const lineTotal = (qty * price) + linesTotal + linesDataTotal;
         const materialsDiscount = Number(record.materials_discount || 0);
         const taxableAmount = lineTotal - materialsDiscount;
         const guaranteePercent = Number(record.guarantee_percent || 0);
@@ -186,7 +190,7 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 }));
             }
         }
-    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca, record?.lines, setRecord]); 
+    }, [record?.quantity, record?.unit_price, record?.materials_discount, record?.guarantee_percent, record?.date, record?.due_in_days, record?.skip_zatca, record?.lines, record?.lines_data, setRecord]); 
 
     const handleAddStatement = (e: React.MouseEvent) => { /* محفوظة للمنطق */ };
     const handleRemoveLine = (indexToRemove: number) => { /* محفوظة للمنطق */ };
@@ -216,6 +220,21 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
     const signatureData = `تم الاعتماد إلكترونياً\nتاريخ الإصدار: ${creationDate}\nوقت الإصدار: ${creationTime}\nبواسطة: ${finalFullName}`;
     
     const amountInWords = tafqeet(Number(record.total_amount || 0));
+
+    // متغير لحساب الترقيم المتسلسل بشكل صحيح
+    const hasMainItem = (Number(record.quantity) > 0 || Number(record.unit_price) > 0 || record.description);
+    const baseLinesCount = (hasMainItem ? 1 : 0) + (record.lines?.length || 0);
+
+    // 🚀 استنتاج إجمالي الأعمال لحظياً لضمان عدم ظهوره بـ 0 أثناء الرندر
+    const calcQty = Number(record.quantity || 0);
+    const calcPrice = Number(record.unit_price || 0);
+    const calcLinesTotal = (record.lines || []).reduce((sum: number, line: any) => sum + (Number(line.quantity) * Number(line.unit_price)), 0);
+    const calcLinesDataTotal = (record.lines_data || []).reduce((sum: number, line: any) => sum + (Number(line.total_price) || (Number(line.quantity || 0) * Number(line.unit_price || 0))), 0);
+    let displayLineTotal = (calcQty * calcPrice) + calcLinesTotal + calcLinesDataTotal;
+    
+    if (displayLineTotal === 0 && Number(record.taxable_amount) > 0) {
+        displayLineTotal = Number(record.taxable_amount) + Number(record.materials_discount || 0);
+    }
 
     // 📦 محتوى المعاينة 
     const modalContent = (
@@ -485,7 +504,8 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         </tr>
                     </thead>
                     <tbody>
-                        {(Number(record.quantity) > 0 || Number(record.unit_price) > 0 || record.description) && (
+                        {/* البند الأساسي الأول إن وجد */}
+                        {hasMainItem && (
                             <tr>
                                 <td>1</td>
                                 <td className="desc">{record.description || '---'}</td>
@@ -495,9 +515,11 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                                 <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrency((Number(record.quantity||0) * Number(record.unit_price||0)))}</td>
                             </tr>
                         )}
+                        
+                        {/* مصفوفة البنود الإضافية (lines) */}
                         {record.lines?.map((line: any, idx: number) => (
-                            <tr key={idx}>
-                                <td>{(Number(record.quantity) > 0 || Number(record.unit_price) > 0 || record.description) ? idx + 2 : idx + 1}</td>
+                            <tr key={`line-${idx}`}>
+                                <td>{hasMainItem ? idx + 2 : idx + 1}</td>
                                 <td className="desc">{line.description}</td>
                                 <td>{line.unit}</td>
                                 <td>{line.quantity}</td>
@@ -505,6 +527,25 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                                 <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrency(line.total_price)}</td>
                             </tr>
                         ))}
+
+                        {/* 🚀 الإضافة الجديدة: مصفوفة بيانات lines_data بدون حذف السابق */}
+                        {record.lines_data?.map((line: any, idx: number) => {
+                            const rowNum = baseLinesCount + idx + 1;
+                            const qty = Number(line.quantity || 0);
+                            const price = Number(line.unit_price || 0);
+                            const total = Number(line.total_price || (qty * price) || 0);
+
+                            return (
+                                <tr key={`ldata-${idx}`}>
+                                    <td>{rowNum}</td>
+                                    <td className="desc">{line.description || line.item_name || line.name || '---'}</td>
+                                    <td>{line.unit || '---'}</td>
+                                    <td>{line.quantity || '-'}</td>
+                                    <td>{formatCurrency(price)}</td>
+                                    <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrency(total)}</td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
 
@@ -528,7 +569,8 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     <div className="inv-totals-box">
                         <div className="inv-total-row">
                             <span>إجمالي الأعمال:</span>
-                            <span>{formatCurrency(record.line_total)}</span>
+                            {/* 🚀 الحل هنا: دمج حقل السجل مع الإجمالي المستنتج لحظياً */}
+                            <span>{formatCurrency(record.line_total || displayLineTotal)}</span>
                         </div>
                         {Number(record.materials_discount) > 0 && (
                             <div className="inv-total-row discount">

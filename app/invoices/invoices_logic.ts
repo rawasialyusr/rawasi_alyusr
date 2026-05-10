@@ -10,7 +10,6 @@ export function useInvoicesLogic() {
     const { showToast } = useToast(); 
     const queryClient = useQueryClient();
     
-    // 🎯 دالة سحرية مساعدة لتحديث الكاش لحظياً (Optimistic UI)
     const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
         queryClient.setQueryData(['invoices'], (oldData: any[]) => {
             if (!oldData) return [];
@@ -24,7 +23,7 @@ export function useInvoicesLogic() {
     const [permissions, setPermissions] = useState<any>({ isAdmin: false });
     
     const [globalSearch, setGlobalSearch] = useState('');
-    const deferredSearch = useDeferredValue(globalSearch); // 🚀 تأخير ذكي لمنع التقطيع
+    const deferredSearch = useDeferredValue(globalSearch); 
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -36,7 +35,6 @@ export function useInvoicesLogic() {
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
     const [selectedInvoiceForPay, setSelectedInvoiceForPay] = useState<any>(null);
 
-    // 🛡️ 1. جلب الصلاحيات
     useEffect(() => {
         const fetchAuth = async () => {
             const { data: { session } } = await supabase.auth.getSession();
@@ -57,20 +55,18 @@ export function useInvoicesLogic() {
         fetchAuth();
     }, []);
 
-    // 🧠 2. جلب الفواتير عبر React Query
     const { data: invoices = [], isLoading: isInvLoading } = useQuery({
         queryKey: ['invoices'],
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('invoices')
-                .select('*, partners(*)')
+                .select('*, partners(*), debit_acc:accounts!invoices_debit_acc_fkey(name)')
                 .order('date', { ascending: false });
             if (error) throw error;
             return data || [];
         }
     });
 
-    // 🧠 3. جلب المشاريع عبر React Query
     const { data: projects = [], isLoading: isProjLoading } = useQuery({
         queryKey: ['projects'],
         queryFn: async () => {
@@ -80,9 +76,6 @@ export function useInvoicesLogic() {
         }
     });
 
-    // =========================================================================
-    // ⚙️ المعالجة والحسابات (Logic Filtering) 
-    // =========================================================================
     const allFiltered = useMemo(() => {
         if (!invoices) return [];
         return invoices.filter((inv: any) => {
@@ -126,9 +119,6 @@ export function useInvoicesLogic() {
         pending: allFiltered.filter((i: any) => i.status !== 'مُعتمد').length
     }), [allFiltered]);
 
-    // =========================================================================
-    // 🎬 عمليات الواجهة (UI Actions)
-    // =========================================================================
     const handleOpenPaymentModal = async (inv: any) => {
         const balance = Number(inv.total_amount || 0) - Number(inv.paid_amount || 0);
         
@@ -143,10 +133,20 @@ export function useInvoicesLogic() {
         const pName = inv.client_name || inv.partners?.name || '';
 
         setSelectedInvoiceForPay({
-            id: undefined, invoice_id: inv.id, invoice_number: inv.invoice_number,
-            partner_id: inv.partner_id, partner_name: pName,
-            selected_projects: selectedProjects, project_ids: pIds, 
-            amount: balance > 0 ? balance : 0, payment_method: 'تحويل بنكي'
+            id: undefined, 
+            invoice_id: inv.id, 
+            invoice_number: inv.invoice_number,
+            date: new Date().toISOString().split('T')[0], // 🚀 تاريخ اليوم افتراضياً
+            partner_id: inv.partner_id, 
+            partner_name: pName,
+            selected_projects: selectedProjects, 
+            project_ids: pIds, 
+            amount: balance > 0 ? balance : 0, 
+            payment_method: 'نقدي (كاش)',
+            partner_acc_id: inv.debit_account_id || '4f828d0d-a1f4-4762-83e3-c17dafae802d',
+            partner_acc_name: inv.debit_acc?.name || 'العملاء (أصحاب المشاريع)', 
+            safe_bank_acc_id: '21b8a1db-bc9f-4cf8-b741-1efeded0963c',
+            safe_bank_acc_name: 'الخزينة الرئيسية',
         });
         setIsReceiptModalOpen(true);
     };
@@ -164,7 +164,8 @@ export function useInvoicesLogic() {
     };
 
     const handleAddNew = () => { 
-        setCurrentRecord({ lines: [], date: new Date().toISOString(), project_ids: [], selected_projects: [] }); 
+        // 🚀 ضبط تاريخ الفاتورة الجديدة لتكون بصيغة YYYY-MM-DD
+        setCurrentRecord({ lines: [], date: new Date().toISOString().split('T')[0], project_ids: [], selected_projects: [] }); 
         setIsEditModalOpen(true); 
     };
 
@@ -182,11 +183,6 @@ export function useInvoicesLogic() {
         setIsEditModalOpen(true);
     };
 
-    // =========================================================================
-    // 🚀 طابور العمليات (Mutations & Optimistic Updates)
-    // =========================================================================
-
-    // 1. حفظ الفاتورة (Save)
     const saveMutation = useMutation({
         mutationFn: async (record: any) => {
             const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
@@ -234,81 +230,48 @@ export function useInvoicesLogic() {
         }
     });
 
-    // 2. الترحيل المركزي (Backend RPC)
     const postMutation = useMutation({
         mutationFn: async () => {
             if (!selectedIds.length) return;
-            const previousData = queryClient.getQueryData(['invoices']);
-            
-            // تحديث الكاش لحظياً
-            updateRowsInCache(selectedIds, { status: 'مُعتمد' });
-
             const { error } = await supabase.rpc('post_invoices_bulk', { p_ids: selectedIds });
-            if (error) {
-                queryClient.setQueryData(['invoices'], previousData);
-                throw error;
-            }
+            if (error) throw error;
         },
         onSuccess: () => {
             showToast("تم الاعتماد والترحيل بنجاح ✅", "success");
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
         },
-        onError: (err: any) => {
-            showToast(`خطأ في الترحيل: ${err.message}`, "error");
-        }
+        onError: (err: any) => showToast(`خطأ في الترحيل: ${err.message}`, "error")
     });
 
-    // 3. فك الترحيل المركزي (Backend RPC)
     const unpostMutation = useMutation({
         mutationFn: async () => {
             if (!selectedIds.length) return;
-            const previousData = queryClient.getQueryData(['invoices']);
-            
-            // تحديث الكاش لحظياً
-            updateRowsInCache(selectedIds, { status: 'معلق' });
-
             const { error } = await supabase.rpc('unpost_invoices_bulk', { p_ids: selectedIds });
-            if (error) {
-                queryClient.setQueryData(['invoices'], previousData);
-                throw error;
-            }
+            if (error) throw error;
         },
         onSuccess: () => {
             showToast("تم إلغاء الترحيل وتطهير القيود ⏸️", "warning");
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
         },
-        onError: (err: any) => {
-            showToast(`خطأ: ${err.message}`, "error");
-        }
+        onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
     });
 
-    // 4. الحذف النهائي (Backend RPC)
     const deleteMutation = useMutation({
         mutationFn: async () => {
             if (!selectedIds.length) return;
-            const previousData = queryClient.getQueryData(['invoices']);
-            
-            // مسح من الكاش لحظياً
-            queryClient.setQueryData(['invoices'], (old: any[]) => 
-                old?.filter(inv => !selectedIds.includes(String(inv.id)))
-            );
-
             const { error } = await supabase.rpc('delete_invoices_bulk', { p_ids: selectedIds });
-            if (error) {
-                queryClient.setQueryData(['invoices'], previousData);
-                throw error;
-            }
+            if (error) throw error;
         },
         onSuccess: () => {
             showToast("تم الحذف النهائي وكافة القيود المرتبطة 🗑️", "success");
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
         },
-        onError: (err: any) => {
-            showToast(`خطأ في الحذف: ${err.message}`, "error");
-        }
+        onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, "error")
     });
 
-    // 5. السداد الفوري
     const payMutation = useMutation({
         mutationFn: async (receiptData: any) => {
             const autoNumber = `RV-${Date.now()}`;
@@ -337,8 +300,8 @@ export function useInvoicesLogic() {
                 const { data: invData } = await supabase.from('invoices').select('paid_amount').eq('id', dataToSave.invoice_id).single();
                 const newPaid = Number(invData?.paid_amount || 0) + finalAmount;
                 
-                updateRowsInCache([dataToSave.invoice_id], { paid_amount: newPaid });
-                await supabase.from('invoices').update({ paid_amount: newPaid }).eq('id', dataToSave.invoice_id);
+                const { error: updateErr } = await supabase.from('invoices').update({ paid_amount: newPaid }).eq('id', dataToSave.invoice_id);
+                if (updateErr) throw updateErr;
             }
         },
         onError: (err: any) => {
@@ -349,6 +312,8 @@ export function useInvoicesLogic() {
             setIsReceiptModalOpen(false);
             setSelectedInvoiceForPay(null);
             showToast("تم السداد وتحديث الفاتورة بنجاح ✅", "success");
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
         }
     });
 

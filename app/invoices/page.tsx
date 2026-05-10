@@ -46,7 +46,10 @@ export default function InvoicesPage() {
   const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
 
   // =========================================================================
-  // 💎 أعمدة الجدول (متوافقة مع RawasiSmartTable)
+  // 💎 أعمدة الجدول (متوافقة مع RawasiSmartTable والسكيما الجديدة)
+  // =========================================================================
+  // =========================================================================
+  // 💎 أعمدة الجدول (شاملة كل تفاصيل السكيما الجديدة 100%)
   // =========================================================================
   const invoiceColumns = useMemo(() => [
     {
@@ -89,10 +92,17 @@ export default function InvoicesPage() {
     },
     { 
       key: 'invoice_number',
-      label: 'رقم الفاتورة', 
+      label: 'الفاتورة', 
       render: (row: any) => {
         if (!row) return null;
-        return <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px', letterSpacing: '0.5px' }}>#{row.invoice_number}</b>;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px' }}>#{row.invoice_number}</b>
+            <span style={{ fontSize: '10px', color: '#64748b' }}>
+               {row.skip_zatca ? '📄 فاتورة داخلية' : '🧾 ضريبية (ZATCA)'}
+            </span>
+          </div>
+        );
       } 
     },
     { 
@@ -109,22 +119,73 @@ export default function InvoicesPage() {
     },
     { 
       key: 'client_name',
-      label: 'العميل', 
+      label: 'العميل / البيان', 
       render: (row: any) => {
         if (!row) return null; 
-        return <span style={{fontWeight: 800, color: '#1e293b'}}>{row.client_name || '---'}</span>;
+        const finalClientName = row.partners?.name || row.client_name || '---';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'right' }}>
+             <span style={{fontWeight: 900, color: '#1e293b'}}>{finalClientName}</span>
+             {row.description && (
+               <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={row.description}>
+                  {row.description}
+               </span>
+             )}
+          </div>
+        );
       } 
+    },
+    {
+      key: 'financial_details',
+      label: 'تفاصيل المبالغ (قبل الصافي)',
+      render: (row: any) => {
+        if (!row) return null;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', fontWeight: 700, textAlign: 'right' }}>
+             <span style={{ color: '#334155' }}>الخاضع: {formatCurrency(row.taxable_amount)}</span>
+             {Number(row.materials_discount) > 0 && <span style={{ color: '#ef4444' }}>خصم مواد: -{formatCurrency(row.materials_discount)}</span>}
+             {Number(row.tax_amount) > 0 && <span style={{ color: '#0ea5e9' }}>ضريبة (15%): +{formatCurrency(row.tax_amount)}</span>}
+             {Number(row.guarantee_amount) > 0 && <span style={{ color: '#f59e0b' }}>ضمان ({row.guarantee_percent}%): -{formatCurrency(row.guarantee_amount)}</span>}
+          </div>
+        );
+      }
+    },
+    { 
+      key: 'total_amount',
+      label: 'الإجمالي الصافي', 
+      render: (row: any) => {
+        if (!row) return null; 
+        return <span style={{ fontWeight: 900, color: THEME.brand?.gold || '#d97706', fontSize: '15px' }}>{formatCurrency(row.total_amount)}</span>;
+      } 
+    },
+    {
+      key: 'paid_amount',
+      label: 'السداد',
+      render: (row: any) => {
+        if (!row) return null; 
+        const total = Number(row.total_amount || 0);
+        const paid = Number(row.paid_amount || 0);
+        const remaining = total - paid;
+        
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 800 }}>
+             {paid > 0 && <span style={{ color: '#10b981' }}>مسدد: {formatCurrency(paid)}</span>}
+             {remaining > 0 && <span style={{ color: '#ef4444' }}>متبقي: {formatCurrency(remaining)}</span>}
+             {paid === 0 && remaining === 0 && <span style={{ color: '#94a3b8' }}>0.00</span>}
+          </div>
+        );
+      }
     },
     {
       key: 'status',
       label: 'الاعتماد',
       render: (row: any) => {
         if (!row) return null; 
-        const isApproved = row.status === 'مُعتمد';
+        const isApproved = row.status === 'مُعتمد' || row.status === 'مرحل';
         return (
           <div className={`approval-glass-badge ${isApproved ? 'approved' : 'pending'}`}>
             <span className="dot"></span>
-            {isApproved ? 'مُعتمد' : 'معلق'}
+            {isApproved ? row.status : 'معلق'}
           </div>
         );
       }
@@ -152,34 +213,6 @@ export default function InvoicesPage() {
       }
     },
     {
-      key: 'paid_amount',
-      label: 'حالة السداد',
-      render: (row: any) => {
-        if (!row) return null; 
-        const total = Number(row.total_amount || 0);
-        const paid = Number(row.paid_amount || 0);
-        
-        if (paid <= 0) return <span className="glass-badge red">🔴 مستحقة</span>;
-        if (paid < total) return <span className="glass-badge orange">⏳ جزئي</span>;
-        return <span className="glass-badge green">✅ مسددة</span>;
-      }
-    },
-    { 
-      key: 'total_amount',
-      label: 'الصافي', 
-      render: (row: any) => {
-        if (!row) return null; 
-        const total = Number(row.total_amount || 0);
-        const paid = Number(row.paid_amount || 0);
-        let textColor = '#dc2626'; 
-        
-        if (paid >= total && total > 0) textColor = '#16a34a'; 
-        else if (paid > 0 && paid < total) textColor = '#d97706'; 
-        
-        return <span style={{ fontWeight: 900, color: textColor, fontSize: '14px', textShadow: `0 0 10px ${textColor}40` }}>{formatCurrency(total)}</span>;
-      } 
-    },
-    {
       key: 'actions',
       label: 'الإجراءات',
       render: (row: any) => {
@@ -191,12 +224,12 @@ export default function InvoicesPage() {
         
         return (
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
-            <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print">🖨️</button>
-            {needsPayment && (
+            <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print" title="طباعة الفاتورة">🖨️</button>
+            {needsPayment && logic.handleOpenPaymentModal && (
               <button onClick={(e) => {
                   e.stopPropagation(); 
-                  logic.handleOpenPaymentModal(row); // 🚀 استخدام الدالة المجهزة في اللوجيك
-                }} className="btn-glass-pay">💰 سداد</button>
+                  logic.handleOpenPaymentModal(row); 
+                }} className="btn-glass-pay" title="تسجيل سند قبض">💰</button>
             )}
           </div>
         );
@@ -275,7 +308,7 @@ export default function InvoicesPage() {
             </div>
         }
         onSearch={logic.setGlobalSearch}
-        onDateFilter={(start, end) => { logic.setDateFrom(start); logic.setDateTo(end); }}
+        onDateFilter={(start, end) => { if(logic.setDateFrom) logic.setDateFrom(start); if(logic.setDateTo) logic.setDateTo(end); }}
         watchDeps={[logic.selectedIds, logic.allFiltered.length, result.totalRemaining]}
       />
 

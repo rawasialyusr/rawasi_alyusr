@@ -11,9 +11,12 @@ export function useBoqCatalogLogic() {
     const [globalSearch, setGlobalSearch] = useState('');
     const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
     
-    // حالات المودال
+    // حالات المودال للبنود
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentRecord, setCurrentRecord] = useState<any>({});
+
+    // حالات المودال للأقسام (تعديل اسم قسم رئيسي/فرعي)
+    const [categoryModal, setCategoryModal] = useState<{isOpen: boolean, oldName: string, newName: string, type: 'main'|'sub', parentMain?: string}>({ isOpen: false, oldName: '', newName: '', type: 'main' });
 
     // 📥 جلب الدليل بالكامل
     const { data: catalogItems = [], isLoading } = useQuery({
@@ -30,97 +33,74 @@ export function useBoqCatalogLogic() {
         }
     });
 
-    // 🚀 السحر المعماري: تحويل البيانات المسطحة إلى هيكل شجري (Tree Structure)
+    // 🚀 السحر المعماري: تحويل البيانات المسطحة إلى هيكل شجري
     const treeData = useMemo(() => {
         const tree: Record<string, Record<string, any[]>> = {};
         
         catalogItems.forEach(item => {
-            // تطبيق البحث لو موجود
             const search = globalSearch.toLowerCase();
-            if (search && !item.item_name.toLowerCase().includes(search) && 
-                !item.main_category.toLowerCase().includes(search) && 
-                !item.sub_category.toLowerCase().includes(search) &&
+            if (search && !item.item_name?.toLowerCase().includes(search) && 
+                !item.main_category?.toLowerCase().includes(search) && 
+                !item.sub_category?.toLowerCase().includes(search) &&
                 !(item.item_code || '').toLowerCase().includes(search)) {
                 return;
             }
 
-            if (!tree[item.main_category]) {
-                tree[item.main_category] = {};
-            }
-            if (!tree[item.main_category][item.sub_category]) {
-                tree[item.main_category][item.sub_category] = [];
-            }
+            if (!tree[item.main_category]) tree[item.main_category] = {};
+            if (!tree[item.main_category][item.sub_category]) tree[item.main_category][item.sub_category] = [];
             tree[item.main_category][item.sub_category].push(item);
         });
         
         return tree;
     }, [catalogItems, globalSearch]);
 
-    // تبديل فتح/غلق فروع الشجرة
     const toggleNode = (nodeName: string) => {
         setExpandedNodes(prev => ({ ...prev, [nodeName]: !prev[nodeName] }));
     };
 
-    // 🚀 [خوارزمية التكويد الذكية (Smart Coding Generator)]
+    // 🚀 [خوارزمية التكويد الذكية المحسنة (Smart AI Coding)]
     const generateItemCode = async (mainCat: string, subCat: string) => {
-        // 1. تحديد الاختصار (Prefix) بناءً على الكلمات المفتاحية
         let prefix = 'GEN'; // عام
-        if (mainCat.includes('إنشائ') || mainCat.includes('عظم') || mainCat.includes('حفر')) prefix = 'STR';
-        else if (mainCat.includes('تشطيب') || mainCat.includes('معمار')) prefix = 'FIN';
-        else if (mainCat.includes('كهروميكانيك') || mainCat.includes('كهرباء') || mainCat.includes('سباكة')) prefix = 'MEP';
-        else if (mainCat.includes('إشراف') || mainCat.includes('إدار') || mainCat.includes('تصميم')) prefix = 'MGT';
-        else if (mainCat.includes('موقع') || mainCat.includes('تجهيز')) prefix = 'SIT';
-
-        // 2. سحب البنود لنفس القسم الرئيسي لمعرفة التسلسل
-        const { data: existingItems } = await supabase
-            .from('boq_items')
-            .select('item_code, sub_category')
-            .eq('main_category', mainCat);
-
-        const items = existingItems || [];
-        const itemsInSub = items.filter(i => i.sub_category === subCat);
-
-        // 3. تحديد كود القسم الفرعي (Sub-Category Code)
-        let subCodeStr = '';
-        const existingSubItem = itemsInSub.find(i => i.item_code && i.item_code.includes('-'));
+        const mainStr = mainCat.toLowerCase();
         
-        if (existingSubItem) {
-            // لو القسم الفرعي ده موجود قبل كده، اسحب الكود بتاعه
-            subCodeStr = existingSubItem.item_code.split('-')[1];
-        } else {
-            // لو ده قسم فرعي جديد، هات أعلى رقم قسم فرعي وزود 1
-            let maxSubNum = 0;
-            items.forEach(item => {
-                const parts = item.item_code?.split('-');
-                if (parts && parts.length >= 2) {
-                    const num = parseInt(parts[1], 10);
-                    if (!isNaN(num) && num > maxSubNum) maxSubNum = num;
-                }
-            });
-            subCodeStr = (maxSubNum + 1).toString().padStart(2, '0');
-        }
+        // تحليل الذكاء للكلمات المفتاحية
+        if (mainStr.includes('انشاء') || mainStr.includes('إنشاء') || mainStr.includes('عظم') || mainStr.includes('خرسان') || mainStr.includes('حفر') || mainStr.includes('هيكل')) prefix = 'STR';
+        else if (mainStr.includes('تشطيب') || mainStr.includes('معمار') || mainStr.includes('ديكور') || mainStr.includes('دهان') || mainStr.includes('بلاط')) prefix = 'FIN';
+        else if (mainStr.includes('كهروميكانيك') || mainStr.includes('كهرباء') || mainStr.includes('سباك') || mainStr.includes('ميكانيك') || mainStr.includes('تكييف')) prefix = 'MEP';
+        else if (mainStr.includes('ادار') || mainStr.includes('إدار') || mainStr.includes('اشراف') || mainStr.includes('إشراف') || mainStr.includes('تصميم') || mainStr.includes('هندس')) prefix = 'MGT';
+        else if (mainStr.includes('موقع') || mainStr.includes('تجهيز') || mainStr.includes('تمهيد') || mainStr.includes('سور')) prefix = 'SIT';
 
-        // 4. تحديد كود البند نفسه (Item Code) لتجنب التكرار
+        const { data: existingItems } = await supabase.from('boq_items').select('item_code, main_category, sub_category');
+        const items = existingItems || [];
+
+        // تسلسل القسم الفرعي
+        const itemsInMain = items.filter(i => i.main_category === mainCat);
+        const uniqueSubsInMain = Array.from(new Set(itemsInMain.map(i => i.sub_category)));
+        let subIndex = uniqueSubsInMain.indexOf(subCat);
+        if (subIndex === -1) subIndex = uniqueSubsInMain.length; 
+        const subCodeStr = (subIndex + 1).toString().padStart(2, '0');
+
+        // تسلسل البند نفسه
+        const itemsInSub = itemsInMain.filter(i => i.sub_category === subCat);
         let maxItemNum = 0;
         itemsInSub.forEach(item => {
-            const parts = item.item_code?.split('-');
-            if (parts && parts.length >= 3) {
-                const num = parseInt(parts[2], 10);
-                if (!isNaN(num) && num > maxItemNum) maxItemNum = num;
-            }
+            if (!item.item_code) return;
+            const parts = item.item_code.split('-');
+            const lastPart = parts[parts.length - 1]; // جلب آخر رقم في الكود
+            const num = parseInt(lastPart, 10);
+            if (!isNaN(num) && num > maxItemNum) maxItemNum = num;
         });
         const itemCodeStr = (maxItemNum + 1).toString().padStart(2, '0');
 
-        return `${prefix}-${subCodeStr}-${itemCodeStr}`; // النتيجة النهائية: FIN-01-02
+        return `${prefix}-${subCodeStr}-${itemCodeStr}`; // النتيجة: FIN-01-02
     };
 
-    // 🚀 دالة الحفظ
+    // 🚀 الحفظ للبند الفردي
     const saveItemMutation = useMutation({
         mutationFn: async (record: any) => {
-            const mainCat = record.main_category || 'بند عام';
-            const subCat = record.sub_category || 'مرحلة عامة';
+            const mainCat = record.main_category || 'أعمال عامة';
+            const subCat = record.sub_category || 'بنود عامة';
 
-            // إذا لم يتم إدخال كود يدوياً، قم بتوليده آلياً
             let finalItemCode = record.item_code;
             if (!finalItemCode || finalItemCode.trim() === '') {
                 finalItemCode = await generateItemCode(mainCat, subCat);
@@ -143,11 +123,10 @@ export function useBoqCatalogLogic() {
             }
         },
         onSuccess: () => {
-            showToast("تم حفظ البند في الدليل الموحد بنجاح 📚✅", "success");
+            showToast("تم الحفظ بنجاح 📚✅", "success");
             setIsModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['boq_items_catalog'] });
-        },
-        onError: (err: any) => showToast(`خطأ في الحفظ: ${err.message}`, "error")
+        }
     });
 
     const deleteItemMutation = useMutation({
@@ -156,12 +135,45 @@ export function useBoqCatalogLogic() {
             if (error) throw error;
         },
         onSuccess: () => {
-            showToast("تم مسح البند بنجاح 🗑️", "success");
+            showToast("تم المسح بنجاح 🗑️", "success");
             queryClient.invalidateQueries({ queryKey: ['boq_items_catalog'] });
         }
     });
 
-    // استخراج قوائم فريدة لاستخدامها في الاقتراحات داخل المودال
+    // 🚀 [الجديد]: تعديل وحذف الأقسام بالكامل (Cascade Operations)
+    const renameCategoryMutation = useMutation({
+        mutationFn: async ({ oldName, newName, type, parentMain }: any) => {
+            if (type === 'main') {
+                const { error } = await supabase.from('boq_items').update({ main_category: newName }).eq('main_category', oldName);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('boq_items').update({ sub_category: newName }).eq('main_category', parentMain).eq('sub_category', oldName);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            showToast("تم تحديث اسم القسم بنجاح 🔄", "success");
+            setCategoryModal({ ...categoryModal, isOpen: false });
+            queryClient.invalidateQueries({ queryKey: ['boq_items_catalog'] });
+        }
+    });
+
+    const deleteCategoryMutation = useMutation({
+        mutationFn: async ({ name, type, parentMain }: any) => {
+            if (type === 'main') {
+                const { error } = await supabase.from('boq_items').delete().eq('main_category', name);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('boq_items').delete().eq('main_category', parentMain).eq('sub_category', name);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            showToast("تم حذف القسم بجميع بنوده 🗑️", "success");
+            queryClient.invalidateQueries({ queryKey: ['boq_items_catalog'] });
+        }
+    });
+
     const uniqueMainCategories = Array.from(new Set(catalogItems.map(i => i.main_category)));
     const uniqueSubCategories = Array.from(new Set(catalogItems.map(i => i.sub_category)));
 
@@ -173,6 +185,9 @@ export function useBoqCatalogLogic() {
         handleSaveItem: (data: any) => saveItemMutation.mutate(data),
         handleDeleteItem: (id: string) => { if(confirm("تأكيد الحذف النهائي؟")) deleteItemMutation.mutate(id); },
         isSaving: saveItemMutation.isPending,
-        uniqueMainCategories, uniqueSubCategories
+        uniqueMainCategories, uniqueSubCategories,
+        categoryModal, setCategoryModal,
+        handleRenameCategory: (data: any) => renameCategoryMutation.mutate(data),
+        handleDeleteCategory: (data: any) => deleteCategoryMutation.mutate(data)
     };
 }

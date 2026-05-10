@@ -3,7 +3,6 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { fetchAllSupabaseData } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context';
 
 export function useHierarchicalAccountsLogic() {
@@ -19,70 +18,47 @@ export function useHierarchicalAccountsLogic() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
-  // 🧠 1. جلب البيانات عبر React Query (Offline-First & Caching)
-  const { data: rawAccounts = [], isLoading: isAccLoading } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => fetchAllSupabaseData(supabase, 'accounts')
+  // 🧠 1. جلب البيانات "المطبوخة" من الباك إند (سريعة جداً - 59 صف فقط بدلاً من 13,000)
+  const { data: accountsReport = [], isLoading } = useQuery({
+    queryKey: ['accounts_report', startDate, endDate],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_accounts_report', {
+        p_date_from: startDate || '1900-01-01',
+        p_date_to: endDate || '2099-12-31'
+      });
+      
+      if (error) {
+        console.error("❌ خطأ في جلب تقرير الحسابات:", error);
+        throw error;
+      }
+      return data || [];
+    }
   });
 
-  const { data: rawHeaders = [], isLoading: isHeadLoading } = useQuery({
-    queryKey: ['journal_headers'],
-    queryFn: () => fetchAllSupabaseData(supabase, 'journal_headers')
-  });
-
-  const { data: rawLines = [], isLoading: isLinesLoading } = useQuery({
-    queryKey: ['journal_lines'],
-    queryFn: () => fetchAllSupabaseData(supabase, 'journal_lines')
-  });
-
-  const isLoading = isAccLoading || isHeadLoading || isLinesLoading;
-
-  // 🧠 2. المحرك الذكي: بناء الشجرة وتطبيق فلاتر التاريخ (Logic Filtering)
+  // 🧠 2. بناء الشجرة (عملية خفيفة جداً للفرونت إند فقط لترتيب العرض)
   const treeData = useMemo(() => {
-    if (!rawAccounts.length) return [];
-
-    const headerMap: Record<string, any> = {};
-    rawHeaders.forEach((h: any) => { 
-        if (h.status === 'posted') { // الفلترة للحركات المرحلة فقط
-            headerMap[h.id] = h; 
-        }
-    });
+    if (!accountsReport.length) return [];
 
     const mapById: Record<string, any> = {};
-    const mapByCode: Record<string, any> = {};
 
     // ترتيب الحسابات تصاعدياً بالكود لضمان شكل شجرة احترافي
-    const sortedAccounts = [...rawAccounts].sort((a: any, b: any) => {
+    const sortedAccounts = [...accountsReport].sort((a: any, b: any) => {
          const codeA = a.code ? String(a.code) : '';
          const codeB = b.code ? String(b.code) : '';
          return codeA.localeCompare(codeB);
     });
 
+    // تجهيز العقد (Nodes) وربط الأرقام القادمة من الداتابيز
     sortedAccounts.forEach(acc => {
-      const node = { ...acc, children: [], transactions: [], totalDebit: 0, totalCredit: 0, balance: 0 };
       const safeId = String(acc.id).trim();
-      mapById[safeId] = node;
-      if (acc.code) mapByCode[String(acc.code).trim()] = node;
-    });
-
-    rawLines.forEach((line: any) => {
-      const header = headerMap[line.header_id];
-      if (!header) return; 
-
-      // 📅 تطبيق فلاتر التاريخ المحاسبية
-      if (startDate && header.entry_date < startDate) return;
-      if (endDate && header.entry_date > endDate) return;
-
-      const lineAccId = String(line.account_id).trim();
-      let targetNode = mapById[lineAccId] || mapByCode[lineAccId];
-
-      if (targetNode) {
-        targetNode.transactions.push({
-          ...line,
-          date: header.entry_date || '---',
-          description: line.item_name || header.description || 'مصروف مرحل'
-        });
-      }
+      mapById[safeId] = { 
+        ...acc, 
+        children: [], 
+        transactions: [], // تم تفريغ القيود هنا لمنع تهنيج المتصفح (تفاصيل القيود تعرض في كشف حساب منفصل)
+        totalDebit: Number(acc.total_debit || 0),
+        totalCredit: Number(acc.total_credit || 0),
+        balance: Number(acc.balance || 0)
+      };
     });
 
     const roots: any[] = [];
@@ -97,26 +73,8 @@ export function useHierarchicalAccountsLogic() {
       }
     });
 
-    const calculateTotals = (node: any) => {
-      let d = 0, c = 0;
-      node.transactions.forEach((t: any) => {
-        d += Number(t.debit || 0);
-        c += Number(t.credit || 0);
-      });
-      node.children.forEach((child: any) => {
-        const totals = calculateTotals(child);
-        d += totals.debit;
-        c += totals.credit;
-      });
-      node.totalDebit = d;
-      node.totalCredit = c;
-      node.balance = d - c; 
-      return { debit: d, credit: c };
-    };
-
-    roots.forEach(root => calculateTotals(root));
     return roots;
-  }, [rawAccounts, rawHeaders, rawLines, startDate, endDate]);
+  }, [accountsReport]);
 
   // 🧠 3. منطق البحث السريع
   const filteredTree = useMemo(() => {
@@ -138,20 +96,20 @@ export function useHierarchicalAccountsLogic() {
     return filteredTree.slice(start, start + itemsPerPage);
   }, [filteredTree, currentPage, itemsPerPage]);
 
-  // 🚀 4. طابور العمليات (Mutations & Optimistic Updates)
+  // 🚀 4. طابور العمليات (حذف الحسابات)
   const deleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
         const { error } = await supabase.from('accounts').delete().in('id', ids); 
         if (error) throw error;
     },
     onMutate: async (ids) => {
-        await queryClient.cancelQueries({ queryKey: ['accounts'] });
-        const previous = queryClient.getQueryData(['accounts']);
-        queryClient.setQueryData(['accounts'], (old: any[]) => old?.filter(acc => !ids.includes(acc.id)));
+        await queryClient.cancelQueries({ queryKey: ['accounts_report'] });
+        const previous = queryClient.getQueryData(['accounts_report']);
+        queryClient.setQueryData(['accounts_report'], (old: any[]) => old?.filter(acc => !ids.includes(acc.id)));
         return { previous };
     },
     onError: (err: any, vars, context) => {
-        queryClient.setQueryData(['accounts'], context?.previous);
+        queryClient.setQueryData(['accounts_report'], context?.previous);
         showToast(`حدث خطأ أثناء الحذف: ${err.message}`, 'error');
     },
     onSuccess: () => {
@@ -159,7 +117,8 @@ export function useHierarchicalAccountsLogic() {
         showToast('تم حذف الحسابات بنجاح 🗑️', 'success');
     },
     onSettled: () => {
-        queryClient.invalidateQueries({ queryKey: ['accounts'] });
+        // تحديث الـ Cache لتقرير الحسابات
+        queryClient.invalidateQueries({ queryKey: ['accounts_report'] });
     }
   });
 

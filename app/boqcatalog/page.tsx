@@ -15,7 +15,7 @@ export default function BoqCatalogPage() {
                 logic.setCurrentRecord({ main_category: '', sub_category: '', item_name: '', unit_of_measure: 'مقطوعية' });
                 logic.setIsModalOpen(true);
             }} className="btn-main-glass gold">
-                ➕ إضافة بند جديد للدليل
+                ➕ إضافة قسم / بند جديد
             </button>
             <div style={{ height: '1px', background: 'rgba(255,255,255,0.2)', margin: '5px 0' }} />
             <button onClick={() => logic.setExpandedNodes({})} className="btn-main-glass white">
@@ -59,18 +59,22 @@ export default function BoqCatalogPage() {
                     .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
                     .summary-glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2); margin-bottom: 25px; }
                     
-                    /* 🌳 ستايلات الشجرة */
+                    /* 🌳 ستايلات الشجرة وإدارة الأقسام */
                     .tree-main { background: white; border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 15px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-                    .tree-main-header { background: #f8fafc; padding: 15px 20px; font-weight: 900; font-size: 16px; color: ${THEME.coffeeDark}; cursor: pointer; display: flex; align-items: center; border-bottom: 1px solid #e2e8f0; transition: 0.2s; }
+                    .tree-main-header { background: #f8fafc; padding: 15px 20px; font-weight: 900; font-size: 16px; color: ${THEME.coffeeDark}; cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; transition: 0.2s; }
                     .tree-main-header:hover { background: #f1f5f9; }
                     
                     .tree-sub { margin: 10px 20px 10px 0; border-right: 3px solid ${THEME.goldAccent}50; padding-right: 15px; }
-                    .tree-sub-header { padding: 10px; font-weight: 900; font-size: 14px; color: ${THEME.coffeeMain}; cursor: pointer; display: flex; align-items: center; transition: 0.2s; border-radius: 8px; }
+                    .tree-sub-header { padding: 10px; font-weight: 900; font-size: 14px; color: ${THEME.coffeeMain}; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: 0.2s; border-radius: 8px; }
                     .tree-sub-header:hover { background: #f8fafc; }
                     
                     .tree-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: white; border: 1px solid #f1f5f9; border-radius: 12px; margin: 5px 20px 5px 0; transition: 0.2s; }
                     .tree-item:hover { border-color: ${THEME.goldAccent}; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
                     .tree-item-code { background: #f1f5f9; color: #64748b; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; margin-left: 10px; }
+
+                    .action-icon { background: none; border: none; cursor: pointer; font-size: 14px; opacity: 0; transition: 0.2s; padding: 5px; border-radius: 6px; }
+                    .action-icon:hover { background: rgba(0,0,0,0.05); transform: scale(1.1); }
+                    .tree-main-header:hover .action-icon, .tree-sub-header:hover .action-icon { opacity: 1; }
                 `}</style>
 
                 {logic.isLoading ? (
@@ -87,24 +91,40 @@ export default function BoqCatalogPage() {
                                 
                                 return (
                                     <div key={mainCat} className="tree-main">
+                                        
+                                        {/* رأس القسم الرئيسي */}
                                         <div className="tree-main-header" onClick={() => logic.toggleNode(`main_${mainCat}`)}>
-                                            <span style={{ width: '25px' }}>{isMainExpanded ? '📂' : '📁'}</span>
-                                            {mainCat}
+                                            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ width: '25px' }}>{isMainExpanded ? '📂' : '📁'}</span>
+                                                {mainCat}
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '5px' }}>
+                                                <button onClick={(e) => { e.stopPropagation(); logic.setCategoryModal({ isOpen: true, oldName: mainCat, newName: mainCat, type: 'main' }); }} className="action-icon" title="تعديل اسم القسم">✏️</button>
+                                                <button onClick={(e) => { e.stopPropagation(); if(confirm(`هل أنت متأكد من حذف قسم "${mainCat}" بجميع بنوده نهائياً؟`)) logic.handleDeleteCategory({ name: mainCat, type: 'main' }); }} className="action-icon" title="حذف القسم بالكامل">🗑️</button>
+                                            </div>
                                         </div>
 
-                                        {/* إذا كان القسم الرئيسي مفتوحاً، اعرض الأقسام الفرعية */}
+                                        {/* الأقسام الفرعية */}
                                         {isMainExpanded && Object.keys(logic.treeData[mainCat]).map((subCat) => {
                                             const isSubExpanded = logic.expandedNodes[`sub_${mainCat}_${subCat}`];
                                             const items = logic.treeData[mainCat][subCat];
 
                                             return (
                                                 <div key={subCat} className="tree-sub">
+                                                    
+                                                    {/* رأس القسم الفرعي */}
                                                     <div className="tree-sub-header" onClick={() => logic.toggleNode(`sub_${mainCat}_${subCat}`)}>
-                                                        <span style={{ width: '25px', fontSize: '12px' }}>{isSubExpanded ? '▼' : '◀'}</span>
-                                                        {subCat} <span style={{ fontSize: '11px', color: '#94a3b8', marginRight: '8px' }}>({items.length} بنود)</span>
+                                                        <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                                                            <span style={{ width: '25px', fontSize: '12px' }}>{isSubExpanded ? '▼' : '◀'}</span>
+                                                            {subCat} <span style={{ fontSize: '11px', color: '#94a3b8', marginRight: '8px' }}>({items.length} بنود)</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '5px' }}>
+                                                            <button onClick={(e) => { e.stopPropagation(); logic.setCategoryModal({ isOpen: true, oldName: subCat, newName: subCat, type: 'sub', parentMain: mainCat }); }} className="action-icon" title="تعديل اسم القسم الفرعي">✏️</button>
+                                                            <button onClick={(e) => { e.stopPropagation(); if(confirm(`هل أنت متأكد من حذف "${subCat}" بجميع بنوده؟`)) logic.handleDeleteCategory({ name: subCat, type: 'sub', parentMain: mainCat }); }} className="action-icon" title="حذف القسم الفرعي">🗑️</button>
+                                                        </div>
                                                     </div>
 
-                                                    {/* إذا كان القسم الفرعي مفتوحاً، اعرض البنود */}
+                                                    {/* البنود الداخلية */}
                                                     {isSubExpanded && items.map((item: any) => (
                                                         <div key={item.id} className="tree-item">
                                                             <div>
@@ -116,8 +136,8 @@ export default function BoqCatalogPage() {
                                                                     {item.unit_of_measure}
                                                                 </span>
                                                                 <div>
-                                                                    <button onClick={() => { logic.setCurrentRecord(item); logic.setIsModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px' }} title="تعديل">✏️</button>
-                                                                    <button onClick={() => logic.handleDeleteItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px' }} title="حذف">🗑️</button>
+                                                                    <button onClick={() => { logic.setCurrentRecord(item); logic.setIsModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }} title="تعديل البند">✏️</button>
+                                                                    <button onClick={() => logic.handleDeleteItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }} title="حذف البند">🗑️</button>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -129,7 +149,7 @@ export default function BoqCatalogPage() {
                                                             logic.setCurrentRecord({ main_category: mainCat, sub_category: subCat, item_name: '', unit_of_measure: 'مقطوعية' });
                                                             logic.setIsModalOpen(true);
                                                         }} style={{ background: 'transparent', color: THEME.goldAccent, border: 'none', padding: '5px 20px', fontSize: '11px', fontWeight: 900, cursor: 'pointer', display: 'block', marginTop: '5px' }}>
-                                                            + إضافة بند تحت "{subCat}"
+                                                            + إضافة بند جديد تحت "{subCat}"
                                                         </button>
                                                     )}
                                                 </div>
@@ -142,7 +162,29 @@ export default function BoqCatalogPage() {
                     </div>
                 )}
 
-                {/* 🚀 استدعاء مودال الإضافة */}
+                {/* 🚀 مودال تعديل مسمى الأقسام */}
+                {logic.categoryModal.isOpen && (
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(40, 24, 10, 0.7)', backdropFilter: 'blur(10px)', direction: 'rtl' }}>
+                        <div style={{ background: 'white', padding: '30px', borderRadius: '20px', width: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                            <h3 style={{ margin: '0 0 15px 0', color: THEME.primary, fontWeight: 900 }}>
+                                ✏️ تعديل مسمى {logic.categoryModal.type === 'main' ? 'القسم الرئيسي' : 'القسم الفرعي'}
+                            </h3>
+                            <input 
+                                type="text" 
+                                value={logic.categoryModal.newName} 
+                                onChange={e => logic.setCategoryModal({...logic.categoryModal, newName: e.target.value})}
+                                style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '2px solid #e2e8f0', outline: 'none', fontWeight: 900, fontSize: '15px' }}
+                                autoFocus
+                            />
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
+                                <button onClick={() => logic.handleRenameCategory(logic.categoryModal)} style={{ flex: 1, background: THEME.success, color: 'white', padding: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 900 }}>✅ حفظ التعديل</button>
+                                <button onClick={() => logic.setCategoryModal({...logic.categoryModal, isOpen: false})} style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 900 }}>إلغاء</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 🚀 استدعاء مودال البنود */}
                 {logic.isModalOpen && (
                     <CatalogItemModal 
                         isOpen={logic.isModalOpen}

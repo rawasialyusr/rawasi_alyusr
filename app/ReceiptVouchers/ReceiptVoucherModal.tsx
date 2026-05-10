@@ -161,6 +161,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
     }, [isOpen, record?.project_ids, record?.partner_id]);
 
     // 🧠 1. سحر السحب الآلي عند اختيار الفاتورة يدوياً من الداخل
+    // 🧠 1. سحر السحب الآلي عند اختيار الفاتورة يدوياً من الداخل
     const handleInvoiceSelect = async (inv: any) => {
         const remainingAmount = Number(inv.total_amount) - Number(inv.paid_amount || 0);
         const { data: partnerData } = await supabase.from('partners').select('name').eq('id', inv.partner_id).single();
@@ -171,6 +172,20 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
             projectsData = data || [];
         }
 
+        let pAccName = 'العملاء (أصحاب المشاريع)';
+        let pAccId = '4f828d0d-a1f4-4762-83e3-c17dafae802d';
+        
+        if (inv.debit_account_id) {
+            pAccId = inv.debit_account_id;
+            const { data: accData } = await supabase.from('accounts').select('name').eq('id', inv.debit_account_id).single();
+            if (accData) pAccName = accData.name;
+        }
+
+        // 🚀 الحماية الذكية: لو المستخدم كتب مبلغ بإيده، السيستم يحترمه وميمسحوش!
+        // ولو الخانة كانت فاضية (صفر)، السيستم يسحب رصيد الفاتورة المتبقي.
+        const userTypedAmount = Number(record.amount || 0);
+        const amountToSet = userTypedAmount > 0 ? userTypedAmount : (remainingAmount > 0 ? remainingAmount : 0);
+
         setRecord({
             ...record,
             invoice_id: inv.id,
@@ -179,10 +194,13 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
             partner_name: partnerData?.name || '', 
             selected_projects: projectsData, 
             project_ids: projectsData.map((p: any) => p.id), 
-            amount: remainingAmount > 0 ? remainingAmount : 0 
+            amount: amountToSet, // 🚀 تثبيت المبلغ المكتوب
+            partner_acc_id: pAccId, 
+            partner_acc_name: pAccName,
+            safe_bank_acc_id: record.safe_bank_acc_id || '21b8a1db-bc9f-4cf8-b741-1efeded0963c',
+            safe_bank_acc_name: record.safe_bank_acc_name || 'الخزينة الرئيسية'
         });
     };
-
     // 🧠 2. دالة اختيار العقارات
     const handleProjectToggle = (proj: any) => {
         const current = record.selected_projects || [];
@@ -286,7 +304,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                         <input type="number" required tabIndex={3} step="0.01" value={record.amount ?? ''} onChange={e => setRecord({...record, amount: e.target.value})} className="glass-input" style={{ background: '#f0fdf4', color: THEME.success, fontSize: '18px', border: `2px solid ${THEME.success}50` }} />
                     </div>
 
-                    {/* --- الصف الثاني (السحب الآلي) --- */}
+                    {/* --- الصف الثاني --- */}
                     <div style={{ gridColumn: 'span 1', zIndex: 90 }}>
                         <SmartCombo 
                             tabIndex={4} 
@@ -340,7 +358,8 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                                 <SmartCombo tabIndex={10} label="حساب الصندوق/البنك (مدين)" table="accounts" initialDisplay={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
                             </div>
                             <div style={{ zIndex: 20 }}>
-                                <SmartCombo tabIndex={11} label="حساب العميل (دائن)" table="accounts" initialDisplay={record.partner_acc_name || record.partner_name} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
+                                {/* 🚀 لن يتم استخدام اسم البارتنر هنا للبحث، سيعتمد فقط على اسم الحساب الممرر */}
+                                <SmartCombo tabIndex={11} label="الحساب الدائن (تجميعي العملاء)" table="accounts" initialDisplay={record.partner_acc_name || ''} onSelect={(a: any) => setRecord({...record, partner_acc_id: a.id, partner_acc_name: a.name})} />
                             </div>
                         </div>
                     </div>

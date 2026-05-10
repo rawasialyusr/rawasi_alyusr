@@ -21,12 +21,37 @@ export default function ReceiptVouchersPage() {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
 
+    // 🚀 استخراج العناصر الحالية لتحديد الكل بأمان (الإضافة الجديدة)
+    const currentVisibleIds = useMemo(() => {
+        return logic.receipts?.map((v: any) => String(v.id)) || [];
+    }, [logic.receipts]);
+
+    const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
+
     // =========================================================================
     // 💎 أعمدة الجدول الذكي (معمارية نظيفة وحراس رندر)
     // =========================================================================
     const receiptColumns = [
         {
-            header: 'تحديد',
+            // 🚀 تم تحويل الهيدر إلى Checkbox لتحديد الكل
+            header: (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <input 
+                        type="checkbox" 
+                        className="custom-checkbox"
+                        checked={isAllVisibleSelected}
+                        title="تحديد كل الصفحة"
+                        onChange={(e) => {
+                            e.stopPropagation();
+                            if (isAllVisibleSelected) {
+                                logic.setSelectedIds(logic.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
+                            } else {
+                                logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
+                            }
+                        }}
+                    />
+                </div>
+            ),
             accessor: 'id',
             render: (row: any) => {
                 if (!row) return null; // 🛡️ حارس دفاعي
@@ -34,10 +59,10 @@ export default function ReceiptVouchersPage() {
                     <input 
                         type="checkbox" 
                         className="custom-checkbox" 
-                        checked={logic.selectedIds.includes(row.id)} 
+                        checked={logic.selectedIds.includes(String(row.id))} 
                         onChange={(e) => {
                             e.stopPropagation(); 
-                            logic.setSelectedIds(prev => prev.includes(row.id) ? prev.filter(x => x !== row.id) : [...prev, row.id]);
+                            logic.setSelectedIds(prev => prev.includes(String(row.id)) ? prev.filter(x => x !== String(row.id)) : [...prev, String(row.id)]);
                         }} 
                     />
                 );
@@ -200,7 +225,17 @@ export default function ReceiptVouchersPage() {
         });
 
         return () => setSidebarContent({ actions: null, summary: null, customFilters: null });
-    }, [logic.selectedIds, logic.kpis, logic.globalSearch, logic.allFiltered, setSidebarContent]);
+        // 🚀 التعديل هنا: استخدام قيم نهائية (Primitives) بدلاً من الكائنات لمنع اللوب
+    }, [
+        logic.selectedIds.length, 
+        logic.selectedIds[0], 
+        logic.kpis.totalAmount, 
+        logic.kpis.posted, 
+        logic.kpis.pending, 
+        logic.globalSearch, 
+        logic.allFiltered.length, 
+        setSidebarContent
+    ]);
 
     // =========================================================================
     // 🎨 واجهة المستخدم (التغليف السيادي والجدول الذكي)
