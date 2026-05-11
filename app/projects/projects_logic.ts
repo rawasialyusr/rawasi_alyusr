@@ -34,10 +34,10 @@ export function useProjectsLogic() {
   }, [projects]);
 
   // =========================================================================
-  // 🚀 1. إدارة إضافة مشروع جديد (Add Project)
+  // 🚀 1. إدارة إضافة وتعديل وحذف مشروع (Project CRUD)
   // =========================================================================
   const defaultProjectRecord = {
-      project_code: '', Property: '', client_id: '', contract_value: '', 
+      project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', 
       estimated_budget: '', down_payment: '', start_date: '', end_date: '', 
       location_address: '', project_manager: '', status: 'قيد الدراسة', 
       current_stage: 'تجهيز الموقع', notes: ''
@@ -47,24 +47,50 @@ export function useProjectsLogic() {
 
   const saveProjectMutation = useMutation({
       mutationFn: async (payload: any) => {
-          const { error } = await supabase.from('projects').insert([payload]);
+          if (payload.id) {
+              const { error } = await supabase.from('projects').update(payload).eq('id', payload.id);
+              if (error) throw error;
+              return payload; 
+          } else {
+              const { error } = await supabase.from('projects').insert([payload]);
+              if (error) throw error;
+              return null;
+          }
+      },
+      onSuccess: (updatedPayload) => {
+          showToast("تم الحفظ بنجاح 🚀", "success");
+          setIsAddProjectModalOpen(false);
+          setCurrentProjectRecord(defaultProjectRecord);
+          fetchData(); 
+          
+          if (updatedPayload && selectedProject?.id === updatedPayload.id) {
+              setSelectedProject({ ...selectedProject, ...updatedPayload });
+          }
+      },
+      onError: (err: any) => showToast(`خطأ في الحفظ: ${err.message}`, "error")
+  });
+
+  const deleteProjectMutation = useMutation({
+      mutationFn: async (id: string) => {
+          const { error } = await supabase.from('projects').delete().eq('id', id);
           if (error) throw error;
       },
       onSuccess: () => {
-          showToast("تم إنشاء المشروع بنجاح 🚀", "success");
-          setIsAddProjectModalOpen(false);
-          setCurrentProjectRecord(defaultProjectRecord);
-          fetchData(); // تحديث قائمة المشاريع
+          showToast("تم حذف المشروع نهائياً 🗑️", "success");
+          setSelectedProject(null); 
+          fetchData(); 
       },
-      onError: (err: any) => showToast(`خطأ في إنشاء المشروع: ${err.message}`, "error")
+      onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, "error")
   });
 
   const handleSaveProject = () => {
       if (!currentProjectRecord.Property) return showToast("اسم العقار/المشروع مطلوب!", "error");
       
-      const payload = {
-          project_code: currentProjectRecord.project_code || null,
+      const payload: any = {
           Property: currentProjectRecord.Property,
+          project_code: currentProjectRecord.project_code || null,
+          unit_type: currentProjectRecord.unit_type || null, 
+          unit_area: Number(currentProjectRecord.unit_area) || 0, 
           client_id: currentProjectRecord.client_id || null,
           contract_value: Number(currentProjectRecord.contract_value) || 0,
           estimated_budget: Number(currentProjectRecord.estimated_budget) || 0,
@@ -77,6 +103,10 @@ export function useProjectsLogic() {
           current_stage: currentProjectRecord.current_stage || 'تجهيز الموقع',
           notes: currentProjectRecord.notes || null
       };
+
+      if (currentProjectRecord.id) {
+          payload.id = currentProjectRecord.id;
+      }
 
       saveProjectMutation.mutate(payload);
   };
@@ -92,10 +122,12 @@ export function useProjectsLogic() {
 
   const saveBoqMutation = useMutation({
       mutationFn: async (record: any) => {
+          if (!record.work_item) throw new Error("يرجى إدخال اسم البند أو المرحلة أولاً!");
+
           const payload = {
               project_id: selectedProject.id,
               parent_id: record.item_type === 'فرعي' ? record.parent_id : null,
-              item_type: record.item_type,
+              item_type: record.item_type || 'رئيسي',
               work_item: record.work_item,
               unit: record.unit || 'مقطوعية',
               contract_quantity: Number(record.contract_quantity) || 0,
@@ -106,10 +138,10 @@ export function useProjectsLogic() {
 
           if (record.id) {
               const { error } = await supabase.from('boq_budget').update(payload).eq('id', record.id);
-              if (error) throw error;
+              if (error) throw new Error(error.message);
           } else {
               const { error } = await supabase.from('boq_budget').insert([payload]);
-              if (error) throw error;
+              if (error) throw new Error(error.message);
           }
       },
       onSuccess: () => {
@@ -118,13 +150,24 @@ export function useProjectsLogic() {
           showToast("تم حفظ البند في المقايسة بنجاح ✅", "success");
       },
       onError: (err: any) => {
-          showToast(`خطأ في حفظ البند: ${err.message}`, "error");
+          console.error("BOQ Save Error:", err);
+          showToast(`خطأ في الحفظ: ${err.message}`, "error");
       }
   });
 
-  // =========================================================================
-  // 🔍 العمليات العامة
-  // =========================================================================
+  // 🗑️ دالة حذف بند من المقايسة 
+  const deleteBoqMutation = useMutation({
+      mutationFn: async (id: string) => {
+          const { error } = await supabase.from('boq_budget').delete().eq('id', id);
+          if (error) throw new Error(error.message);
+      },
+      onSuccess: () => {
+          showToast("تم حذف البند من المقايسة بنجاح 🗑️", "success");
+          if (selectedProject) loadProjectDetails(selectedProject); // تحديث الجدول فوراً
+      },
+      onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, "error")
+  });
+
   const runDiagnostics = async () => {
     if (!selectedProject) {
       alert("يرجى اختيار مشروع أولاً من القائمة الجانبية لتشغيل الفحص عليه.");
@@ -148,7 +191,7 @@ export function useProjectsLogic() {
       else console.log(`✅ العمالة: تم سحب (${laborTest.data?.length}) سجل بنجاح.`, laborTest.data);
 
       console.log("⏳ جاري فحص المستخلصات...");
-      const invTest = await supabase.from('invoices').select('*, creditor_account_id, debtor_account_id').eq('project_id', selectedProject.id);
+      const invTest = await supabase.from('invoices').select('*').eq('project_id', selectedProject.id);
       if (invTest.error) console.error("❌ إيرور في invoices:", invTest.error.message);
       else console.log(`✅ المستخلصات: تم سحب (${invTest.data?.length}) سجل بنجاح.`, invTest.data);
 
@@ -181,7 +224,8 @@ export function useProjectsLogic() {
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       const matchSearch = (p.Property || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (p.project_code || '').toLowerCase().includes(searchQuery.toLowerCase());
+                          (p.project_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (p.unit_type || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchStatus = filterStatus === 'الكل' || p.status === filterStatus;
       const matchClient = filterClient === 'الكل' || p.client_id === filterClient;
       const matchStage = filterStage === 'الكل' || p.current_stage === filterStage;
@@ -195,53 +239,57 @@ export function useProjectsLogic() {
     setIsDetailsLoading(true);
 
     try {
-      const [stagesRes, boqRes, expRes, laborRes, invRes] = await Promise.all([
+      // 🚀 سحب البيانات من كل الجداول بما فيها مستخلصات المقاولين الجديدة
+      const [stagesRes, boqRes, expRes, laborRes, invRes, subClaimsRes] = await Promise.all([
         supabase.from('project_stages').select('*').eq('project_id', project.id),
-        supabase.from('boq_budget').select('*').eq('project_id', project.id).order('created_at', { ascending: true }), 
+        supabase.from('boq_budget').select('*').eq('project_id', project.id), 
         supabase.from('expenses').select('*, payee:partners!payee_id(name)').eq('project_id', project.id), 
         supabase.from('labor_daily_logs').select('*, worker:partners!worker_partner_id(name)').eq('project_id', project.id),
-        supabase.from('invoices').select('*, creditor:accounts!creditor_account_id(name), debtor:accounts!debtor_account_id(name)').eq('project_id', project.id) 
+        supabase.from('invoices').select('*').eq('project_id', project.id),
+        // 🎯 السطر الجديد: سحب مستخلصات مقاولي الباطن المربوطة بالعقار ده
+        supabase.from('sub_claims').select('*, contractor:partners!contractor_id(name)').eq('project_id', project.id)
       ]);
 
       const boqData = boqRes.data || [];
 
-      const processedInvoices = (invRes.data || []).map((inv: any) => {
-          const matchingBoqItem = boqData.find(b => b.work_item === inv.description);
-          let allocatedAmount = Number(inv.net_amount || inv.amount || 0);
-          let notes = '';
+      // 1️⃣ معالجة الفواتير العامة (Invoices)
+      const processedInvoices = (invRes.data || []).map((inv: any) => ({
+          ...inv,
+          display_number: inv.invoice_number,
+          display_type: 'مستخلص عام / توريد',
+          final_amount: Number(inv.net_amount || inv.amount || 0)
+      }));
 
-          if (matchingBoqItem && inv.global_quantity && matchingBoqItem.contract_quantity) {
-              const buildingRatio = matchingBoqItem.contract_quantity / inv.global_quantity;
-              allocatedAmount = allocatedAmount * buildingRatio;
-              notes = `مسحوب (${(buildingRatio * 100).toFixed(1)}%) من الفاتورة المجمعة بناءً على كمية المقايسة (${matchingBoqItem.contract_quantity} ${matchingBoqItem.unit})`;
-          }
+      // 2️⃣ معالجة مستخلصات المقاولين (Sub Claims) وتحويلها لنفس شكل الجدول
+      const processedSubClaims = (subClaimsRes.data || []).map((clm: any) => ({
+          ...clm,
+          display_number: clm.claim_number,
+          display_type: `مستخلص مقاول: ${clm.contractor?.name || 'غير معروف'}`,
+          description: `مستخلص أعمال مقاولة باطن - ${clm.claim_number}`,
+          final_amount: Number(clm.net_amount || 0),
+          allocatedAmount: Number(clm.net_amount || 0) // لتوحيد العرض في الجدول
+      }));
 
-          return { ...inv, allocatedAmount, allocationNotes: notes };
-      });
+      // 🎯 دمج النوعين مع بعض عشان يظهروا في تاب الماليّات
+      const allFinancials = [...processedInvoices, ...processedSubClaims];
 
+      // بقية الحسابات (العمالة والمصروفات)
       const laborLogs = laborRes.data || [];
       const todayStr = new Date().toISOString().split('T')[0];
-      
       const laborStats = {
         todayWorkers: laborLogs.filter(l => l.work_date === todayStr).reduce((sum, l) => sum + Number(l.attendance_value || 0), 0),
         totalWorkersToDate: laborLogs.reduce((sum, l) => sum + Number(l.attendance_value || 0), 0),
         todayCost: laborLogs.filter(l => l.work_date === todayStr).reduce((sum, l) => sum + (Number(l.daily_wage || 0) * Number(l.attendance_value || 0)), 0),
         totalLaborCost: laborLogs.reduce((sum, l) => sum + (Number(l.daily_wage || 0) * Number(l.attendance_value || 0)), 0),
-        activeTasks: Array.from(new Set(laborLogs.filter(l => l.work_item).map(l => l.work_item)))
       };
-
-      const mockInspections = [
-        { id: 1, element: 'صب قواعد العقار', date: '2024-03-10', engineer: 'م. أحمد', status: 'مُعتمد ✅', photo: 'https://images.unsplash.com/photo-1541888081033-66f91f3a53c1?w=200&h=150&fit=crop' },
-        { id: 2, element: 'استلام نجارة السقف', date: '2024-03-15', engineer: 'م. محمود', status: 'مرفوض ❌', photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=200&h=150&fit=crop' }
-      ];
 
       setProjectDetails({
         stages: stagesRes.data || [],
         boq: boqData,
         expenses: expRes.data || [], 
-        invoices: processedInvoices,
+        invoices: allFinancials, // 🚀 هنا بقى فيه كل حاجة (عام + مقاولين)
         laborStats: laborStats,
-        inspections: mockInspections 
+        inspections: [] 
       });
     } catch (error) {
       console.error(error);
@@ -406,16 +454,17 @@ export function useProjectsLogic() {
     updateRecommendations, 
     updateProjectStatus,
 
-    // 🚀 الإضافة الجديدة الخاصة بإدارة المشاريع
     isAddProjectModalOpen, setIsAddProjectModalOpen,
     currentProjectRecord, setCurrentProjectRecord,
     handleSaveProject, isSavingProject: saveProjectMutation.isPending,
+    deleteProjectMutation,
 
-    // BOQ States
     isBoqModalOpen, 
     setIsBoqModalOpen,
     currentBoqRecord, 
     setCurrentBoqRecord,
-    handleSaveBoq: (data: any) => saveBoqMutation.mutate(data)
+    handleSaveBoq: (data: any) => saveBoqMutation.mutate(data),
+    deleteBoqMutation,
+    isSavingBoq: saveBoqMutation.isPending 
   };
 }
