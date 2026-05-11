@@ -63,43 +63,44 @@ export function useViolationsLogic() {
         return { displayedViolations: result, totalSum: sum, totalCount: result.length };
     }, [violations, deferredSearch, filterStatus]);
 
-    // 🚀 3. الترحيل المركزي (RPC)
+    // 🚀 3. الترحيل المركزي (RPC) - تم التحديث لـ V3
     const postMutation = useMutation({
         mutationFn: async (idsToPost: string[]) => {
             if (!idsToPost || idsToPost.length === 0) throw new Error('لا يوجد سجلات للترحيل');
             const previousData = queryClient.getQueryData(['violations']);
             updateRowsInCache(idsToPost, { is_posted: true });
 
-            const { error } = await supabase.rpc('post_violations_bulk', { p_ids: idsToPost });
+            // 🎯 استدعاء الدالة المحدثة مع المتغير الصحيح violation_ids
+            const { error } = await supabase.rpc('post_violations_bulk_journal', { violation_ids: idsToPost });
             if (error) {
                 queryClient.setQueryData(['violations'], previousData); 
                 throw error;
             }
         },
-        onSuccess: () => {
-            showToast('تم الترحيل المحاسبي بنجاح ✅', 'success');
+        onSuccess: (data, ids) => {
+            showToast(`✅ تم الترحيل وخصم المبالغ من ذمم ${ids.length} شريك`, 'success');
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['violations'] });
         },
         onError: (err: any) => showToast(`فشل الترحيل: ${err.message}`, 'error')
     });
 
-    // ⏪ 4. فك الترحيل المركزي (RPC)
+    // ⏪ 4. فك الترحيل المركزي (RPC) - تم التحديث لـ V3
     const unpostMutation = useMutation({
         mutationFn: async (idsToSuspend: string[]) => {
             if (!idsToSuspend || idsToSuspend.length === 0) throw new Error('لا يوجد سجلات للتعليق');
             const previousData = queryClient.getQueryData(['violations']);
             updateRowsInCache(idsToSuspend, { is_posted: false });
 
-            // ✅ تم تصحيح record_ids إلى p_ids هنا
-            const { error } = await supabase.rpc('unpost_violations_bulk', { p_ids: idsToSuspend });
+            // 🎯 استدعاء الدالة المحدثة اللي بتمسح السندات التسلسلية
+            const { error } = await supabase.rpc('unpost_violations_bulk_journal', { violation_ids: idsToSuspend });
             if (error) {
                 queryClient.setQueryData(['violations'], previousData); 
                 throw error;
             }
         },
         onSuccess: () => {
-            showToast('تم فك الترحيل وتطهير الحسابات ⏸️', 'warning');
+            showToast('⏸️ تم فك الترحيل وحذف القيود التسلسلية بنجاح', 'warning');
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['violations'] });
         },
@@ -127,7 +128,7 @@ export function useViolationsLogic() {
         mutationFn: async (payload: any) => {
             const { partner, project, debit_acc, credit_acc, ...cleanPayload } = payload;
             
-            // 💎 الحسابات الثابتة حسب طلبك
+            // 💎 الحسابات الثابتة
             const FIXED_DEBIT_ID = '39f878cd-dc58-4a2a-a199-50f6fca983d4'; // رواتب وأجور مستحقة (216)
             const FIXED_CREDIT_ID = '25998af5-dca4-4512-8f1a-3d0f9c6b8e98'; // إيراد خصومات وجزاءات عمالة (46)
 

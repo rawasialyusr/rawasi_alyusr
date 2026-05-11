@@ -79,13 +79,16 @@ export default function PaymentVoucherModal({
 
                 {/* ⚖️ التوجيه المحاسبي الدقيق (القيد المزدوج) */}
                 <div style={{ background: '#f8fafc', padding: '25px', borderRadius: '20px', border: '1px solid #cbd5e1', marginBottom: '25px' }}>
-                    <h3 style={{ margin: '0 0 20px 0', fontSize: '16px', fontWeight: 900, color: THEME.primary, borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>⚖️ التوجيه المحاسبي للقيد المزدوج</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', marginBottom: '20px' }}>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: THEME.primary }}>⚖️ التوجيه المحاسبي</h3>
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>يمكن إضافتها لاحقاً للتوجيه المجمع</span>
+                    </div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                         <div style={{ zIndex: 60, position: 'relative' }}>
                             {/* 1. الحساب المدين */}
                             <SmartCombo 
-                                label="🧾 الحساب المدين (مثال: ذمم عمال / مصروف) *" 
+                                label="🧾 الحساب المدين (اختياري الآن)" 
                                 table="accounts" 
                                 displayCol="name" 
                                 initialDisplay={record.debit_account_name || ''} 
@@ -100,7 +103,7 @@ export default function PaymentVoucherModal({
                         <div style={{ zIndex: 50, position: 'relative' }}>
                             {/* 2. الحساب الدائن */}
                             <SmartCombo 
-                                label="🏦 الحساب الدائن (البنك / الخزينة) *" 
+                                label="🏦 الحساب الدائن (اختياري الآن)" 
                                 table="accounts" 
                                 displayCol="name" 
                                 initialDisplay={record.credit_account_name || ''} 

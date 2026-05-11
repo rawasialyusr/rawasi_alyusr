@@ -20,6 +20,11 @@ export default function PartnerStatementPage() {
 
     useEffect(() => { setMounted(true); }, []);
 
+    // 🚀 حساب المسميات بشكل ديناميكي بناءً على حالة التواريخ
+    const isPeriodSelected = Boolean(logic.dateFrom || logic.dateTo);
+    const summarySuffix = isPeriodSelected ? 'للفترة المحددة' : '(تراكمي نهائي)';
+    const netTitle = isPeriodSelected ? 'صافي حساب الفترة المحددة' : 'صافي الحساب (النهائي)';
+
     const columns = useMemo(() => [
         { 
             header: 'التاريخ', 
@@ -131,7 +136,7 @@ export default function PartnerStatementPage() {
                 </button>
             </SecureAction>
         </div>
-    ), [logic.partnerId, selectedPartnerName]); // 🚀 التأكد من تحديث الأزرار
+    ), [logic.partnerId, selectedPartnerName]); 
 
     if (!mounted) return null;
 
@@ -139,7 +144,6 @@ export default function PartnerStatementPage() {
         <div className="clean-page">
             <MasterPage title="كشف حساب الشركاء" subtitle="تحليل مالي ملكي بنظام رواسي اليسر الماسي">
                 
-                {/* 🚀 السر هنا: تم إعادة خاصية watchDeps لكي يستشعر السايد بار اختيار الشريك ويفتح الزر */}
                 <RawasiSidebarManager 
                     actions={sidebarActions} 
                     watchDeps={[logic.partnerId]} 
@@ -147,43 +151,44 @@ export default function PartnerStatementPage() {
 
                 <div className="main-content-flow">
                     
-                    {/* 1️⃣ لوحة الملخص المالي */}
+                    {/* 1️⃣ لوحة الملخص المالي المبسطة (السامري) */}
                     {logic.partnerId && (
                         <div className="glass-panel summary-container">
-                            <div className="balances-grid">
+                            <div className="balances-grid" style={{ gridTemplateColumns: '1fr 1fr 1.5fr' }}>
                                 <div className="grid-box green">
-                                    <small>كل الدائن (له)</small>
+                                    <small>كل الدائن (له) {summarySuffix}</small>
                                     <span>{formatCurrency(logic.totalCredit)}</span>
                                 </div>
                                 <div className="grid-box red">
-                                    <small>كل المدين (عليه)</small>
+                                    <small>كل المدين (عليه) {summarySuffix}</small>
                                     <span>{formatCurrency(logic.totalDebit)}</span>
                                 </div>
-                                <div className="grid-box gold final-balance">
-                                    <small>الرصيد المستحق (النهائي)</small>
-                                    <span style={{ color: logic.currentBalance >= 0 ? '#4ade80' : '#f87171' }}>
-                                        {formatCurrency(Math.abs(logic.currentBalance))}
-                                        <small style={{fontSize: '14px', marginLeft: '5px'}}>{logic.currentBalance >= 0 ? '(له)' : '(عليه)'}</small>
+                                <div className="grid-box blue final-balance">
+                                    <small>{netTitle}</small>
+                                    <span style={{ color: logic.periodNet >= 0 ? '#4ade80' : '#f87171' }}>
+                                        {formatCurrency(Math.abs(logic.periodNet))}
+                                        <small style={{fontSize: '14px', marginLeft: '5px'}}>{logic.periodNet >= 0 ? '(له)' : '(عليه)'}</small>
                                     </span>
+                                    {/* 🚀 إظهار الرصيد التراكمي النهائي تحت الصافي إذا كنا نبحث في فترة معينة */}
+                                    {isPeriodSelected && (
+                                        <div style={{ marginTop: '8px', fontSize: '12px', color: '#d4c4a8', fontWeight: 800, borderTop: '1px dashed rgba(197, 160, 89, 0.2)', paddingTop: '8px' }}>
+                                            الرصيد التراكمي (النهائي): {formatCurrency(Math.abs(logic.currentBalance))} <span style={{fontSize: '10px'}}>{logic.currentBalance >= 0 ? '(له)' : '(عليه)'}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+                            
                             <hr className="glass-divider" />
-                            <div className="dashboard-stats-grid">
-                                <div className="stat-box blue">
-                                    <small>🗓️ أيام الحضور</small>
-                                    <span>{logic.attendanceCount} <small style={{fontSize:'12px', opacity:0.8}}>يوم</small></span>
-                                </div>
-                                <div className="stat-box green-outline">
-                                    <small>👷 إجمالي اليوميات (له)</small>
-                                    <span>{formatCurrency(logic.totalLaborAmount)}</span>
-                                </div>
-                                <div className="stat-box red-outline">
-                                    <small>💸 سندات الصرف (عليه)</small>
-                                    <span>{formatCurrency(logic.totalPayments)}</span>
+                            
+                            {/* 🚀 قسم الأيام والغرامات */}
+                            <div className="dashboard-stats-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                <div className="stat-box cyan-outline">
+                                    <small>🗓️ عدد أيام الحضور</small>
+                                    <span style={{ fontSize: '24px' }}>{logic.attendanceCount} <small style={{fontSize:'14px', opacity:0.8}}>يوم</small></span>
                                 </div>
                                 <div className="stat-box dark-red">
-                                    <small>⚠️ الغرامات (عليه)</small>
-                                    <span>{formatCurrency(logic.totalViolations)}</span>
+                                    <small>⚠️ إجمالي الغرامات (عليه)</small>
+                                    <span style={{ fontSize: '24px', color: '#fca5a5' }}>{formatCurrency(logic.totalViolations)}</span>
                                 </div>
                             </div>
                         </div>
@@ -257,21 +262,20 @@ export default function PartnerStatementPage() {
                 .main-content-flow { display: flex; flex-direction: column; gap: 20px; width: 100%; }
                 .glass-panel { background: linear-gradient(135deg, rgba(74, 59, 50, 0.85) 0%, rgba(44, 34, 27, 0.95) 100%); backdrop-filter: blur(15px); border: 1px solid rgba(197, 160, 89, 0.15); border-top: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px; color: #f3e5d8; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
                 .glass-divider { border: 0; height: 1px; background: rgba(197, 160, 89, 0.1); margin: 20px 0; }
-                .balances-grid { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 15px; }
+                .balances-grid { display: grid; gap: 15px; }
                 .grid-box { padding: 20px; border-radius: 16px; text-align: center; background: rgba(212, 196, 168, 0.05); border: 1px solid rgba(212, 196, 168, 0.1); display: flex; flex-direction: column; justify-content: center; }
                 .grid-box.green { border-bottom: 3px solid #22c55e; }
                 .grid-box.red { border-bottom: 3px solid #ef4444; }
+                .grid-box.blue { border-bottom: 3px solid #3b82f6; } 
                 .grid-box.gold { border-bottom: 3px solid ${THEME.goldAccent}; background: rgba(197, 160, 89, 0.05); }
                 .grid-box small { font-size: 12px; color: #d4c4a8; font-weight: 900; margin-bottom: 8px; }
                 .grid-box span { font-size: 22px; font-weight: 900; }
-                .final-balance span { font-size: 32px; }
-                .dashboard-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+                .final-balance span { font-size: 30px; }
+                .dashboard-stats-grid { display: grid; gap: 15px; }
                 .stat-box { padding: 15px; border-radius: 12px; text-align: center; background: rgba(20, 15, 12, 0.4); border: 1px dashed rgba(197, 160, 89, 0.2); display: flex; flex-direction: column; justify-content: center; }
-                .stat-box.blue { border-bottom: 3px solid #3b82f6; }
-                .stat-box.green-outline { border-bottom: 3px solid #4ade80; }
-                .stat-box.red-outline { border-bottom: 3px solid #f87171; }
+                .stat-box.cyan-outline { border-bottom: 3px solid #06b6d4; background: rgba(6, 182, 212, 0.05); }
                 .stat-box.dark-red { border-bottom: 3px solid #b91c1c; background: rgba(185, 28, 28, 0.1); }
-                .stat-box small { font-size: 12px; color: #bba58f; display: block; margin-bottom: 8px; font-weight: 900; }
+                .stat-box small { font-size: 13px; color: #bba58f; display: block; margin-bottom: 8px; font-weight: 900; }
                 .stat-box span { font-size: 18px; font-weight: 900; color: white; }
                 .filter-dashboard-glass { background: linear-gradient(135deg, rgba(62, 49, 40, 0.85) 0%, rgba(44, 34, 27, 0.95) 100%); backdrop-filter: blur(15px); border: 1px solid rgba(197, 160, 89, 0.2); border-top: 1px solid rgba(197, 160, 89, 0.4); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4); padding: 20px 25px; border-radius: 20px; }
                 .filter-title { font-size: 14px; font-weight: 900; color: ${THEME.goldAccent}; text-transform: uppercase; }

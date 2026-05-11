@@ -24,6 +24,7 @@ interface StatementPrintModalProps {
 export default function StatementPrintModal({
     isOpen, onClose, partnerName, dateFrom, dateTo,
     openingBalance, currentBalance, totalDebit, totalCredit, 
+    attendanceCount = 0, totalLaborAmount = 0, totalViolations = 0, totalPayments = 0,
     statementLines = []
 }: StatementPrintModalProps) {
     const printRef = useRef<HTMLDivElement>(null);
@@ -89,8 +90,28 @@ export default function StatementPrintModal({
                         </div>
                     </div>
 
-                    {/* 🚀 صف السامري المالي الشامل (الدائن، المدين، الصافي) */}
-                    <div className="summary-print-grid">
+                    {/* 🚀 1. ملخص الحركات (التشغيلي) */}
+                    <div className="summary-print-grid operational-grid">
+                        <div className="summary-box">
+                            <small>أيام الحضور (الكمية)</small>
+                            <b style={{ color: '#2c221b' }}>{attendanceCount} يوم</b>
+                        </div>
+                        <div className="summary-box">
+                            <small>إجمالي يوميات العمالة</small>
+                            <b style={{ color: '#2c221b' }}>{formatCurrency(totalLaborAmount)}</b>
+                        </div>
+                        <div className="summary-box">
+                            <small>إجمالي الغرامات (عليه)</small>
+                            <b style={{ color: THEME.danger }}>{formatCurrency(totalViolations)}</b>
+                        </div>
+                        <div className="summary-box">
+                            <small>الدفعات المنصرفة</small>
+                            <b style={{ color: THEME.primary }}>{formatCurrency(totalPayments)}</b>
+                        </div>
+                    </div>
+
+                    {/* 🚀 2. ملخص الأرصدة (المالي الشامل) */}
+                    <div className="summary-print-grid financial-grid">
                         <div className="summary-box">
                             <small>رصيد افتتاحي</small>
                             <b style={{ color: openingBalance >= 0 ? THEME.success : THEME.danger }}>
@@ -199,8 +220,14 @@ export default function StatementPrintModal({
                 .info-row strong { color: #8a7a6b; font-size: 13px; }
                 .info-row span { font-weight: 800; font-size: 15px; color: #2c221b; }
 
-                .summary-print-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+                /* 🚀 تعديلات الـ Grid لتقسيم الملخصات */
+                .summary-print-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px; }
+                .financial-grid { margin-bottom: 30px; }
                 .summary-box { background: white; border: 2px solid #eaddcf; padding: 15px; border-radius: 12px; text-align: center; }
+                
+                /* تمييز الملخص التشغيلي بلون خفيف */
+                .operational-grid .summary-box { background: rgba(197, 160, 89, 0.05); border-color: rgba(197, 160, 89, 0.2); }
+                
                 .summary-box.final-balance { border-color: ${THEME.goldAccent}; background: #fdfaf6; }
                 .summary-box small { display: block; color: #8a7a6b; font-weight: 900; font-size: 11px; margin-bottom: 5px; }
                 .summary-box b { font-size: 16px; font-weight: 900; }
@@ -219,7 +246,7 @@ export default function StatementPrintModal({
                 /* 🚀 دفع التواقيع لنهاية الحاوية (أسفل الصفحة) */
                 .print-signatures { 
                     display: flex; justify-content: space-between; 
-                    margin-top: auto; /* 🚀 السر هنا */
+                    margin-top: auto; 
                     padding-top: 50px; 
                     page-break-inside: avoid; 
                 }

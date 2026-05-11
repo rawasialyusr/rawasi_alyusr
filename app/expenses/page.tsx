@@ -13,6 +13,7 @@ import MasterPage from '@/components/MasterPage';
 import RawasiSmartTable from '@/components/rawasismarttable';
 import { usePaymentVouchersLogic } from '../PaymentVouchers/payment_vouchers_logic'; 
 import PaymentVoucherModal from '../PaymentVouchers/PaymentVoucherModal'; 
+import { supabase } from '@/lib/supabase';
 
 // 🎬 المودالز
 import ExpenseFormModal from './ExpenseFormModal'; 
@@ -32,6 +33,9 @@ export default function ExpensesPage() {
   const [mounted, setMounted] = useState(false); 
   
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  // 🚀 حالة الترتيب (للأعمدة)
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
 
   const { can, loading: permsLoading } = usePermissions();
 
@@ -53,6 +57,65 @@ export default function ExpensesPage() {
       return sum + total;
     }, 0);
   }, [displayedExpenses]);
+
+  // 🚀 اللوجيك الذكي لترتيب البيانات حسب العمود المختار
+  const sortedExpenses = useMemo(() => {
+      if (!sortConfig) return displayedExpenses;
+
+      return [...displayedExpenses].sort((a, b) => {
+          let aValue = a[sortConfig.key];
+          let bValue = b[sortConfig.key];
+
+          // 🚀 معالجة المبالغ والأرقام والإجمالي المحسوب
+          if (sortConfig.key === 'total' || sortConfig.key === 'vat_amount' || sortConfig.key === 'discount_amount' || sortConfig.key === 'paid_amount') {
+              if (sortConfig.key === 'total') {
+                  aValue = a.total_price || ((Number(a.quantity || 1) * Number(a.unit_price || 0)) + Number(a.vat_amount || 0) - Number(a.discount_amount || 0));
+                  bValue = b.total_price || ((Number(b.quantity || 1) * Number(b.unit_price || 0)) + Number(b.vat_amount || 0) - Number(b.discount_amount || 0));
+              }
+              aValue = Number(aValue || 0);
+              bValue = Number(bValue || 0);
+          } 
+          // 🚀 معالجة التواريخ
+          else if (sortConfig.key === 'exp_date') {
+              aValue = new Date(aValue || 0).getTime();
+              bValue = new Date(bValue || 0).getTime();
+          } 
+          // 🚀 معالجة المقاول/المستفيد (عشان بيعتمد على حقلين)
+          else if (sortConfig.key === 'sub_contractor') {
+              aValue = (a.sub_contractor || a.payee_name || '').toLowerCase();
+              bValue = (b.sub_contractor || b.payee_name || '').toLowerCase();
+          }
+          // 🚀 معالجة النصوص
+          else {
+              aValue = aValue !== null && aValue !== undefined ? String(aValue).toLowerCase() : '';
+              bValue = bValue !== null && bValue !== undefined ? String(bValue).toLowerCase() : '';
+          }
+
+          if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+          if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+          return 0;
+      });
+  }, [displayedExpenses, sortConfig]);
+
+  // 🚀 خدعة ذكية: دالة لإنشاء عنوان عمود قابل للضغط والترتيب
+  const renderSortableHeader = (label: string, key: string) => (
+      <div 
+          onClick={() => {
+              let direction: 'asc' | 'desc' = 'asc';
+              if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+                  direction = 'desc';
+              }
+              setSortConfig({ key, direction });
+          }}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', userSelect: 'none' }}
+          title={`ترتيب حسب ${label}`}
+      >
+          <span>{label}</span>
+          <span style={{ fontSize: '10px', opacity: sortConfig?.key === key ? 1 : 0.3 }}>
+              {sortConfig?.key === key ? (sortConfig.direction === 'asc' ? '🔼' : '🔽') : '↕️'}
+          </span>
+      </div>
+  );
 
   // =========================================================================
   // 💎 أعمدة الجدول
@@ -98,19 +161,19 @@ export default function ExpensesPage() {
       }
     },
     { 
-      header: 'التاريخ', 
+      header: renderSortableHeader('التاريخ', 'exp_date'), 
       accessor: 'exp_date', 
       render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.exp_date}</span> : null,
       exportValue: (row: any) => row.exp_date || '---' 
     },
     { 
-      header: 'المقاول/المستفيد', 
+      header: renderSortableHeader('المقاول/المستفيد', 'sub_contractor'), 
       accessor: 'sub_contractor', 
       render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>{row.sub_contractor || row.payee_name || '---'}</b> : null,
       exportValue: (row: any) => row.sub_contractor || row.payee_name || '---'
     },
     { 
-      header: 'التصنيف الرئيسي', 
+      header: renderSortableHeader('التصنيف', 'main_category'), 
       accessor: 'main_category', 
       render: (row: any) => row ? (
         <span style={{ fontSize:'11px', background: '#e0f2fe', padding: '4px 10px', borderRadius: '8px', color: '#0369a1', fontWeight: 900, border: '1px solid #bae6fd', whiteSpace: 'nowrap' }}>
@@ -120,7 +183,7 @@ export default function ExpensesPage() {
       exportValue: (row: any) => row.main_category || 'غير مصنف'
     },
     { 
-      header: 'المشروع', 
+      header: renderSortableHeader('المشروع', 'site_ref'), 
       accessor: 'site_ref', 
       render: (row: any) => row ? (
         <span style={{ fontSize:'11px', background: row.is_auto_distributed ? '#f3e8ff' : '#f1f5f9', padding: '4px 10px', borderRadius: '8px', color: row.is_auto_distributed ? THEME.purple : THEME.brand.coffee, fontWeight: 900 }}>
@@ -130,7 +193,7 @@ export default function ExpensesPage() {
       exportValue: (row: any) => row.is_auto_distributed ? '⚡ توزيع ذكي' : (row.site_ref || 'عام')
     },
     { 
-      header: 'حساب المصروف (مدين)', 
+      header: renderSortableHeader('المدين', 'creditor_account'), 
       accessor: 'creditor_account', 
       render: (row: any) => row ? (
         <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
@@ -140,7 +203,7 @@ export default function ExpensesPage() {
       exportValue: (row: any) => row.creditor_account || '---'
     },
     { 
-      header: 'حساب السداد (دائن)', 
+      header: renderSortableHeader('الدائن', 'payment_account'), 
       accessor: 'payment_account', 
       render: (row: any) => row ? (
         <span style={{ fontSize:'11px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
@@ -150,7 +213,7 @@ export default function ExpensesPage() {
       exportValue: (row: any) => row.payment_account || '---'
     },
     { 
-      header: 'البيان التفصيلي', 
+      header: renderSortableHeader('البيان التفصيلي', 'description'), 
       accessor: 'description', 
       render: (row: any) => {
         if (!row) return null;
@@ -169,19 +232,19 @@ export default function ExpensesPage() {
       }
     },
     { 
-      header: 'الضريبة', 
+      header: renderSortableHeader('الضريبة', 'vat_amount'), 
       accessor: 'vat_amount', 
       render: (row: any) => row ? <span style={{fontWeight: 700}}>{Number(row.vat_amount || 0).toLocaleString()}</span> : null,
       exportValue: (row: any) => Number(row.vat_amount || 0)
     },
     { 
-      header: 'الخصم', 
+      header: renderSortableHeader('الخصم', 'discount_amount'), 
       accessor: 'discount_amount', 
       render: (row: any) => row ? <span style={{ color: THEME.ruby, fontWeight: 700 }}>{Number(row.discount_amount || 0).toLocaleString()}</span> : null,
       exportValue: (row: any) => Number(row.discount_amount || 0)
     },
     { 
-      header: 'الإجمالي', 
+      header: renderSortableHeader('الإجمالي', 'total'), 
       accessor: 'total', 
       render: (row: any) => {
         if (!row) return null;
@@ -201,7 +264,7 @@ export default function ExpensesPage() {
       }
     },
     {
-      header: 'حالة السداد',
+      header: renderSortableHeader('السداد', 'paid_amount'),
       accessor: 'payment_status',
       render: (row: any) => {
         if (!row) return null;
@@ -233,7 +296,7 @@ export default function ExpensesPage() {
       }
     },
     {
-      header: 'الحالة',
+      header: renderSortableHeader('الحالة', 'is_posted'),
       accessor: 'is_posted',
       render: (row: any) => {
         if (!row) return null;
@@ -289,7 +352,6 @@ export default function ExpensesPage() {
                           credit_account_name: MAIN_TREASURY_NAME,
                           partner_id: row.partner_id, 
                           
-                          // 🚀 ✅ السطر اللي تم تعديله: بياخد المقاول الأول، ولو مش موجود ياخد المستفيد، ولو مش موجود ياخد اسم الحساب الدائن
                           payee_name: row.sub_contractor || row.payee_name || row.creditor_account,
                           
                           site_ref: row.site_ref,
@@ -346,6 +408,17 @@ export default function ExpensesPage() {
               <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 900, margin: 0 }}>الإجراءات على ({logic.selectedIds.length})</p>
               <button onClick={() => logic.setSelectedIds([])} style={{ background: 'none', border: 'none', color: THEME.primary, fontSize: '10px', fontWeight: 900, cursor: 'pointer', textDecoration: 'underline' }}>إلغاء التحديد</button>
           </div>
+          
+          <SecureAction module="expenses" action="edit">
+              <button 
+                  className="btn-main-glass green" 
+                  onClick={logic.handleBulkDisburse}
+                  disabled={logic.isDisbursing}
+              >
+                  {logic.isDisbursing ? '⏳ جاري المعالجة...' : `💰 صرف جماعي (${logic.selectedIds.length})`}
+              </button>
+          </SecureAction>
+
           <SecureAction module="expenses" action="edit">
             <button className="btn-main-glass blue" onClick={() => logic.setIsBulkFixModalOpen(true)}>🛠️ تصحيح مجمع</button>
           </SecureAction>
@@ -470,12 +543,12 @@ export default function ExpensesPage() {
           ) : (
             <div className="table-glass-wrapper cinematic-scroll" style={{ overflowX: 'auto' }}>
               <RawasiSmartTable 
-                data={displayedExpenses} 
+                data={sortedExpenses} 
                 columns={expenseColumns} 
                 onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
                 enablePagination={true}
                 currentPage={logic.currentPage}
-                totalItems={displayedExpenses.length}
+                totalItems={sortedExpenses.length}
                 rowsPerPage={logic.rowsPerPage}
                 onPageChange={logic.setCurrentPage}
                 onRowsChange={logic.setRowsPerPage}

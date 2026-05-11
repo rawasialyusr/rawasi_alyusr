@@ -9,7 +9,6 @@ export function usePaymentVouchersLogic() {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
 
-    // 🎯 دالة سحرية لتحديث الكاش لحظياً
     const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
         queryClient.setQueryData(['payment_vouchers'], (oldData: any[]) => {
             if (!oldData) return [];
@@ -20,7 +19,6 @@ export function usePaymentVouchersLogic() {
         });
     };
 
-    // 1. إدارة الحالة (State)
     const [globalSearch, setGlobalSearch] = useState('');
     const deferredSearch = useDeferredValue(globalSearch);
     const [filterStatus, setFilterStatus] = useState('الكل'); 
@@ -32,11 +30,9 @@ export function usePaymentVouchersLogic() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [currentVoucher, setCurrentVoucher] = useState<any>({});
 
-    // 🚀 State الخاصة بالتصحيح المجمع لسندات الصرف
     const [isBulkFixModalOpen, setIsBulkFixModalOpen] = useState(false);
     const [bulkFixAccounts, setBulkFixAccounts] = useState({ credit_account_name: '', credit_account_id: null, debit_account_name: '', debit_account_id: null });
 
-    // 🌟 2. استماع دائم لحدث التواريخ والبحث
     useEffect(() => {
         const handleDateChange = (e: any) => {
             setDateRange({ start: e.detail.start, end: e.detail.end });
@@ -57,7 +53,6 @@ export function usePaymentVouchersLogic() {
         };
     }, []);
 
-    // 📥 3. جلب البيانات
     const { data: vouchers = [], isLoading: isFetching } = useQuery({
         queryKey: ['payment_vouchers'],
         queryFn: async () => {
@@ -95,7 +90,6 @@ export function usePaymentVouchersLogic() {
         }
     });
 
-    // 📊 4. جلب رصيد المستفيد
     const { data: partnerBalance = 0, isLoading: isBalanceLoading } = useQuery({
         queryKey: ['partner_balance', currentVoucher.payee_id],
         queryFn: async () => {
@@ -107,7 +101,15 @@ export function usePaymentVouchersLogic() {
         enabled: !!currentVoucher.payee_id 
     });
 
-    // 🔍 5. التصفية المتقدمة (Logic Filtering)
+    const { data: serverTotals } = useQuery({
+        queryKey: ['vouchers_server_totals'],
+        queryFn: async () => {
+            const { data, error } = await supabase.rpc('get_dashboard_totals');
+            if (error) return null;
+            return data?.[0] || null;
+        }
+    });
+
     const displayedVouchers = useMemo(() => {
         let result = vouchers;
 
@@ -122,48 +124,63 @@ export function usePaymentVouchersLogic() {
         if (deferredSearch) {
             const lower = deferredSearch.toLowerCase().trim();
             result = result.filter(v => 
-                (v.voucher_number && String(v.voucher_number).toLowerCase().includes(lower)) ||
-                (v.description && String(v.description).toLowerCase().includes(lower)) ||
-                (v.payee?.name && String(v.payee.name).toLowerCase().includes(lower)) ||
-                (v.credit_account?.name && String(v.credit_account.name).toLowerCase().includes(lower)) ||
-                (v.debit_account?.name && String(v.debit_account.name).toLowerCase().includes(lower)) ||
-                (v.amount && String(v.amount).includes(lower))
+                (v.voucher_number?.toString().toLowerCase().includes(lower)) ||
+                (v.description?.toString().toLowerCase().includes(lower)) ||
+                (v.payee?.name?.toString().toLowerCase().includes(lower)) ||
+                (v.credit_account?.name?.toString().toLowerCase().includes(lower)) ||
+                (v.debit_account?.name?.toString().toLowerCase().includes(lower)) ||
+                (v.amount?.toString().includes(lower))
             );
         }
 
         return result;
     }, [vouchers, deferredSearch, filterStatus, dateRange]);
 
-    // 🧮 6. الحسابات الإجمالية
     const totals = useMemo(() => {
-        const totalAmount = displayedVouchers.reduce((sum, v) => sum + Number(v.amount || 0), 0);
-        return { totalAmount, count: displayedVouchers.length };
-    }, [displayedVouchers]);
+        const totalAmount = displayedVouchers.reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
+        
+        return { 
+            totalAmount: parseFloat(totalAmount.toFixed(2)), 
+            count: displayedVouchers.length,
+            serverTotalPosted: serverTotals?.total_posted_vouchers || 0,
+            serverTotalPending: serverTotals?.total_pending_vouchers || 0
+        };
+    }, [displayedVouchers, serverTotals]);
 
-    // 🚀 7. الترحيل المركزي
     const { postRecords, unpostRecords, isProcessing } = useUniversalPosting(
         'payment_vouchers',
         'payment_vouchers',
         'post_payment_vouchers_bulk'
     );
 
-    // 📝 8. عمليات الحفظ والحذف
+    // 📝 8. عمليات الحفظ 
     const saveMutation = useMutation({
         mutationFn: async (voucherData: any) => {
-            if (!voucherData.debit_account_id) throw new Error("يرجى تحديد الحساب المدين.");
-            if (!voucherData.credit_account_id) throw new Error("يرجى تحديد الحساب الدائن.");
-            if (!voucherData.amount || Number(voucherData.amount) <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر.");
+            // 🎯 تم إلغاء شروط التحقق من الحسابات (المدين والدائن) لتكون اختيارية
+            if (!voucherData.amount || Number(voucherData.amount) <= 0) {
+                throw new Error("⚠️ تنبيه: يرجى إدخال المبلغ المراد صرفه.");
+            }
 
             let payload = { ...voucherData };
             payload.partner_id = payload.payee_id;
-            
-            // 🚀 الحل المحاسبي القاطع: نأخذ الرقم كـ Float ونثبته على منزلتين عشريتين (هللات) عشان مايطيرش
             payload.amount = parseFloat(Number(payload.amount).toFixed(2));
             
-            delete payload.payee_id; delete payload.payee_name; delete payload.debit_account_name;
-            delete payload.credit_account_name; delete payload.payee; delete payload.credit_account; delete payload.debit_account;
+            // تنظيف الحقول المؤقتة
+            delete payload.payee_id; 
+            delete payload.payee_name; 
+            delete payload.debit_account_name;
+            delete payload.credit_account_name; 
+            delete payload.payee; 
+            delete payload.credit_account; 
+            delete payload.debit_account;
+            delete payload.manual_debit; 
+            delete payload.manual_credit;
 
-            if (!payload.voucher_number) payload.voucher_number = `PV-${Date.now().toString().slice(-6)}`;
+            if (!payload.voucher_number) {
+                const timePart = Date.now().toString().slice(-4);
+                const randomPart = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+                payload.voucher_number = `PV-${timePart}${randomPart}`;
+            }
             
             if (!payload.id) {
                 payload.is_posted = false;
@@ -187,6 +204,7 @@ export function usePaymentVouchersLogic() {
             showToast('تم حفظ السند وهو الآن (معلق) ⏳', 'success');
             setIsEditModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
+            queryClient.invalidateQueries({ queryKey: ['vouchers_server_totals'] }); 
         },
         onError: (error: any) => showToast(error.message, 'error')
     });
@@ -196,18 +214,22 @@ export function usePaymentVouchersLogic() {
             const postedVouchers = vouchers.filter(v => selectedIds.includes(v.id) && v.is_posted);
             if (postedVouchers.length > 0) throw new Error('لا يمكن حذف سندات مُرحلة. قم بفك الترحيل أولاً.');
 
-            const { error } = await supabase.from('payment_vouchers').delete().in('id', selectedIds);
-            if (error) throw error;
+            const CHUNK_SIZE = 20;
+            for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
+                const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
+                const { error } = await supabase.from('payment_vouchers').delete().in('id', chunk);
+                if (error) throw error;
+            }
         },
         onSuccess: () => {
             showToast('تم الحذف بنجاح 🗑️', 'success');
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
+            queryClient.invalidateQueries({ queryKey: ['vouchers_server_totals'] });
         },
         onError: (err: any) => showToast(err.message, 'error')
     });
 
-    // 🚀 دالة التصحيح المجمع لسندات الصرف
     const handleBulkFixSave = async () => {
         if (selectedIds.length === 0 || (!bulkFixAccounts.credit_account_id && !bulkFixAccounts.debit_account_id)) return;
         
@@ -225,7 +247,7 @@ export function usePaymentVouchersLogic() {
         updateRowsInCache(selectedIds, cacheUpdateFields);
 
         try {
-            const CHUNK_SIZE = 50; 
+            const CHUNK_SIZE = 20;
             for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
                 const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
                 const { error } = await supabase.from('payment_vouchers').update(updatePayload).in('id', chunk).eq('is_posted', false); 
@@ -241,7 +263,6 @@ export function usePaymentVouchersLogic() {
         }
     };
 
-    // 💎 9. المخرجات
     return {
         data: displayedVouchers,
         isLoading: isFetching || isProcessing || saveMutation.isPending, 
@@ -258,8 +279,8 @@ export function usePaymentVouchersLogic() {
                 setCurrentVoucher({ 
                     date: new Date().toISOString().split('T')[0], 
                     payment_method: 'نقدي', 
-                    amount: '', // 🚀 السر هنا: خلينها string فاضي عشان المتصفح يسمحلك تكتب الكسور براحتك من غير ما يمسح النقطة (.)
-                    debit_account_id: '', debit_account_name: '', credit_account_id: '', credit_account_name: '',
+                    amount: '', // 🎯 اعتماد مبلغ واحد فقط
+                    debit_account_id: null, debit_account_name: '', credit_account_id: null, credit_account_name: '',
                     payee_id: '', payee_name: '', is_posted: false, status: 'مسودة'
                 });
                 setIsEditModalOpen(true);
@@ -286,8 +307,16 @@ export function usePaymentVouchersLogic() {
                 const dataToSave = (dataFromOutside && Object.keys(dataFromOutside).length > 0) ? dataFromOutside : currentVoucher;
                 return await saveMutation.mutateAsync(dataToSave);
             },
-            handlePostSelected: () => postRecords(selectedIds),
-            handleUnpostSelected: () => unpostRecords(selectedIds),
+            handlePostSelected: async () => {
+                await postRecords(selectedIds);
+                queryClient.invalidateQueries({ queryKey: ['vouchers_server_totals'] });
+                queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
+            },
+            handleUnpostSelected: async () => {
+                await unpostRecords(selectedIds);
+                queryClient.invalidateQueries({ queryKey: ['vouchers_server_totals'] });
+                queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
+            },
             handleBulkFixSave,
             exportToExcel: () => {}
         }

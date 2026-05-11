@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react'; 
-import { createPortal } from 'react-dom'; // 🚀 ضفنا الـ createPortal عشان المودال يظهر صح
+import { createPortal } from 'react-dom'; 
 import { usePaymentVouchersLogic } from './payment_vouchers_logic';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo'; 
@@ -185,8 +185,16 @@ export default function PaymentVouchersPage() {
             <RawasiSidebarManager 
               summary={
                 <div className="summary-glass-card">
-                  <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي المدفوعات 📉</span>
-                  <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.danger, marginTop:'5px'}}>{formatCurrency(logic.totals.totalAmount)}</div>
+                  <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>
+                    {logic.state.filterStatus === 'مرحل' ? 'إجمالي السندات المرحلة 📉' : 
+                     logic.state.filterStatus === 'معلق' ? 'إجمالي السندات المعلقة ⏳' : 
+                     'إجمالي المدفوعات 🏦'}
+                  </span>
+                  
+                  <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.danger, marginTop:'5px'}}>
+                    {/* 🚀 رجعنا نعتمد على جمع الشاشة الدقيق لأنه تفاعلي مع البحث والتاريخ */}
+                    {formatCurrency(logic.totals.totalAmount)}
+                  </div>
                 </div>
               }
               actions={sidebarActions}
@@ -295,6 +303,7 @@ export default function PaymentVouchersPage() {
           document.body
       )}
 
+      {/* 🚀 مودال التعديل والإضافة المربوط باللوجيك الجديد */}
       {mounted && logic.state.isEditModalOpen && (
           <PaymentVoucherModal 
               isOpen={logic.state.isEditModalOpen} 

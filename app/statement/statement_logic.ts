@@ -12,6 +12,7 @@ const translateVType = (type: string) => {
         case 'payment_vouchers': return 'سند صرف';
         case 'receipt_vouchers': return 'سند قبض';
         case 'labor_daily_logs': return 'يومية عمالة';
+        case 'violation': 
         case 'violations': return 'قيد غرامة';
         case 'invoices': return 'فاتورة';
         default: return type;
@@ -44,7 +45,7 @@ export function useStatementLogic() {
         enabled: !!partnerId,
     });
 
-    // 2️⃣ محرك جلب البيانات (البلدوزر لسحب كل السجلات مهما كان عددها)
+    // 2️⃣ محرك جلب البيانات
     const { data: rawLines = [], isLoading } = useQuery({
         queryKey: ['partner_statement_raw', partnerId],
         queryFn: async () => {
@@ -82,7 +83,7 @@ export function useStatementLogic() {
         staleTime: 1000 * 60 * 5, 
     });
 
-    // 3️⃣ معالجة البيانات والحسابات المحاسبية الدقيقة (useMemo)
+    // 3️⃣ معالجة البيانات والحسابات المحاسبية الدقيقة
     const processedData = useMemo(() => {
         if (!rawLines || rawLines.length === 0) return null;
 
@@ -99,24 +100,20 @@ export function useStatementLogic() {
         const periodLines: any[] = [];
         const typeSummaries: Record<string, { debit: number, credit: number }> = {};
 
-        // 🚀 دوران واحد (Single Loop) لفرز القديم وتجميع الجديد
         rawLines.forEach((line: any) => {
             const credit = Number(line.credit || 0);
             const debit = Number(line.debit || 0);
             const lineDate = line.entry_date;
 
-            // تحديث الرصيد التراكمي الشامل
             cumulativeBalance += (credit - debit);
 
             const isBeforeFrom = dateFrom && lineDate < dateFrom;
             const isAfterTo = dateTo && lineDate > dateTo;
 
             if (isBeforeFrom) {
-                // لو القيد قبل تاريخ البداية، نضيفه للرصيد الافتتاحي وميظهرش في الجدول
                 openingBalance = cumulativeBalance;
             } 
             else if (!isAfterTo) {
-                // لو القيد جوه الفترة المحددة، نحسب مجاميعه ونضيفه للجدول
                 periodDebit += debit;
                 periodCredit += credit;
 
@@ -134,28 +131,34 @@ export function useStatementLogic() {
                     balance: cumulativeBalance
                 });
 
-                // تجميع أنواع القيود للفترة المحددة فقط
                 if (!typeSummaries[vType]) typeSummaries[vType] = { debit: 0, credit: 0 };
                 typeSummaries[vType].debit += debit;
                 typeSummaries[vType].credit += credit;
 
+                // 🚀 تحديث منطق التعرف على أيام العمل بناءً على attendance_value 
                 if (vType === 'يومية عمالة' || desc.includes('يومية عامل')) {
-                    attendanceCount += 1;
+                    let qty = 1;
+                    // الأولوية لـ attendance_value كما كان في السكربت القديم
+                    if (line.attendance_value !== undefined && line.attendance_value !== null && line.attendance_value !== '') {
+                        qty = Number(line.attendance_value);
+                    } else if (line.quantity !== null && line.quantity !== undefined && line.quantity !== '') {
+                        qty = Number(line.quantity);
+                    }
+                    
+                    attendanceCount += qty; 
                     totalLaborAmount += credit;
-                } else if (vType === 'قيد غرامة' || desc.includes('غرامة') || desc.includes('جزاء')) {
-                    totalViolations += debit;
+                } else if (vType === 'قيد غرامة' || desc.includes('غرامة') || desc.includes('جزاء') || desc.includes('مخالفة')) {
+                    totalViolations += debit; 
                 } else if (vType === 'سند صرف') {
                     totalPayments += debit;
                 }
             }
         });
 
-        // 🚀 الرصيد النهائي للفترة هو رصيد آخر قيد نزل في المصفوفة، أو الافتتاحي لو مفيش حركات
         const currentBalance = periodLines.length > 0 
             ? periodLines[periodLines.length - 1].balance 
             : openingBalance;
 
-        // د. تطبيق البحث النصي السريع (على العرض فقط)
         let finalLines = [...periodLines].reverse();
         if (globalSearch) {
             const s = globalSearch.toLowerCase();
@@ -168,9 +171,10 @@ export function useStatementLogic() {
         return {
             lines: finalLines, 
             openingBalance,
-            currentBalance, // يقف عند تاريخ الـ dateTo
-            totalDebit: periodDebit, // مدين الفترة فقط
-            totalCredit: periodCredit, // دائن الفترة فقط
+            currentBalance,
+            totalDebit: periodDebit,
+            totalCredit: periodCredit,
+            periodNet: periodCredit - periodDebit,
             attendanceCount,
             totalLaborAmount,
             totalViolations,
@@ -213,7 +217,6 @@ export function useStatementLogic() {
         link.click();
     };
 
-    // 5️⃣ تجريد المخرجات مع حماية كاملة
     return {
         partnerId,
         partnerName: partnerInfo?.name || '', 
@@ -232,6 +235,7 @@ export function useStatementLogic() {
         currentBalance: processedData?.currentBalance ?? 0,
         totalDebit: processedData?.totalDebit ?? 0,
         totalCredit: processedData?.totalCredit ?? 0,
+        periodNet: processedData?.periodNet ?? 0, 
         attendanceCount: processedData?.attendanceCount ?? 0,
         totalLaborAmount: processedData?.totalLaborAmount ?? 0,
         totalViolations: processedData?.totalViolations ?? 0,

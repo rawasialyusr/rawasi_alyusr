@@ -23,25 +23,6 @@ export function useExpensesLogic() {
         });
     };
 
-    // 🔍 أداة الفحص الشامل للكونسول
-    useEffect(() => {
-        (window as any).testPosting = async () => {
-            console.log("🔍 === بدء اختبار الترحيل من الكونسول ===");
-            const { data: expData, error: expError } = await supabase.from('expenses').select('*').eq('is_posted', false).limit(1).single();
-            if (expError || !expData) return console.error("❌ لم أجد أي مصروف معلق!", expError);
-            console.log("1️⃣ تم مسك المصروف بنجاح:", { id: expData.id, وصف: expData.description });
-            console.log("2️⃣ جاري إرسال أمر الترحيل (RPC) لـ Supabase...");
-            const { data: rpcData, error: rpcError } = await supabase.rpc('post_expenses_bulk', { p_ids: [expData.id] });
-            if (rpcError) return console.error("❌ Supabase رفض الترحيل (RPC Error)!", rpcError);
-            console.log("✅ الدالة اتنفذت في Supabase بدون أخطاء (Status 200).");
-            console.log("3️⃣ جاري البحث عن القيد المحاسبي في الجورنال...");
-            const { data: journalData, error: journalError } = await supabase.from('journal_headers').select('*, journal_lines(*)').eq('reference_id', expData.id);
-            if (journalError) return console.error("❌ خطأ أثناء البحث في الجورنال:", journalError);
-            if (journalData && journalData.length > 0) console.log("🎉 تم الفحص بنجاح! القيد اتعمل:", journalData);
-            else console.warn("⚠️ الدالة نجحت.. بس مفيش قيد اتعمل!");
-        };
-    }, []);
-    
     // 1. إدارة الحالة الأساسية
     const [userRole, setUserRole] = useState<string>('viewer');
     const [userPermissions, setUserPermissions] = useState<any>({});
@@ -50,13 +31,14 @@ export function useExpensesLogic() {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
     
-    // 🚀 إضافة حالة الفلتر الجديد (حالة السداد)
     const [paymentFilter, setPaymentFilter] = useState<string>('الكل');
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isBulkFixModalOpen, setIsBulkFixModalOpen] = useState(false);
     const [bulkFixAccounts, setBulkFixAccounts] = useState({ creditor_account: '', payment_account: '' });
+
+    const [disburseProgress, setDisburseProgress] = useState({ current: 0, total: 0, isActive: false });
 
     const defaultExp = { 
         exp_date: new Date().toISOString().split('T')[0], main_category: '', sub_contractor: '', site_ref: '',       
@@ -67,7 +49,7 @@ export function useExpensesLogic() {
     const [currentExpense, setCurrentExpense] = useState<any>(defaultExp);
 
     // 📥 2. جلب البيانات الأساسية
-    const { data: expenses = [], isLoading: isFetching } = useQuery({
+    const expensesQuery = useQuery({
         queryKey: ['expenses'],
         queryFn: async () => {
             let allData: any[] = [];
@@ -92,11 +74,13 @@ export function useExpensesLogic() {
                 return { ...exp, lines_data: parsedLines };
             });
         },
-        staleTime: 1000 * 60 * 5 
+        staleTime: 1000 * 60 * 5,
+        retry: 1
     });
+    const expenses = expensesQuery.data || [];
 
     // 📥 جلب البيانات المساعدة
-    const { data: supportData } = useQuery({
+    const supportDataQuery = useQuery({
         queryKey: ['expenses_support_data'],
         queryFn: async () => {
             const [proj, part, acc, boq] = await Promise.all([
@@ -115,8 +99,10 @@ export function useExpensesLogic() {
                 boqItems: Array.from(new Set((boq.data || []).map((b: any) => `${b.item_code} - ${b.item_name}`)))
             };
         },
-        staleTime: 1000 * 60 * 5 
+        staleTime: 1000 * 60 * 5,
+        retry: 1
     });
+    const supportData = supportDataQuery.data;
 
     useEffect(() => {
         const fetchPerms = async () => {
@@ -136,12 +122,17 @@ export function useExpensesLogic() {
         'exp_date' 
     );
 
-    // 🚀 تطبيق فلتر السداد على البيانات المفلترة
     const finalFilteredExpenses = useMemo(() => {
         if (paymentFilter === 'الكل') return allFiltered;
         
         return allFiltered.filter((exp: any) => {
-            const total = exp.total_price || ((Number(exp.quantity || 1) * Number(exp.unit_price || 0)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0));
+            let baseAmount = 0;
+            if (exp.lines_data && Array.isArray(exp.lines_data) && exp.lines_data.length > 0) {
+                baseAmount = exp.lines_data.reduce((sum: number, line: any) => sum + (Number(line.total_price) || (Number(line.quantity || 1) * Number(line.unit_price || 0))), 0);
+            } else {
+                baseAmount = Number(exp.total_price) || (Number(exp.quantity || 1) * Number(exp.unit_price || 0));
+            }
+            const total = baseAmount + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0);
             const paid = Number(exp.paid_amount || 0);
             
             if (paymentFilter === 'غير مسدد') return paid <= 0;
@@ -151,7 +142,6 @@ export function useExpensesLogic() {
         });
     }, [allFiltered, paymentFilter]);
 
-    // 💰 حساب الإجماليات بناءً على الفلتر النهائي
     const totalAmount = useMemo(() => finalFilteredExpenses.reduce((sum, exp) => sum + ((Number(exp.quantity) * Number(exp.unit_price)) + Number(exp.vat_amount || 0) - Number(exp.discount_amount || 0)), 0), [finalFilteredExpenses]);
     const totalPages = Math.ceil(finalFilteredExpenses.length / rowsPerPage) || 1;
     
@@ -167,8 +157,7 @@ export function useExpensesLogic() {
         return { sites: Array.from(sites), contractors: Array.from(contractors), payees: Array.from(payees), descriptions: Array.from(descriptions), notes: Array.from(notes) };
     }, [expenses]);
 
-    // 🚀 4. الترحيل المركزي
-    const { postRecords, unpostRecords, isProcessing } = useUniversalPosting('expenses', 'expenses', 'post_expenses_bulk');
+    const { isProcessing } = useUniversalPosting('expenses', 'expenses', 'post_expenses_bulk');
 
     // 💾 5. الحفظ
     const saveMutation = useMutation({
@@ -217,18 +206,10 @@ export function useExpensesLogic() {
         onError: (err: any) => toast.error(err.message)
     });
 
-    // 🗑️ الحذف المتسلسل
+    // 🗑️ الحذف المتسلسل (الاعتماد على الداتا بيز للسرعة)
     const deleteMutation = useMutation({
         mutationFn: async () => {
-            // ✅ تم تصحيح اسم العمود هنا ليكون related_expense_id
-            const { data: linkedVouchers } = await supabase.from('payment_vouchers').select('id').in('related_expense_id', selectedIds);
-            const voucherIds = linkedVouchers?.map(v => v.id) || [];
-            if (voucherIds.length > 0) {
-                await supabase.from('journal_headers').delete().in('reference_id', voucherIds);
-                await supabase.from('payment_vouchers').delete().in('id', voucherIds);
-            }
-            await supabase.from('journal_headers').delete().in('reference_id', selectedIds);
-            const { error } = await supabase.from('expenses').delete().in('id', selectedIds);
+            const { error } = await supabase.rpc('delete_expenses_bulk', { record_ids: selectedIds });
             if (error) throw error;
             return selectedIds; 
         },
@@ -240,20 +221,16 @@ export function useExpensesLogic() {
                 return oldData.filter(exp => !stringDeletedIds.includes(String(exp.id)));
             });
             setSelectedIds([]);
+            queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
         },
         onError: (err: any) => toast.error(`حدث خطأ أثناء الحذف: ${err.message}`)
     });
 
-    // 💸 السداد المباشر
+    // 💸 السداد المباشر للسطر الواحد
     const handleSavePayment = async (paymentData: any) => {
         const toastId = toast.loading('جاري الفحص والصرف...');
-        console.log("🛠️ === بدء فحص عملية الصرف ===");
-        
         try {
-            console.log("1️⃣ البيانات المستلمة:", paymentData);
             const targetId = paymentData.id || paymentData.related_expense_id || paymentData.expense_id;
-            console.log("2️⃣ الـ ID المستهدف:", targetId);
-
             if (!targetId) throw new Error("لا يوجد ID للفاتورة مبعوث من المودال!");
 
             const currentCache = queryClient.getQueryData(['expenses']) as any[];
@@ -272,7 +249,6 @@ export function useExpensesLogic() {
                 );
             });
 
-            console.log("8️⃣ جاري تجهيز بيانات Supabase...");
             const { data: { session } } = await supabase.auth.getSession();
             
             let resolvedDebitId = null, resolvedCreditId = null;
@@ -287,7 +263,7 @@ export function useExpensesLogic() {
 
             const voucherPayload = {
                 related_expense_id: targetId, 
-                voucher_number: `PV-${Date.now().toString().slice(-6)}`, 
+                voucher_number: `PV-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`, 
                 date: paymentData.payment_date || new Date().toISOString().split('T')[0], 
                 amount: addedAmount, 
                 payment_method: paymentData.payment_method || 'كاش', 
@@ -300,19 +276,14 @@ export function useExpensesLogic() {
                 created_by: session?.user?.id
             };
             
-            console.log("9️⃣ بيانات السند اللي هتتبعت:", voucherPayload);
-
             const { error: voucherErr } = await supabase.from('payment_vouchers').insert([voucherPayload]);
             if (voucherErr) throw voucherErr;
 
             const { error: expErr } = await supabase.from('expenses').update({ paid_amount: newPaidAmount }).eq('id', targetId);
             if (expErr) throw expErr;
 
-            console.log("🔟 ✅ تم الحفظ في الداتا بيز بنجاح");
             toast.success('تم الصرف بنجاح ✅', { id: toastId });
-
         } catch (error: any) {
-            console.error("❌ حدث خطأ:", error);
             toast.error(`خطأ: ${error.message}`, { id: toastId });
             queryClient.invalidateQueries({ queryKey: ['expenses'] });
         }
@@ -333,7 +304,7 @@ export function useExpensesLogic() {
         updateRowsInCache(selectedIds, updatePayload);
 
         try {
-            const CHUNK_SIZE = 50; 
+            const CHUNK_SIZE = 20; 
             for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
                 const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
                 const { error } = await supabase.from('expenses').update(updatePayload).in('id', chunk).eq('is_posted', false); 
@@ -349,7 +320,80 @@ export function useExpensesLogic() {
         }
     };
     
-    const exportToExcel = () => { /* ... */ };
+    // =========================================================================
+    // 🚀 الصرف الجماعي (عداد ذكي وتحديث سلس)
+    // =========================================================================
+    const bulkDisburseMutation = useMutation({
+        mutationFn: async (ids: string[]) => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user?.id) throw new Error("يجب تسجيل الدخول أولاً");
+
+            const CHUNK_SIZE = 20; // 🚀 حجم الدفعة للعداد
+            let totalProcessedCount = 0;
+            let totalDisbursedSum = 0;
+
+            // 1. بدء تشغيل شريط التحميل
+            setDisburseProgress({ current: 0, total: ids.length, isActive: true });
+
+            // 2. تقسيم العمل لـ Chunks عشان العداد يشتغل قدام المستخدم
+            for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+                const chunk = ids.slice(i, i + CHUNK_SIZE);
+                
+                // 🚀 استدعاء المحرك المجمع في السيرفر (طلقة واحدة لكل 20 سجل)
+                const { data, error } = await supabase.rpc('bulk_disburse_v2', { 
+                    p_ids: chunk, 
+                    p_user_id: session.user.id 
+                });
+
+                if (error) {
+                    // 🚀 كود استخراج الخطأ الحقيقي بدلاً من {}
+                    const errorDetails = error.message || error.details || error.hint || JSON.stringify(error);
+                    console.error("🔥 الخلل في قاعدة البيانات:", errorDetails, "كامل الخطأ:", error);
+                    
+                    // إيقاف العملية وإظهار الخطأ للمستخدم
+                    if (i === 0) throw new Error(`فشل الاتصال: ${errorDetails}`);
+                    continue;
+                }
+
+                // 3. تحديث الإحصائيات من رد السيرفر
+                if (data && data[0]) {
+                    totalProcessedCount += data[0].processed_count;
+                    totalDisbursedSum += Number(data[0].total_amount);
+                }
+
+                // 4. تحديث العداد اللحظي في الواجهة
+                const currentProgress = Math.min(i + CHUNK_SIZE, ids.length);
+                setDisburseProgress(prev => ({ ...prev, current: currentProgress }));
+            }
+
+            return { processed_count: totalProcessedCount, total_amount: totalDisbursedSum };
+        },
+        onSuccess: (res) => {
+            // إخفاء أي توست قديم وإظهار نتيجة النجاح النهائية
+            toast.dismiss('bulk-disburse');
+            if (res.processed_count > 0) {
+                toast.success(
+                    `تم إنشاء ${res.processed_count} سند صرف بإجمالي ${Number(res.total_amount).toLocaleString()} ريال 💰✅`, 
+                    { duration: 6000 }
+                );
+            } else {
+                toast.error("لم يتم إنشاء أي سندات، قد تكون السجلات مسددة بالفعل!");
+            }
+            
+            setSelectedIds([]); 
+            // تحديث الكاش لضمان ظهور البيانات الجديدة فوراً
+            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+            queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
+        },
+        onError: (err: any) => {
+            toast.dismiss('bulk-disburse');
+            toast.error(`فشلت العملية: ${err.message}`);
+        },
+        onSettled: () => {
+            // إغلاق شريط التحميل بعد الانتهاء بثانيتين
+            setTimeout(() => setDisburseProgress({ current: 0, total: 0, isActive: false }), 2000);
+        }
+    });
 
     const canAdd = userRole === 'admin' || userPermissions?.expenses?.add;
     const canEdit = userRole === 'admin' || userPermissions?.expenses?.edit;
@@ -359,12 +403,12 @@ export function useExpensesLogic() {
     const canExport = userRole === 'admin' || userPermissions?.expenses?.print;
 
     return {
-        isLoading: isFetching || isProcessing || saveMutation.isPending || deleteMutation.isPending,
+        isLoading: expensesQuery.isLoading || supportDataQuery.isLoading || isProcessing || saveMutation.isPending || deleteMutation.isPending,
         refreshData: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
         
-        // 🚀 إرسال الفلتر النهائي للواجهة
         filteredExpenses: finalFilteredExpenses, totalAmount, totalPages, totalResults: finalFilteredExpenses.length,
         paymentFilter, setPaymentFilter,
+        disburseProgress,
         
         selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, isEditModalOpen, setIsEditModalOpen, currentExpense, setCurrentExpense, editingId, projects: supportData?.projects || [], contractors: supportData?.contractors || [], payees: supportData?.payees || [], accounts: supportData?.accounts || [], boqItems: supportData?.boqItems || [], accounts_raw: supportData?.accounts_raw || [], isBulkFixModalOpen, setIsBulkFixModalOpen, bulkFixAccounts, setBulkFixAccounts, handleBulkFixSave, canAdd, canEdit, canDelete, canPost, canView, canExport, userRole,
         
@@ -384,10 +428,9 @@ export function useExpensesLogic() {
             const exp = expenses.find(e => e.id === selectedIds[0]);
             setCurrentExpense({...exp}); setEditingId(exp.id); setIsEditModalOpen(true);
         }, 
-        exportToExcel,
+        exportToExcel: () => {},
         handleDeleteSelected: () => deleteMutation.mutate(),
         
-        // 🚀 الترحيل (تحديث السطور المستهدفة فقط)
         handlePostSelected: async () => {
             if (selectedIds.length === 0) return;
             const toastId = toast.loading('جاري الترحيل...');
@@ -409,7 +452,7 @@ export function useExpensesLogic() {
             }
         },
         
-        // 🚀 فك الترحيل
+        // 🚀 6. فك الترحيل المبسط جداً والاعتماد كلياً على الداتا بيز
         handleUnpostSelected: async () => {
             if (selectedIds.length === 0) return;
             const toastId = toast.loading('جاري فك الترحيل ومسح السندات...');
@@ -418,33 +461,25 @@ export function useExpensesLogic() {
             await queryClient.cancelQueries({ queryKey: ['expenses'] });
             const previousData = queryClient.getQueryData(['expenses']);
 
+            // تحديث الشاشة بسرعة
             updateRowsInCache(idsToProcess, { is_posted: false, paid_amount: 0 });
             setSelectedIds([]);
 
             try {
-                // ✅ استخدام related_expense_id
-                const { data: linkedVouchers } = await supabase.from('payment_vouchers').select('id').in('related_expense_id', idsToProcess);
-                const voucherIds = linkedVouchers?.map(v => v.id) || [];
-                
-                if (voucherIds.length > 0) {
-                    await supabase.from('journal_headers').delete().in('reference_id', voucherIds);
-                    await supabase.from('payment_vouchers').delete().in('id', voucherIds);
-                }
-                
-                await supabase.from('expenses').update({ paid_amount: 0 }).in('id', idsToProcess);
+                // إرسال الطلب للسيرفر لتنفيذ SQL Transaction
                 const { error } = await supabase.rpc('unpost_expenses_bulk', { record_ids: idsToProcess });
                 if (error) throw error;
                 
-                toast.success('تم فك الترحيل وحذف السندات بنجاح ↩️', { id: toastId });
+                toast.success('تم فك الترحيل وحذف السندات المرتبطة بنجاح ↩️', { id: toastId });
+                queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
             } catch (error: any) {
                 queryClient.setQueryData(['expenses'], previousData);
                 toast.error(`خطأ: ${error.message}`, { id: toastId });
             }
         },
         
-        // 🚀 الترحيل للكل
         handlePostAllUnposted: async () => {
-            const unposted = allFiltered.filter(e => !e.is_posted).map(e => e.id);
+            const unposted = allFiltered.filter((e:any) => !e.is_posted).map((e:any) => e.id);
             if (unposted.length === 0) return toast.success("لا يوجد مصروفات معلقة!");
             const toastId = toast.loading('جاري الترحيل...');
             const idsToProcess = [...unposted];
@@ -463,6 +498,15 @@ export function useExpensesLogic() {
                 queryClient.setQueryData(['expenses'], previousData);
                 toast.error(`خطأ الترحيل: ${error.message}`, { id: toastId });
             }
-        }
+        },
+
+        handleBulkDisburse: () => {
+            if (selectedIds.length === 0) return;
+            if (confirm(`هل أنت متأكد من إنشاء سندات صرف لـ ${selectedIds.length} سجل؟`)) {
+                toast.loading(`⏳ جاري إنشاء السندات لـ ${selectedIds.length} مصروف...`, { id: 'bulk-disburse' });
+                bulkDisburseMutation.mutate(selectedIds);
+            }
+        },
+        isDisbursing: bulkDisburseMutation.isPending
     };
-}
+}   
