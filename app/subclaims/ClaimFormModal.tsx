@@ -2,208 +2,228 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
+import SmartCombo from '@/components/SmartCombo';
 import { formatCurrency } from '@/lib/helpers';
 
-export default function ClaimFormModal({ isOpen, onClose, contractor, assignments, onSave, isSaving, fetchExpenses }: any) {
+export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
     const [mounted, setMounted] = useState(false);
-    
-    const [claimData, setClaimData] = useState<any>({
-        date: new Date().toISOString().split('T')[0],
-        retention_percent: 5,
-        total_amount: 0,
-        net_amount: 0,
-        total_deductions: 0,
-        retention_amount: 0,
-        advance_payment: 0,
-        materials_deduction: 0,
-        other_deductions: 0,
-        project_ids: [], // 🚀 مصفوفة العقارات المختارة
-        project_names: "" // للعرض فقط
-    });
-
-    const [localAssignments, setLocalAssignments] = useState<any[]>([]);
     const [localDeductions, setLocalDeductions] = useState<any[]>([]);
 
-    useEffect(() => { setMounted(true); }, []);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
-        if (!isOpen || !assignments || assignments.length === 0) return;
-
-        const loadData = async () => {
-            // 🎯 1. استخراج كل العقارات الفريدة المختارة
-            const uniqueProjectIds = Array.from(new Set(assignments.map((a: any) => a.project_id)));
-            const uniqueProjectNames = Array.from(new Set(assignments.map((a: any) => a.projects?.Property))).join(' + ');
-
-            // 🎯 2. تجهيز البنود
-            const initialAssigns = assignments.map((a:any) => ({
-                ...a,
-                assigned_qty: Number(a.assigned_qty || 0),
-                unit_price: Number(a.unit_price || 0)
-            }));
-            setLocalAssignments(initialAssigns);
-
-            // 🎯 3. سحب كل المصاريف لكل العقارات المختارة للمقاول ده
-            let allExpenses: any[] = [];
-            if (contractor?.name) {
-                for (const pId of uniqueProjectIds) {
-                    const fetched = await fetchExpenses(contractor.name, pId as string);
-                    const mapped = fetched.map((e:any) => ({
-                        ...e,
-                        deduction_amount: Number(e.total_price || e.unit_price || 0)
+        const loadDeductions = async () => {
+            if (isOpen && logic?.selectedContractor?.id && logic?.currentClaim?.project_ids?.length > 0) {
+                try {
+                    const projectId = logic.currentClaim.project_ids[0];
+                    const data = await logic.fetchPendingDeductions(logic.selectedContractor.id, projectId);
+                    setLocalDeductions(data);
+                    
+                    const matTotal = data.filter((d:any) => d.type === 'material').reduce((s:any, d:any) => s + (Number(d.amount) || 0), 0);
+                    const expTotal = data.filter((d:any) => d.type === 'expense').reduce((s:any, d:any) => s + (Number(d.amount) || 0), 0);
+                    
+                    logic.setCurrentClaim((prev: any) => ({
+                        ...prev,
+                        deductions: data, 
+                        materials_deduction: matTotal,
+                        other_deductions: expTotal
                     }));
-                    allExpenses = [...allExpenses, ...mapped];
+                } catch (error) {
+                    console.error("Error loading deductions:", error);
                 }
             }
-            setLocalDeductions(allExpenses);
-            
-            setClaimData(prev => ({ 
-                ...prev, 
-                project_ids: uniqueProjectIds, 
-                project_display_name: uniqueProjectNames 
-            }));
         };
-        loadData();
-    }, [isOpen, assignments]);
+        loadDeductions();
+    }, [isOpen, logic?.selectedContractor?.id, logic?.currentClaim?.project_ids]); 
 
-    // 🚀 تحديث الحسابات اللحظية
-    useEffect(() => {
-        const totalWork = localAssignments.reduce((sum, a) => sum + (Number(a.assigned_qty) * Number(a.unit_price)), 0);
-        const expenseDed = localDeductions.reduce((sum, d) => sum + Number(d.deduction_amount), 0);
-        const retention = (totalWork * (claimData.retention_percent / 100));
+    if (!isOpen || !mounted || !logic) return null;
 
-        const advance = Number(claimData.advance_payment || 0);
-        const materials = Number(claimData.materials_deduction || 0);
-        const others = Number(claimData.other_deductions || 0);
+    // 🚀 التريكاية السحرية: تحويل مصفوفة الـ IDs لبيانات الأعمال الكاملة
+    const fullAssignments = logic.assignments?.filter((a: any) => logic.selectedAssignments?.includes(a.id)) || [];
 
-        const manualDeductions = advance + materials + others;
-        const allDeductions = expenseDed + manualDeductions;
+    // 🚀 تجميع (توحيد) الأعمال المنجزة ذات نفس السعر والبند في سطر واحد
+    const groupedAssignments = Object.values(fullAssignments.reduce((acc: any, curr: any) => {
+        const itemName = curr.boq_budget?.work_item || curr.boq_items?.item_name || 'بند أعمال مجمع';
+        const unit = curr.boq_budget?.unit || curr.boq_items?.unit_of_measure || 'وحدة';
+        const price = Number(curr.unit_price) || 0;
+        const qty = Number(curr.assigned_qty) || 0;
         
-        const net = totalWork - retention - allDeductions;
+        // مفتاح التجميع (الاسم + السعر عشان لو نفس البند بسعرين مختلفين يتفصلوا)
+        const key = `${itemName}-${price}`; 
+        
+        if (!acc[key]) {
+            acc[key] = { name: itemName, unit, price, qty: 0, total: 0 };
+        }
+        
+        acc[key].qty += qty;
+        acc[key].total += (qty * price);
+        return acc;
+    }, {}) || {});
 
-        setClaimData(prev => ({
-            ...prev,
+    // 🧮 الحسابات المالية اللحظية
+    const totalWork = groupedAssignments.reduce((sum: number, a: any) => sum + a.total, 0) || 0;
+    const retentionPercent = Number(logic.currentClaim?.retention_percent) || 0;
+    const retentionAmount = totalWork * (retentionPercent / 100);
+    const materialsDed = Number(logic.currentClaim?.materials_deduction) || 0;
+    const expensesDed = Number(logic.currentClaim?.other_deductions) || 0;
+    const advanceDed = Number(logic.currentClaim?.advance_payment) || 0;
+    
+    const totalDeductions = materialsDed + expensesDed + advanceDed;
+    const netAmount = totalWork - retentionAmount - totalDeductions;
+
+    const handleSave = () => {
+        if (!logic.currentClaim?.project_ids || logic.currentClaim.project_ids.length === 0) {
+            alert("⚠️ يرجى اختيار العقار / المشروع أولاً.");
+            return;
+        }
+        if (fullAssignments.length === 0) {
+            const confirmEmpty = window.confirm("⚠️ أنت لم تقم بتحديد أي أعمال منجزة لهذا المستخلص (قيمة الأعمال = 0). هل تريد المتابعة وخصم المسحوبات فقط؟");
+            if (!confirmEmpty) return;
+        }
+
+        logic.handleSaveClaim({
+            ...logic.currentClaim,
             total_amount: totalWork,
-            total_deductions: allDeductions,
-            retention_amount: retention,
-            net_amount: net,
-            assignments: localAssignments, 
-            deductions: localDeductions
-        }));
-    }, [localAssignments, localDeductions, claimData.retention_percent, claimData.advance_payment, claimData.materials_deduction, claimData.other_deductions]);
-
-    const handleAssignmentChange = (index: number, field: string, value: string) => {
-        const updated = [...localAssignments];
-        updated[index][field] = Number(value);
-        setLocalAssignments(updated);
+            retention_amount: retentionAmount,
+            net_amount: netAmount,
+            assignments: fullAssignments // 👈 بنبعت البيانات الكاملة هنا عشان الداتا بيز تتحدث صح
+        });
     };
-
-    const handleDeductionChange = (index: number, value: string) => {
-        const updated = [...localDeductions];
-        updated[index].deduction_amount = Number(value);
-        setLocalDeductions(updated);
-    };
-
-    if (!isOpen || !mounted) return null;
 
     return createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(28, 20, 10, 0.9)', backdropFilter: 'blur(15px)', direction: 'rtl', padding: '20px' }}>
-            <div style={{ position: 'fixed', inset: 0 }} onClick={onClose} />
-            
-            <div className="cinematic-scroll" style={{ background: 'white', borderRadius: '35px', width: '100%', maxWidth: '950px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', position: 'relative', zIndex: 10, boxShadow: '0 50px 100px rgba(0,0,0,0.5)', border: `1px solid ${THEME.accent}40` }}>
+        <div className="warm-portal-overlay-fullscreen" onClick={onClose}>
+            <style>{`
+                .warm-portal-overlay-fullscreen { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; background: radial-gradient(circle at center, rgba(40, 24, 10, 0.4) 0%, rgba(15, 7, 0, 0.9) 100%) !important; backdrop-filter: blur(20px) !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 999999999 !important; }
+                .glass-input-field { width: 100%; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.65); border: 1px solid rgba(255, 255, 255, 0.8); outline: none; transition: 0.2s; font-weight: 700; color: #1e293b; }
+                .glass-input-field:focus { background: #fff; border-color: ${THEME.goldAccent || '#d4af37'}; box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.15); }
+                .btn-glass-save { background: linear-gradient(135deg, ${THEME.goldAccent || '#d4af37'}, ${THEME.coffeeDark || '#2d1a11'}); color: white; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3); }
+                .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); }
+                .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
+            `}</style>
+
+            <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ width: '1000px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.95)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', overflowY: 'auto', direction: 'rtl' }}>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px dashed #eee', paddingBottom: '25px', marginBottom: '25px' }}>
-                    <div style={{ maxWidth: '60%' }}>
-                        <h2 style={{ margin: 0, fontWeight: 900, color: THEME.primary, fontSize: '24px' }}>📄 إصدار مستخلص مجمع (متعدد العقارات)</h2>
-                        <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                            <span style={{ fontSize: '13px', background: '#f1f5f9', padding: '5px 12px', borderRadius: '10px', fontWeight: 800 }}>👤 المقاول: {contractor?.name}</span>
-                            <span style={{ fontSize: '13px', background: `${THEME.success}10`, color: THEME.success, padding: '5px 12px', borderRadius: '10px', fontWeight: 800 }}>🏢 العقارات: {claimData.project_display_name}</span>
-                        </div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:`2px solid ${THEME.goldAccent || '#d4af37'}50`, paddingBottom:'15px'}}>
+                    <div>
+                        <h2 style={{ color: THEME.coffeeDark || '#2d1a11', fontWeight: 900, margin: 0, fontSize: '26px' }}>🧾 إصدار مستخلص مقاول باطن</h2>
+                        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '5px', fontWeight: 800 }}>المقاول: {logic.selectedContractor?.name}</div>
                     </div>
                     <div style={{ textAlign: 'left' }}>
-                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800 }}>الصافي المستحق للصرف</div>
-                        <div style={{ fontSize: '28px', fontWeight: 900, color: THEME.success }}>{formatCurrency(claimData.net_amount)}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 900 }}>الصافي المستحق للصرف</div>
+                        <div style={{ color: THEME.goldAccent || '#d4af37', fontWeight: 900, fontSize: '28px' }}>{formatCurrency(netAmount)}</div>
                     </div>
                 </div>
 
-                {/* بقية الفورم (التاريخ، نسب الضمان، الخصومات) تظل كما هي لضمان كفاءة الإدخال */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
-                    <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px', color: '#64748b' }}>📅 تاريخ المستخلص</label>
-                        <input type="date" value={claimData.date} onChange={e => setClaimData({...claimData, date: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '2px solid #f1f5f9', fontWeight: 700, outline: 'none' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '25px', background: 'rgba(212, 175, 55, 0.05)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(212, 175, 55, 0.2)` }}>
+                    <div style={{ zIndex: 90 }}>
+                        <SmartCombo label="🏢 العقار / المشروع *" icon="🏢" table="projects" displayCol="Property" value={logic.currentClaim.project_ids?.[0]} onSelect={(v: any) => logic.setCurrentClaim({ ...logic.currentClaim, project_ids: v ? [v.id] : [] })} />
                     </div>
                     <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px', color: '#64748b' }}>🛡️ نسبة محتجز الضمان (%)</label>
-                        <input type="number" value={claimData.retention_percent} onChange={e => setClaimData({...claimData, retention_percent: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '2px solid #f1f5f9', fontWeight: 900, textAlign: 'center', outline: 'none' }} />
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>📅 تاريخ المستخلص</label>
+                        <input type="date" className="glass-input-field" value={logic.currentClaim.date} onChange={e => logic.setCurrentClaim({...logic.currentClaim, date: e.target.value})} />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🛡️ نسبة الدفعة المحتجزة (ضمان أعمال) %</label>
+                        <input type="number" className="glass-input-field" value={logic.currentClaim.retention_percent} onChange={e => logic.setCurrentClaim({...logic.currentClaim, retention_percent: e.target.value})} />
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '25px', background: '#fff1f2', padding: '20px', borderRadius: '20px', border: '1px solid #fecaca' }}>
-                    <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px', color: '#be123c' }}>💸 خصم دفعات سابقة</label>
-                        <input type="number" placeholder="0" value={claimData.advance_payment || ''} onChange={e => setClaimData({...claimData, advance_payment: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #fda4af', fontWeight: 900, textAlign: 'center', outline: 'none' }} />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px', color: '#be123c' }}>🧱 خصم خامات مجمعة</label>
-                        <input type="number" placeholder="0" value={claimData.materials_deduction || ''} onChange={e => setClaimData({...claimData, materials_deduction: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #fda4af', fontWeight: 900, textAlign: 'center', outline: 'none' }} />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px', color: '#be123c' }}>✂️ خصومات أخرى</label>
-                        <input type="number" placeholder="0" value={claimData.other_deductions || ''} onChange={e => setClaimData({...claimData, other_deductions: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #fda4af', fontWeight: 900, textAlign: 'center', outline: 'none' }} />
+                {/* 🚀 قسم بيان الأعمال المعتمدة (مجمعة) */}
+                <div style={{ marginBottom: '25px' }}>
+                    <h3 style={{ color: THEME.primary, fontWeight: 900, fontSize: '16px', marginBottom: '10px' }}>🏗️ بيان الأعمال المعتمدة (مجمعة)</h3>
+                    {groupedAssignments.length > 0 ? (
+                        <div style={{ background: 'white', borderRadius: '15px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+                                <thead style={{ background: '#f8fafc', color: '#64748b', fontSize: '12px' }}>
+                                    <tr>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>بيان الأعمال</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>إجمالي الكمية المنجزة</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>فئة السعر</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>الإجمالي</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {groupedAssignments.map((a: any, idx: number) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '10px', fontSize: '13px', fontWeight: 800, color: THEME.primary }}>{a.name}</td>
+                                            <td style={{ padding: '10px', fontSize: '13px', fontWeight: 900 }}>{a.qty} <span style={{fontSize: '11px', color: '#64748b'}}>{a.unit}</span></td>
+                                            <td style={{ padding: '10px', fontSize: '13px' }}>{formatCurrency(a.price)}</td>
+                                            <td style={{ padding: '10px', fontWeight: 900, color: THEME.success }}>{formatCurrency(a.total)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div style={{ background: '#fef2f2', padding: '15px', borderRadius: '12px', textAlign: 'center', color: '#991b1b', fontWeight: 800, border: '1px dashed #fca5a5' }}>لم يتم تحديد أي أعمال منجزة لهذا المستخلص. سيتم إنشاء مستخلص بالخصومات فقط.</div>
+                    )}
+                </div>
+
+                <div style={{ marginBottom: '25px' }}>
+                    <h3 style={{ color: THEME.coffeeDark, fontWeight: 900, fontSize: '16px', marginBottom: '10px' }}>🔻 المسحوبات والخصومات المرحلة (تُسحب تلقائياً)</h3>
+                    {localDeductions.length > 0 ? (
+                        <div style={{ background: 'white', borderRadius: '15px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+                                <thead style={{ background: '#f8fafc', color: '#64748b', fontSize: '12px' }}>
+                                    <tr>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>النوع</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>التاريخ</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>البيان</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>المبلغ المخصوم</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {localDeductions.map((d: any, idx: number) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '10px' }}>
+                                                <span style={{ background: d.type === 'material' ? '#fef3c7' : '#fee2e2', color: d.type === 'material' ? '#d97706' : '#dc2626', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 900 }}>
+                                                    {d.type === 'material' ? '📦 خامات' : '💸 نقدي'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '10px', fontSize: '12px' }}>{d.date}</td>
+                                            <td style={{ padding: '10px', fontSize: '13px', fontWeight: 700 }}>{d.statement}</td>
+                                            <td style={{ padding: '10px', fontWeight: 900, color: THEME.danger }}>{formatCurrency(d.amount)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', textAlign: 'center', color: '#94a3b8', fontWeight: 800, border: '1px dashed #cbd5e1' }}>لا توجد مسحوبات معلقة على هذا المشروع.</div>
+                    )}
+                    
+                    <div style={{ marginTop: '10px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>💵 خصم دفعة مقدمة سابقة (إن وجدت)</label>
+                        <input type="number" placeholder="0.00" className="glass-input-field" value={logic.currentClaim.advance_payment} onChange={e => logic.setCurrentClaim({...logic.currentClaim, advance_payment: e.target.value})} />
                     </div>
                 </div>
 
-                {/* جدول البنود المستحق صرفها */}
-                <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '25px', marginBottom: '25px', border: '1px solid #e2e8f0' }}>
-                    <h4 style={{ margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900, color: THEME.primary }}>🏗️ بنود الأعمال المختارة (من عقارات مختلفة):</h4>
-                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', fontSize: '13px' }}>
-                        <thead>
-                            <tr style={{ color: '#64748b' }}>
-                                <th style={{ textAlign: 'right', padding: '10px' }}>البند / العقار</th>
-                                <th style={{ textAlign: 'center', padding: '10px', width: '120px' }}>الكمية</th>
-                                <th style={{ textAlign: 'center', padding: '10px', width: '150px' }}>الفئة</th>
-                                <th style={{ textAlign: 'left', padding: '10px' }}>الإجمالي</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {localAssignments.map((a: any, i: number) => (
-                                <tr key={i} style={{ background: 'white', borderRadius: '15px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>
-                                    <td style={{ padding: '15px', fontWeight: 800, borderRadius: '0 15px 15px 0' }}>
-                                        <span style={{ fontSize: '10px', color: THEME.accent, display: 'block' }}>🏠 {a.projects?.Property}</span>
-                                        {a.boq_budget?.work_item || a.boq_items?.item_name || 'بند عمل'} 
-                                    </td>
-                                    <td style={{ padding: '10px', textAlign: 'center' }}>
-                                        <input type="number" value={a.assigned_qty} onChange={(e) => handleAssignmentChange(i, 'assigned_qty', e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 900, outline: 'none' }} />
-                                    </td>
-                                    <td style={{ padding: '10px', textAlign: 'center' }}>
-                                        <input type="number" value={a.unit_price} onChange={(e) => handleAssignmentChange(i, 'unit_price', e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: `1px solid ${THEME.primary}50`, color: THEME.primary, textAlign: 'center', fontWeight: 900, outline: 'none' }} />
-                                    </td>
-                                    <td style={{ padding: '15px', textAlign: 'left', fontWeight: 900, borderRadius: '15px 0 0 15px' }}>{formatCurrency(a.assigned_qty * a.unit_price)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* ملخص الأرقام النهائية */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', background: '#1e293b', padding: '25px', borderRadius: '25px', color: 'white', textAlign: 'center' }}>
-                    <div><div style={{ fontSize: '10px', opacity: 0.6, marginBottom: '5px' }}>إجمالي الأعمال</div><div style={{ fontSize: '18px', fontWeight: 900 }}>{formatCurrency(claimData.total_amount)}</div></div>
-                    <div><div style={{ fontSize: '10px', opacity: 0.6, marginBottom: '5px' }}>محتجز الضمان</div><div style={{ fontSize: '18px', fontWeight: 900, color: '#fbbf24' }}>{formatCurrency(claimData.retention_amount)}</div></div>
-                    <div><div style={{ fontSize: '10px', opacity: 0.6, marginBottom: '5px' }}>إجمالي الاستقطاعات</div><div style={{ fontSize: '18px', fontWeight: 900, color: '#fca5a5' }}>{formatCurrency(claimData.total_deductions)}</div></div>
-                    <div style={{ background: THEME.success, borderRadius: '18px', padding: '10px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 900 }}>صافي المستحق</div>
-                        <div style={{ fontSize: '22px', fontWeight: 900 }}>{formatCurrency(claimData.net_amount)}</div>
+                <div style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الأعمال المنجزة</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#60a5fa' }}>{formatCurrency(totalWork)}</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>محتجز ضمان أعمال ({retentionPercent}%)</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#fca5a5' }}>{formatCurrency(retentionAmount)}</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الخصومات</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#fca5a5' }}>{formatCurrency(totalDeductions)}</div>
+                    </div>
+                    <div style={{ background: `linear-gradient(135deg, ${THEME.goldAccent || '#d4af37'}40, transparent)`, padding: '15px', borderRadius: '16px', border: `1px solid ${THEME.goldAccent || '#d4af37'}80`, boxShadow: `0 0 20px ${THEME.goldAccent || '#d4af37'}20` }}>
+                        <div style={{ fontSize: '12px', fontWeight: 900, color: THEME.goldAccent || '#d4af37' }}>الصافي المستحق للمقاول</div>
+                        <div style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>{formatCurrency(netAmount)}</div>
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '15px', marginTop: '30px' }}>
-                    <button 
-                        onClick={() => onSave(claimData)} 
-                        disabled={isSaving || claimData.net_amount <= 0} 
-                        style={{ flex: 2, background: THEME.success, color: 'white', border: 'none', padding: '18px', borderRadius: '18px', fontWeight: 900, cursor: 'pointer', fontSize: '16px', boxShadow: `0 10px 20px ${THEME.success}40` }}
-                    >
-                        {isSaving ? '⏳ جاري الحفظ والترحيل...' : '✅ اعتماد المستخلص المجمع'}
+                <div style={{ display: 'flex', gap: '20px', marginTop: '35px' }}>
+                    <button onClick={handleSave} disabled={logic.isClaimSaving} className="btn-glass-save" style={{ flex: 2 }}>
+                        {logic.isClaimSaving ? '⏳ جاري الحفظ والترحيل...' : '✅ اعتماد المستخلص وخصم المسحوبات'}
                     </button>
-                    <button onClick={onClose} style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: 'none', padding: '18px', borderRadius: '18px', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إلغاء</button>
+                    <button onClick={onClose} className="btn-glass-cancel" style={{ flex: 1 }}>إغلاق</button>
                 </div>
             </div>
         </div>,

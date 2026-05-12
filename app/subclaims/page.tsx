@@ -16,11 +16,6 @@ export default function SubContractorClaimsPage() {
 
     useEffect(() => { setMounted(true); }, []);
 
-    // 🎯 تحويل الـ IDs المختارة من الجدول لبيانات كاملة عشان المودال يقرأها ويحسبها صح
-    const selectedAssignmentObjects = useMemo(() => {
-        return logic.assignments.filter((a: any) => logic.selectedAssignments.includes(a.id));
-    }, [logic.assignments, logic.selectedAssignments]);
-
     if (!mounted) return null;
 
     const sidebarActions = (
@@ -37,9 +32,10 @@ export default function SubContractorClaimsPage() {
                         ➕ إسناد بند عمل جديد
                     </button>
 
+                    {/* 🚀 الزرار الجديد المتصل بدالة الفتح الذكية للمستخلص */}
                     <button 
                         disabled={logic.selectedAssignments.length === 0} 
-                        onClick={() => logic.setIsClaimModalOpen(true)}
+                        onClick={logic.handleOpenClaimModal}
                         className="btn-main-glass green"
                     >
                         📑 إصدار مستخلص ({logic.selectedAssignments.length})
@@ -83,7 +79,6 @@ export default function SubContractorClaimsPage() {
             header: 'الإجراءات (لحظية)',
             render: (row: any) => (
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                    {/* 🚀 الزرار هنا اتعدل عشان ينده على الدالة اللي بتسحب الكميات من الداتا بيز */}
                     <button 
                         onClick={() => logic.handlePreparePrint(row)} 
                         style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px', transition: '0.2s' }}
@@ -143,7 +138,7 @@ export default function SubContractorClaimsPage() {
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', padding: '10px' }}>
-                            {logic.contractors.map((contractor: any) => (
+                            {(logic.contractors || []).map((contractor: any) => (
                                 <div key={contractor.id} onClick={() => logic.setSelectedContractor(contractor)} 
                                      style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(15px)', borderRadius: '24px', padding: '25px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.5)', transition: '0.3s', boxShadow: '0 10px 20px rgba(0,0,0,0.05)' }}>
                                     <div style={{ fontSize: '40px', marginBottom: '15px' }}>👷</div>
@@ -162,7 +157,6 @@ export default function SubContractorClaimsPage() {
                             </div>
                         </div>
 
-                        {/* 🚀 أزرار التنقل بين الأعمال الجارية والمستخلصات السابقة */}
                         <div style={{ display: 'flex', gap: '15px', marginBottom: '25px' }}>
                             <button 
                                 className={`tab-btn ${logic.activeTab === 'assignments' ? 'active' : 'inactive'}`} 
@@ -178,52 +172,48 @@ export default function SubContractorClaimsPage() {
                             </button>
                         </div>
 
-                        {/* 🚀 جدول الأعمال الجارية (المعتاد) */}
                         {logic.activeTab === 'assignments' && (
                             <div style={{ background: 'white', borderRadius: '24px', padding: '10px', border: '1px solid #eee', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', animation: 'fadeIn 0.3s' }}>
                                 <RawasiSmartTable 
-    data={logic.assignments}
-    isLoading={logic.isAssignLoading}
-    columns={[
-        { header: 'المشروع العقاري', render: (row: any) => <span style={{fontWeight: 800}}>{row.projects?.Property || '---'}</span> },
-        { header: 'بند العمل المسند', render: (row: any) => <span style={{color: THEME.primary, fontWeight: 700}}>{row.boq_budget?.work_item || row.boq_items?.item_name || '---'}</span> },
-        { header: 'الكمية', render: (row: any) => `${row.assigned_qty} ${row.boq_budget?.unit || row.boq_items?.unit_of_measure || ''}` },
-        { header: 'سعر الوحدة', render: (row: any) => formatCurrency(row.unit_price) },
-        { header: 'الإجمالي', render: (row: any) => <strong style={{ color: THEME.success }}>{formatCurrency(row.assigned_qty * row.unit_price)}</strong> },
-        { header: 'الحالة', render: (row: any) => <span style={{ color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>{row.status}</span> },
-        
-        // 🚀 العمود الجديد: الإجراءات (تعديل ومسح)
-        {
-            header: 'إجراءات',
-            render: (row: any) => (
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); logic.handleEditAssignment(row); }} 
-                        style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
-                    >
-                        تعديل ✏️
-                    </button>
-                    <button 
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            if(confirm('متأكد من مسح هذا البند؟')) logic.deleteAssignment(row.id); 
-                        }} 
-                        style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
-                    >
-                        مسح 🗑️
-                    </button>
-                </div>
-            )
-        }
-    ]}
-    selectable={true}
-    selectedIds={logic.selectedAssignments}
-    onSelectionChange={logic.setSelectedAssignments}
-/>
+                                    data={logic.assignments}
+                                    isLoading={logic.isAssignLoading}
+                                    columns={[
+                                        { header: 'المشروع العقاري', render: (row: any) => <span style={{fontWeight: 800}}>{row.projects?.Property || '---'}</span> },
+                                        { header: 'بند العمل المسند', render: (row: any) => <span style={{color: THEME.primary, fontWeight: 700}}>{row.boq_budget?.work_item || row.boq_items?.item_name || '---'}</span> },
+                                        { header: 'الكمية', render: (row: any) => `${row.assigned_qty} ${row.boq_budget?.unit || row.boq_items?.unit_of_measure || ''}` },
+                                        { header: 'سعر الوحدة', render: (row: any) => formatCurrency(row.unit_price) },
+                                        { header: 'الإجمالي', render: (row: any) => <strong style={{ color: THEME.success }}>{formatCurrency(row.assigned_qty * row.unit_price)}</strong> },
+                                        { header: 'الحالة', render: (row: any) => <span style={{ color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>{row.status}</span> },
+                                        {
+                                            header: 'إجراءات',
+                                            render: (row: any) => (
+                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); logic.handleEditAssignment(row); }} 
+                                                        style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
+                                                    >
+                                                        تعديل ✏️
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => { 
+                                                            e.stopPropagation(); 
+                                                            if(confirm('متأكد من مسح هذا البند؟')) logic.deleteAssignment(row.id); 
+                                                        }} 
+                                                        style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
+                                                    >
+                                                        مسح 🗑️
+                                                    </button>
+                                                </div>
+                                            )
+                                        }
+                                    ]}
+                                    selectable={true}
+                                    selectedIds={logic.selectedAssignments}
+                                    onSelectionChange={logic.setSelectedAssignments}
+                                />
                             </div>
                         )}
 
-                        {/* 🚀 جدول سجل المستخلصات التاريخية (الجديد) */}
                         {logic.activeTab === 'history' && (
                             <div style={{ background: 'white', borderRadius: '24px', padding: '10px', border: '1px solid #eee', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', animation: 'fadeIn 0.3s' }}>
                                 <RawasiSmartTable 
@@ -236,7 +226,6 @@ export default function SubContractorClaimsPage() {
                     </div>
                 )}
 
-                {/* 🚀 استدعاء المودالات */}
                 {logic.isAssignModalOpen && (
                     <AssignWorkModal 
                         isOpen={logic.isAssignModalOpen}
@@ -250,25 +239,22 @@ export default function SubContractorClaimsPage() {
                     />
                 )}
 
+                {/* 🚀 التحديث الأهم: تمرير الـ logic بالكامل للمودال الجديد */}
                 {logic.isClaimModalOpen && (
                     <ClaimFormModal 
                         isOpen={logic.isClaimModalOpen}
                         onClose={() => logic.setIsClaimModalOpen(false)}
-                        contractor={logic.selectedContractor}
-                        assignments={selectedAssignmentObjects} 
-                        onSave={logic.handleSaveClaim}
-                        isSaving={logic.isClaimSaving} 
-                        fetchExpenses={logic.fetchContractorExpenses}
+                        logic={logic} 
                     />
                 )}
 
-                {/* 🚀 استدعاء مودال الطباعة وتم تمرير assignments بشكل صحيح */}
                 {logic.isPrintModalOpen && (
                     <PrintClaimModal 
                         isOpen={logic.isPrintModalOpen}
                         onClose={() => { logic.setIsPrintModalOpen(false); logic.setSelectedPrintClaim(null); }}
                         claim={logic.selectedPrintClaim}
-                        assignments={logic.printAssignments} // 🎯 السطر ده اللي كان ناقص
+                        assignments={logic.printAssignments} 
+                        deductions={logic.printDeductions} // 🚀 تمرير الخصومات هنا
                         contractorName={logic.selectedContractor?.name}
                     />
                 )}

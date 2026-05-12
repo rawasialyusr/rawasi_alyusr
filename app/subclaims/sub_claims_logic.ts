@@ -28,6 +28,7 @@ export function useSubClaimsLogic() {
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [selectedPrintClaim, setSelectedPrintClaim] = useState<any | null>(null);
     const [printAssignments, setPrintAssignments] = useState<any[]>([]); 
+    const [printDeductions, setPrintDeductions] = useState<any[]>([]);
 
     const [projectBoqItems, setProjectBoqItems] = useState<any[]>([]);
     const fetchProjectBoq = async (projectId: string) => {
@@ -44,9 +45,10 @@ export function useSubClaimsLogic() {
         }
     });
 
+    // 🛡️ حماية الفلتر
     const filteredContractors = useMemo(() => {
-        if (!searchTerm) return contractors;
-        return contractors.filter((c: any) => 
+        if (!searchTerm) return contractors || [];
+        return (contractors || []).filter((c: any) => 
             c.name?.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [contractors, searchTerm]);
@@ -82,18 +84,85 @@ export function useSubClaimsLogic() {
         }
     });
 
-    const fetchContractorExpenses = async (contractorName: string, projectId: string) => {
-        const { data } = await supabase.from('expenses')
+    const handleOpenClaimModal = () => {
+        if (!selectedAssignments || selectedAssignments.length === 0) {
+            showToast("⚠️ يرجى تحديد بند واحد على الأقل من الأعمال المنجزة.", "error");
+            return;
+        }
+
+        // 🛡️ حماية الفلتر هنا
+        const selectedObjects = (assignments || []).filter((a: any) => selectedAssignments.includes(a.id));
+        const projectIds = Array.from(new Set(selectedObjects.map((a: any) => a.project_id)));
+        
+        if (projectIds.length > 1) {
+            showToast("⚠️ لا يمكن عمل مستخلص يجمع بنود من عقارات مختلفة. يرجى تحديد بنود لعقار واحد فقط.", "error");
+            return;
+        }
+
+        setCurrentClaim({
+            date: new Date().toISOString().split('T')[0],
+            retention_percent: 5,
+            tax_percent: 15,
+            project_ids: projectIds, 
+            deductions: [],
+            materials_deduction: 0,
+            other_deductions: 0,
+            advance_payment: 0
+        });
+
+        setIsClaimModalOpen(true);
+    };
+
+    const fetchPendingDeductions = async (contractorId: string, projectId: string) => {
+        const { data: expenses, error: expError } = await supabase.from('expenses')
             .select('*')
-            .eq('sub_contractor', contractorName)
+            .eq('sub_contractor', selectedContractor?.name) 
+            .eq('is_posted', true)
+            .eq('is_deducted_in_claim', false); 
+
+        if (expError) console.error("Expenses Fetch Error:", expError.message);
+
+        const validExpenses = (expenses || [])
+            .filter(e => e.project_id === projectId || !e.project_id) 
+            .map(e => ({
+                id: e.id,
+                type: 'expense',
+                date: e.expense_date || e.created_at,
+                statement: e.notes || 'مصروف محمل على المقاول',
+                amount: e.amount || e.total_price || 0
+            }));
+
+        const { data: materials, error: matError } = await supabase.from('material_issues')
+            .select('*, lines:material_issue_lines(*)')
+            .eq('subcontractor_id', contractorId)
             .eq('project_id', projectId)
-            .eq('is_deducted_in_claim', false)
-            .eq('is_posted', true);
-        return data || [];
+            .eq('is_posted', true)
+            .is('claim_id', null);
+
+        if (matError) console.error("Materials Fetch Error:", matError.message);
+
+        const validMaterials = (materials || []).map(m => {
+            const lines = m.lines || m.material_issue_lines || [];
+            const total = lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0) || 0;
+            const desc = lines.map((l:any) => `${l.item_name} (${l.quantity} ${l.unit})`).join(' + ');
+            return {
+                id: m.id,
+                type: 'material',
+                date: m.issue_date,
+                statement: `صرف خامات للموقع: ${desc}`,
+                amount: total
+            };
+        });
+
+        return [...validExpenses, ...validMaterials];
     };
 
     const saveClaimMutation = useMutation({
         mutationFn: async (claimData: any) => {
+            if (!claimData.project_ids || claimData.project_ids.length === 0) {
+                throw new Error("يرجى تحديد العقار / المشروع أولاً.");
+            }
+
             const { data: claim, error } = await supabase.from('sub_claims').insert([{
                 claim_number: `CLM-${Date.now().toString().slice(-6)}`,
                 contractor_id: selectedContractor.id,
@@ -112,8 +181,16 @@ export function useSubClaimsLogic() {
             if (error) throw new Error(error.message);
 
             if (claimData.deductions?.length > 0) {
-                for (const exp of claimData.deductions) {
-                    await supabase.from('expenses').update({ is_deducted_in_claim: true, claim_id: claim.id, total_price: exp.deduction_amount }).eq('id', exp.id);
+                for (const ded of claimData.deductions) {
+                    if (ded.type === 'expense') {
+                        await supabase.from('expenses')
+                            .update({ is_deducted_in_claim: true, claim_id: claim.id })
+                            .eq('id', ded.id);
+                    } else if (ded.type === 'material') {
+                        await supabase.from('material_issues')
+                            .update({ claim_id: claim.id })
+                            .eq('id', ded.id);
+                    }
                 }
             }
 
@@ -131,16 +208,18 @@ export function useSubClaimsLogic() {
             return claim;
         },
         onSuccess: () => {
-            showToast("تم اعتماد المستخلص وترحيله لحسابات الذمة بنجاح 🚀", "success");
+            showToast("تم اعتماد المستخلص وترحيله لحسابات الذمة وقفل مسحوباته بنجاح 🚀", "success");
             setIsClaimModalOpen(false);
             setSelectedAssignments([]);
             queryClient.invalidateQueries({ queryKey: ['contractor_tasks'] });
             queryClient.invalidateQueries({ queryKey: ['contractor_claims_history'] }); 
             setActiveTab('history'); 
+        },
+        onError: (err: any) => {
+            showToast(`خطأ في الحفظ: ${err.message}`, "error");
         }
     });
 
-    // 🚀 التعديل هنا: الدالة بقت تقبل التعديل والإضافة معاً
     const assignWorkMutation = useMutation({
         mutationFn: async (record: any) => {
             const payload = {
@@ -154,11 +233,9 @@ export function useSubClaimsLogic() {
             };
 
             if (record.id) {
-                // لو البند ليه ID يبقى بنعمل تعديل
                 const { error } = await supabase.from('contractor_assignments').update(payload).eq('id', record.id);
                 if (error) throw new Error(error.message);
             } else {
-                // لو جديد نعمل إضافة
                 const { error } = await supabase.from('contractor_assignments').insert([payload]);
                 if (error) throw new Error(error.message); 
             }
@@ -171,7 +248,6 @@ export function useSubClaimsLogic() {
         }
     });
 
-    // 🚀 دالة المسح للبند الجاري تنفيذه
     const deleteAssignmentMutation = useMutation({
         mutationFn: async (id: string) => {
             const { error } = await supabase.from('contractor_assignments').delete().eq('id', id);
@@ -183,7 +259,6 @@ export function useSubClaimsLogic() {
         }
     });
 
-    // 🚀 دالة تجهيز البند للتعديل
     const handleEditAssignment = (assignment: any) => {
         setAssignRecord({
             id: assignment.id,
@@ -212,12 +287,16 @@ export function useSubClaimsLogic() {
             showToast(msg, "success");
             queryClient.invalidateQueries({ queryKey: ['contractor_claims_history'] });
             if (variables.action === 'delete') queryClient.invalidateQueries({ queryKey: ['contractor_tasks'] });
+        },
+        onError: (err: any) => {
+            showToast(`فشلت العملية: ${err.message}`, "error");
         }
     });
 
     const handlePreparePrint = async (claim: any) => {
         setSelectedPrintClaim(claim);
-        const { data, error } = await supabase
+        
+        const { data: assignmentsData } = await supabase
             .from('contractor_assignments')
             .select(`
                 *,
@@ -227,7 +306,30 @@ export function useSubClaimsLogic() {
             `)
             .eq('claim_id', claim.id);
         
-        if (data) setPrintAssignments(data);
+        if (assignmentsData) setPrintAssignments(assignmentsData);
+
+        const { data: expenses } = await supabase.from('expenses').select('*').eq('claim_id', claim.id);
+        const validExpenses = (expenses || []).map(e => ({
+            type: 'expense',
+            date: e.expense_date || e.created_at,
+            statement: e.notes || 'مصروف نقدي مقيد',
+            amount: e.amount || e.total_price || 0
+        }));
+
+        const { data: materials } = await supabase.from('material_issues').select('*, lines:material_issue_lines(*)').eq('claim_id', claim.id);
+        const validMaterials = (materials || []).map(m => {
+            const lines = m.lines || m.material_issue_lines || [];
+            const total = lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0) || 0;
+            const desc = lines.map((l:any) => `${l.item_name} (${l.quantity} ${l.unit})`).join(' + ');
+            return {
+                type: 'material',
+                date: m.issue_date,
+                statement: `صرف خامات: ${desc}`,
+                amount: total
+            };
+        });
+
+        setPrintDeductions([...validExpenses, ...validMaterials]);
         setIsPrintModalOpen(true);
     };
 
@@ -240,16 +342,21 @@ export function useSubClaimsLogic() {
         isClaimModalOpen, setIsClaimModalOpen, currentClaim, setCurrentClaim,
         isPrintModalOpen, setIsPrintModalOpen, 
         selectedPrintClaim, setSelectedPrintClaim,
-        printAssignments, handlePreparePrint, 
-        fetchContractorExpenses,
+        printAssignments, 
+        printDeductions, 
+        handlePreparePrint, 
+        
+        handleOpenClaimModal, 
+        fetchPendingDeductions, 
+
         handleSaveClaim: (data: any) => saveClaimMutation.mutate(data),
         isClaimSaving: saveClaimMutation.isPending, 
         isAssignModalOpen, setIsAssignModalOpen,
         assignRecord, setAssignRecord,
         handleAssignWork: (data: any) => assignWorkMutation.mutate(data),
         isAssigning: assignWorkMutation.isPending,
-        handleEditAssignment, // 🚀 
-        deleteAssignment: (id: string) => deleteAssignmentMutation.mutate(id), // 🚀
+        handleEditAssignment, 
+        deleteAssignment: (id: string) => deleteAssignmentMutation.mutate(id),
         projectBoqItems, fetchProjectBoq
     };
 }

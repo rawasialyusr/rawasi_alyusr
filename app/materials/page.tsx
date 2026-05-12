@@ -7,13 +7,30 @@ import RawasiSmartTable from '@/components/rawasismarttable';
 import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import MaterialInvoiceModal from './MaterialInvoiceModal';
-import MaterialReceiptPrintModal from './MaterialReceiptPrintModal'; // 🖨️ استدعاء مودال الطباعة
+import MaterialReceiptPrintModal from './MaterialReceiptPrintModal';
 
 export default function MaterialsPage() {
     const logic = useMaterialsLogic();
 
     const columns = [
-        { header: 'التاريخ', render: (row: any) => row ? row.exp_date : null },
+        { 
+            header: 'التاريخ والنوع', 
+            render: (row: any) => row ? (
+                <div>
+                    <div style={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px' }}>{row.exp_date}</div>
+                    <span style={{ 
+                        fontSize: '10px', 
+                        background: row.receipt_type === 'توريد عميل' ? '#dbeafe' : '#fef3c7', 
+                        color: row.receipt_type === 'توريد عميل' ? '#1d4ed8' : '#d97706', 
+                        padding: '3px 8px', 
+                        borderRadius: '6px', 
+                        fontWeight: 900 
+                    }}>
+                        {row.receipt_type || 'توريد شركة'}
+                    </span>
+                </div>
+            ) : null 
+        },
         { 
             header: 'الخامة والكمية', 
             render: (row: any) => row ? (
@@ -28,40 +45,80 @@ export default function MaterialsPage() {
             render: (row: any) => row ? (
                 <div>
                     <div style={{ fontWeight: 800, color: THEME.coffeeDark }}>🏢 {row.project?.Property || '---'}</div>
-                    <div style={{ fontSize: '11px', color: THEME.ruby }}>👤 المورد: {row.supplier?.name || '---'}</div>
+                    <div style={{ fontSize: '11px', color: THEME.ruby, marginTop: '2px' }}>👤 المورد/العميل: {row.supplier?.name || '---'}</div>
                 </div>
             ) : null 
         },
         { 
-            header: 'حساب الخصم (الأستاذ)', 
-            render: (row: any) => row ? <span style={{ fontSize: '12px', fontWeight: 800, background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>{row.account?.name || '---'}</span> : null 
+            header: 'الحالة المحاسبية', 
+            render: (row: any) => row ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 800, background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px', color: '#475569' }}>
+                        {row.account?.name || '---'}
+                    </span>
+                    <span style={{ 
+                        background: row.is_posted ? '#dcfce7' : '#fef2f2', 
+                        color: row.is_posted ? '#166534' : '#dc2626', 
+                        padding: '3px 8px', 
+                        borderRadius: '6px', 
+                        fontSize: '10px', 
+                        fontWeight: 900 
+                    }}>
+                        {row.is_posted ? 'مرحل ومقيد ✅' : 'مسودة غير مرحلة ⏳'}
+                    </span>
+                </div>
+            ) : null 
         },
         { 
             header: 'الإجمالي للتكلفة', 
             render: (row: any) => row ? <span style={{ fontWeight: 900, color: THEME.danger, fontSize: '15px' }}>{formatCurrency(row.total_price)}</span> : null 
         },
-        // 🖨️ عمود الطباعة الجديد
+        // 🚀 عمود الإجراءات الشامل (طباعة - ترحيل - مسح)
         { 
-            header: 'إجراءات', 
+            header: 'إجراءات الإذن', 
             render: (row: any) => row ? (
-                <button 
-                    onClick={() => {
-                        logic.setPrintReceiptId(row.receipt_id);
-                        logic.setIsPrintModalOpen(true);
-                    }} 
-                    style={{ padding: '8px 12px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, color: THEME.primary, transition: '0.2s' }}
-                    onMouseOver={(e:any) => e.target.style.background = '#e2e8f0'}
-                    onMouseOut={(e:any) => e.target.style.background = '#f8fafc'}
-                >
-                    🖨️ طباعة الإذن
-                </button>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '180px' }}>
+                    
+                    <button 
+                        onClick={() => { logic.setPrintReceiptId(row.receipt_id); logic.setIsPrintModalOpen(true); }} 
+                        style={{ flex: '1 1 45%', padding: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, color: THEME.primary, fontSize: '11px', transition: '0.2s' }}
+                    >
+                        🖨️ طباعة
+                    </button>
+
+                    {!row.is_posted ? (
+                        <button 
+                            onClick={() => logic.handleAction('post', row.receipt_id)} 
+                            disabled={logic.isActionPending}
+                            style={{ flex: '1 1 45%', padding: '6px', background: THEME.success, color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px', opacity: logic.isActionPending ? 0.5 : 1 }}
+                        >
+                            🚀 ترحيل
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => logic.handleAction('unpost', row.receipt_id)} 
+                            disabled={logic.isActionPending}
+                            style={{ flex: '1 1 45%', padding: '6px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px', opacity: logic.isActionPending ? 0.5 : 1 }}
+                        >
+                            🔓 فك الترحيل
+                        </button>
+                    )}
+
+                    <button 
+                        onClick={() => { if(confirm('هل أنت متأكد من مسح الفاتورة نهائياً وإلغاء قيودها المحاسبية؟')) logic.handleAction('delete', row.receipt_id); }} 
+                        disabled={logic.isActionPending}
+                        style={{ flex: '1 1 100%', padding: '6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px', opacity: logic.isActionPending ? 0.5 : 1 }}
+                    >
+                        🗑️ مسح الفاتورة بالكامل
+                    </button>
+                </div>
             ) : null 
         },
     ];
 
     return (
         <div className="clean-page">
-            <MasterPage title="مركز توريد خامات المشاريع" subtitle="إصدار فواتير الخامات، توجيهها للمشاريع، وربطها بحسابات العملاء للخصم التلقائي">
+            <MasterPage title="مركز توريد خامات المشاريع" subtitle="إصدار فواتير الخامات، توجيهها للمشاريع، وربطها بحسابات الموردين والعملاء للخصم التلقائي">
                 
                 <RawasiSidebarManager 
                     actions={
