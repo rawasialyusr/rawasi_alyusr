@@ -60,10 +60,11 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
         return res;
     }, [deductions, claim]);
 
-    const handlePrint = useReactToPrint({
-        content: () => printRef.current,
-        documentTitle: `مستخلص_${contractorName}_${claim?.claim_number}`,
-    });
+    // 🚀 التعديل الأول: تغيير دالة الطباعة لتعمل مثل الكيبورد تماماً (window.print)
+    const handlePrint = () => {
+        document.title = `مستخلص_${contractorName}_${claim?.claim_number}`;
+        window.print();
+    };
 
     if (!isOpen || !mounted || !claim) return null;
 
@@ -80,7 +81,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                     .print-modal-backdrop { display: none !important; }
                     .printable-area, .printable-area * { visibility: visible; }
                     
-                    /* 🚀 ضبط العرض ليتناسب تلقائياً مع مقاس A4 الطولي */
+                    /* 🚀 السحر هنا: تصغير الصفحة تلقائياً لتناسب ورقة الطباعة (Fit to Page) */
                     .printable-area { 
                         position: absolute !important; 
                         left: 0; top: 0; 
@@ -90,26 +91,31 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                         overflow: visible !important; 
                         box-shadow: none !important; 
                         border: none !important; 
-                        padding: 0 !important; 
+                        padding: 15px !important; 
                         margin: 0 !important; 
                         background: white !important; 
+                        zoom: 0.85; /* 👈 بيصغر المحتوى 15% عشان يلم الصفحة كلها بالعرض */
                     }
                     .no-print { display: none !important; }
-                    @page { size: A4 portrait; margin: 10mm; } 
                     
-                    /* 🚀 منع قطع الجداول والتوقيعات بين الصفحات */
-                    .modern-table { page-break-inside: auto; font-size: 11px !important; }
+                    @page { size: A4 landscape; margin: 10mm; } 
+                    
+                    /* 🚀 تصغير المسافات بين العناصر أثناء الطباعة فقط عشان توفر مساحة */
+                    .info-grid { gap: 10px !important; margin-bottom: 15px !important; }
+                    .info-card { padding: 10px !important; }
+                    .modern-table { page-break-inside: auto; font-size: 11px !important; margin-bottom: 15px !important; }
+                    .modern-table th, .modern-table td { padding: 6px !important; }
                     .modern-table tr { page-break-inside: avoid; page-break-after: auto; }
-                    .signatures-container { page-break-inside: avoid; }
+                    .signatures-container { page-break-inside: avoid; margin-top: 30px !important; }
                     .summary-section { width: 60% !important; float: left; }
                 }
                 
-                /* تصميم عصري للمودال */
+                /* تصميم عصري للمودال (المعاينة على الشاشة) */
                 .printable-area { 
                     background: white; 
                     border-radius: 24px; 
                     width: 100%; 
-                    max-width: 900px; /* أنسب عرض لمحاكاة A4 */
+                    max-width: 1100px; 
                     max-height: 95vh; 
                     overflow-y: auto; 
                     padding: 40px; 
@@ -166,7 +172,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                 
                 {/* 🚀 أزرار التحكم */}
                 <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', background: '#f8fafc', padding: '15px', borderRadius: '16px' }}>
-                    <h2 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>📄 معاينة الطباعة (A4)</h2>
+                    <h2 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>📄 معاينة الطباعة (A4 بالعرض)</h2>
                     <div style={{ display: 'flex', gap: '10px' }}>
                         <button onClick={handlePrint} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.2)' }}>🖨️ طباعة المستخلص</button>
                         <button onClick={onClose} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}>❌ إغلاق</button>
@@ -301,7 +307,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                                 <span>{Number(totalWorkAmount).toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
                             </div>
                             
-                            {/* إخفاء سطر ضمان الأعمال إذا كان 0 */}
                             {Number(claim.retention_amount || 0) > 0 && (
                                 <div className="summary-row deduction">
                                     <span>(-) خصم ضمان أعمال {claim.retention_percent || 0}% (Retention):</span>
@@ -309,7 +314,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                                 </div>
                             )}
 
-                            {/* إخفاء سطر الدفعات السابقة إذا كان 0 */}
                             {Number(claim.advance_payment || 0) > 0 && (
                                 <div className="summary-row deduction">
                                     <span>(-) خصم دفعات سابقة (Advances):</span>
@@ -317,7 +321,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                                 </div>
                             )}
 
-                            {/* عرض الخصومات المجمعة إن وجدت */}
                             {groupedDeductions.map((d: any, idx: number) => (
                                 <div className="summary-row deduction" key={`ded-${idx}`} style={{ borderBottom: idx === groupedDeductions.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
                                     <span>(-) {d.statement}:</span>

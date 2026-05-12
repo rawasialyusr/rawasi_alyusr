@@ -15,18 +15,23 @@ export function useMaterialsLogic() {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     
+    // 🚀 حالات التشيك بوكس والترتيب الجديدة
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [sortBy, setSortBy] = useState('newest');
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     
     // 🖨️ متغيرات التحكم في مودال الطباعة
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
 
-    // 🚀 هيكل الفاتورة المحدث ليشمل "نوع التوريد"
+    // 🚀 هيكل الفاتورة
     const initialInvoiceState = {
+        id: null, // 👈 مهم جداً عشان نميز بين الإضافة والتعديل
         project_id: '',
-        payee_id: '', // المورد أو العميل
+        payee_id: '', 
         account_id: '', 
-        receipt_type: 'توريد شركة', // 👈 'توريد شركة' أو 'توريد عميل'
+        receipt_type: 'توريد شركة',
         exp_date: new Date().toISOString().split('T')[0],
         notes: '',
         items: [
@@ -36,55 +41,78 @@ export function useMaterialsLogic() {
     const [invoiceData, setInvoiceData] = useState<any>(initialInvoiceState);
 
     // 📥 سحب الخامات مع بيانات الترحيل ونوع التوريد
-    const { data: allMaterials = [], isLoading } = useQuery({
-        queryKey: ['materials_logs'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('material_receipt_lines')
-                .select(`
-                    id, item_name, quantity, unit, unit_price, total_price,
-                    receipt:material_receipts (
-                        id, receipt_date, project_id, notes, status, receipt_type, is_posted, jv_id,
-                        project:projects(Property), 
-                        supplier:partners!supplier_id(name), 
-                        account:accounts!account_id(name)
-                    )
-                `)
-                .order('created_at', { ascending: false });
+   // 📥 سحب الخامات مع بيانات الترحيل ونوع التوريد ورقم السند
+    // 📥 [Query] المحدث بدون تعليقات داخل النص
+const { data: allMaterials = [], isLoading } = useQuery({
+    queryKey: ['materials_logs'],
+    queryFn: async () => {
+        const { data, error } = await supabase
+            .from('material_receipt_lines')
+            .select(`
+                id, 
+                item_name, 
+                quantity, 
+                unit, 
+                unit_price, 
+                total_price,
+                receipt:material_receipts (
+                    id, 
+                    receipt_number,
+                    receipt_date, 
+                    project_id, 
+                    notes, 
+                    status, 
+                    receipt_type, 
+                    is_posted, 
+                    jv_id, 
+                    created_at,
+                    project:projects(Property), 
+                    supplier:partners!supplier_id(id, name), 
+                    account:accounts!account_id(id, name)
+                )
+            `)
+            .order('created_at', { ascending: false });
 
-            if (error) throw error;
+        if (error) throw error;
 
-            return (data || []).map((line: any) => ({
-                id: line.id,
-                receipt_id: line.receipt?.id,
-                work_item: line.item_name,
-                quantity: line.quantity,
-                unit: line.unit,
-                unit_price: line.unit_price,
-                total_price: line.total_price,
-                exp_date: line.receipt?.receipt_date,
-                project_id: line.receipt?.project_id,
-                project: line.receipt?.project,
-                supplier: line.receipt?.supplier,
-                account: line.receipt?.account,
-                status: line.receipt?.status,
-                receipt_type: line.receipt?.receipt_type, // 👈
-                is_posted: line.receipt?.is_posted, // 👈
-                jv_id: line.receipt?.jv_id // 👈
-            }));
-        }
-    });
+        return (data || []).map((line: any) => ({
+            id: line.id,
+            receipt_id: line.receipt?.id,
+            receipt_no: line.receipt?.receipt_number, // المرجع الأساسي
+            work_item: line.item_name,
+            quantity: line.quantity,
+            unit: line.unit,
+            unit_price: line.unit_price,
+            total_price: line.total_price,
+            exp_date: line.receipt?.receipt_date,
+            created_at: line.receipt?.created_at,
+            project_id: line.receipt?.project_id,
+            project: line.receipt?.project,
+            supplier: line.receipt?.supplier,
+            account: line.receipt?.account,
+            status: line.receipt?.status,
+            notes: line.receipt?.notes,
+            receipt_type: line.receipt?.receipt_type, 
+            is_posted: line.receipt?.is_posted,
+            jv_id: line.receipt?.jv_id 
+        }));
+    }
+});
 
+    // 📥 سحب المشاريع النشطة للفلترة
     const { data: projects = [] } = useQuery({
         queryKey: ['active_projects_materials'],
         queryFn: async () => {
-            const { data } = await supabase.from('projects').select('id, Property, project_code').neq('status', 'منتهي');
+            const { data } = await supabase
+                .from('projects')
+                .select('id, Property, project_code')
+                .neq('status', 'منتهي');
             return data || [];
         }
     });
 
     const filteredData = useMemo(() => {
-        return allMaterials.filter(mat => {
+        let result = allMaterials.filter(mat => {
             const matchSearch = !globalSearch || 
                 mat.work_item?.toLowerCase().includes(globalSearch.toLowerCase()) || 
                 mat.supplier?.name?.toLowerCase().includes(globalSearch.toLowerCase());
@@ -92,7 +120,18 @@ export function useMaterialsLogic() {
             const matchDate = (!dateFrom || mat.exp_date >= dateFrom) && (!dateTo || mat.exp_date <= dateTo);
             return matchSearch && matchProject && matchDate;
         });
-    }, [allMaterials, globalSearch, filterProject, dateFrom, dateTo]);
+
+        // 🚀 الفلترة والترتيب (Sort By)
+        result.sort((a, b) => {
+            if (sortBy === 'newest') return new Date(b.created_at || b.exp_date).getTime() - new Date(a.created_at || a.exp_date).getTime();
+            if (sortBy === 'oldest') return new Date(a.created_at || a.exp_date).getTime() - new Date(b.created_at || b.exp_date).getTime();
+            if (sortBy === 'highest_price') return (b.total_price || 0) - (a.total_price || 0);
+            if (sortBy === 'lowest_price') return (a.total_price || 0) - (b.total_price || 0);
+            return 0;
+        });
+
+        return result;
+    }, [allMaterials, globalSearch, filterProject, dateFrom, dateTo, sortBy]);
 
     const kpis = useMemo(() => {
         return filteredData.reduce((acc, curr) => ({
@@ -101,7 +140,6 @@ export function useMaterialsLogic() {
         }), { totalCost: 0, totalTransactions: 0 });
     }, [filteredData]);
 
-    // 🚀 إدارة أصناف الفاتورة
     const handleAddItem = () => {
         setInvoiceData({
             ...invoiceData,
@@ -127,34 +165,63 @@ export function useMaterialsLogic() {
         return invoiceData.items.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0);
     }, [invoiceData.items]);
 
-    // 💾 دالة الحفظ + الترحيل الفوري
+    // 💾 دالة الحفظ (تدعم الإضافة والتعديل)
     const saveMutation = useMutation({
         mutationFn: async () => {
             if (!invoiceData.project_id || !invoiceData.payee_id || !invoiceData.account_id) {
                 throw new Error("يرجى اختيار المشروع، المورد، والحساب المالي.");
             }
 
-            // 1️⃣ رأس الفاتورة
-            const { data: masterData, error: masterError } = await supabase
-                .from('material_receipts')
-                .insert([{
-                    receipt_number: `MAT-${Date.now().toString().slice(-6)}`,
-                    project_id: invoiceData.project_id,
-                    supplier_id: invoiceData.payee_id,
-                    account_id: invoiceData.account_id,
-                    receipt_date: invoiceData.exp_date,
-                    receipt_type: invoiceData.receipt_type, // 👈 توريد شركة أو عميل
-                    total_amount: grandTotal,
-                    notes: invoiceData.notes || 'توريد خامات',
-                    status: 'مُعتمد',
-                    is_posted: false
-                }])
-                .select('id').single();
+            let receiptId = invoiceData.id;
 
-            if (masterError) throw masterError;
-            const receiptId = masterData.id;
+            if (receiptId) {
+                // 🚀 حالة التعديل
+                // 1. فك الترحيل أولاً لتجنب مشاكل القيود
+                await supabase.rpc('rpc_unpost_material', { p_id: receiptId });
 
-            // 2️⃣ الأصناف
+                // 2. تحديث الرأس
+                const { error: masterError } = await supabase
+                    .from('material_receipts')
+                    .update({
+                        project_id: invoiceData.project_id,
+                        supplier_id: invoiceData.payee_id,
+                        account_id: invoiceData.account_id,
+                        receipt_date: invoiceData.exp_date,
+                        receipt_type: invoiceData.receipt_type,
+                        total_amount: grandTotal,
+                        notes: invoiceData.notes || 'توريد خامات',
+                        status: 'مُعتمد',
+                        is_posted: false
+                    })
+                    .eq('id', receiptId);
+                if (masterError) throw masterError;
+
+                // 3. مسح السطور القديمة
+                await supabase.from('material_receipt_lines').delete().eq('receipt_id', receiptId);
+
+            } else {
+                // 🚀 حالة الإضافة الجديدة
+                const { data: masterData, error: masterError } = await supabase
+                    .from('material_receipts')
+                    .insert([{
+                        receipt_number: `MAT-${Date.now().toString().slice(-6)}`,
+                        project_id: invoiceData.project_id,
+                        supplier_id: invoiceData.payee_id,
+                        account_id: invoiceData.account_id,
+                        receipt_date: invoiceData.exp_date,
+                        receipt_type: invoiceData.receipt_type,
+                        total_amount: grandTotal,
+                        notes: invoiceData.notes || 'توريد خامات',
+                        status: 'مُعتمد',
+                        is_posted: false
+                    }])
+                    .select('id').single();
+
+                if (masterError) throw masterError;
+                receiptId = masterData.id;
+            }
+
+            // 4. إدراج السطور (سواء تعديل أو جديد)
             const linesPayload = invoiceData.items.map((item: any) => ({
                 receipt_id: receiptId,
                 item_name: item.work_item,
@@ -167,7 +234,7 @@ export function useMaterialsLogic() {
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
             if (linesError) throw linesError;
 
-            // 3️⃣ 🚀 ترحيل محاسبي فوري عبر الـ RPC
+            // 5. ترحيل محاسبي فوري
             const { error: rpcError } = await supabase.rpc('rpc_post_material', { p_id: receiptId });
             if (rpcError) throw new Error("تم الحفظ ولكن فشل الترحيل: " + rpcError.message);
 
@@ -177,18 +244,18 @@ export function useMaterialsLogic() {
             queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
             setIsModalOpen(false);
             setInvoiceData(initialInvoiceState);
+            setSelectedIds([]); // تفريغ التحديد بعد النجاح
             showToast("تم الحفظ والترحيل المحاسبي بنجاح 🧱🚀", "success");
         },
         onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
     });
 
-    // ⚙️ دالة الأكشن (ترحيل / تعليق / مسح متسلسل)
     const actionMutation = useMutation({
         mutationFn: async ({ action, id }: { action: string, id: string }) => {
             let rpcName = '';
             if (action === 'post') rpcName = 'rpc_post_material';
             if (action === 'unpost') rpcName = 'rpc_unpost_material';
-            if (action === 'delete') rpcName = 'rpc_delete_material_receipt'; // 👈 المسح المتسلسل
+            if (action === 'delete') rpcName = 'rpc_delete_material_receipt';
 
             const { error } = await supabase.rpc(rpcName, { p_id: id });
             if (error) throw error;
@@ -208,7 +275,100 @@ export function useMaterialsLogic() {
         isPrintModalOpen, setIsPrintModalOpen, printReceiptId, setPrintReceiptId,
         invoiceData, setInvoiceData, handleAddItem, handleRemoveItem, handleItemChange, grandTotal,
         handleSave: () => saveMutation.mutate(),
-        // ⚙️ تصدير الأكشن للواجهة
+        
+        // 🚀 حالات وأزرار التشيك بوكس والترتيب
+        // ==========================================
+        // 🚀 إدارة الاختيار (Selection) - تحديث لمنع التداخل
+        // ==========================================
+        sortBy, 
+        setSortBy,
+        selectedIds, 
+        setSelectedIds,
+        
+        // ==========================================
+        // 🚀 إدارة الاختيار (V11 Selection System)
+        // ==========================================
+                
+        // اختيار الكل بناءً على ID السطر الفريد (منع التداخل)
+        handleSelectAll: (e: any) => {
+            if (e.target.checked) {
+                const allLineIds = filteredData.map((d: any) => d.id).filter(Boolean);
+                setSelectedIds(allLineIds as string[]);
+            } else {
+                setSelectedIds([]);
+            }
+        },
+
+        // اختيار سطر واحد بشكل مستقل
+        handleSelectRow: (id: string) => {
+            setSelectedIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+        },
+
+        // ==========================================
+        // 🚀 دالة التعديل (Edit Logic)
+        // ==========================================
+        handleEdit: (receipt_id: string) => {
+            // سحب كافة السطور التابعة للفاتورة المختارة من الذاكرة
+            const lines = allMaterials.filter((d: any) => d.receipt_id === receipt_id);
+            if (lines.length > 0) {
+                const first = lines[0];
+                setInvoiceData({
+                    id: receipt_id, // وجود ID يعني أننا في وضع "تحديث"
+                    project_id: first.project_id || '',
+                    payee_id: first.supplier?.id || '',
+                    account_id: first.account?.id || '',
+                    receipt_type: first.receipt_type || 'توريد شركة',
+                    exp_date: first.exp_date || new Date().toISOString().split('T')[0],
+                    notes: first.notes || '',
+                    items: lines.map((l: any) => ({
+                        work_item: l.work_item || '',
+                        quantity: l.quantity || 1,
+                        unit: l.unit || 'وحدة',
+                        unit_price: l.unit_price || 0,
+                        total_price: l.total_price || 0
+                    }))
+                });
+                setIsModalOpen(true);
+            }
+        },
+
+        // ==========================================
+        // 🚀 العمليات الجماعية الذكية (V11 Bulk Actions)
+        // ==========================================
+        handleBulkAction: async (action: 'post' | 'unpost' | 'delete') => {
+            try {
+                // 🧠 ذكاء اصطناعي مدمج: استخراج معرفات الفواتير (الأب) الفريدة فقط
+                // حتى لو اخترت 10 سطور لنفس الفاتورة، سيتم تنفيذ الأمر مرة واحدة عليها
+                const uniqueReceiptIds = Array.from(new Set(
+                    allMaterials
+                        .filter((d: any) => selectedIds.includes(d.id))
+                        .map((d: any) => d.receipt_id)
+                        .filter(Boolean)
+                ));
+
+                if (uniqueReceiptIds.length === 0) return;
+
+                const rpcMap: any = { 
+                    post: 'rpc_post_material', 
+                    unpost: 'rpc_unpost_material', 
+                    delete: 'rpc_delete_material_receipt' 
+                };
+
+                // تنفيذ الـ RPC على كل فاتورة فريدة
+                for (const rId of uniqueReceiptIds) {
+                    const { error } = await supabase.rpc(rpcMap[action], { p_id: rId });
+                    if (error) throw error;
+                }
+
+                showToast("تم تنفيذ العملية بنجاح على الفواتير المحددة ✅", "success");
+                setSelectedIds([]); // تفريغ التحديد بعد النجاح
+                queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
+            } catch (err: any) {
+                showToast(`خطأ في التنفيذ الجماعي: ${err.message}`, "error");
+            }
+        },
+
+        // الأوامر الفردية (من داخل الجدول)
         handleAction: (action: string, id: string) => actionMutation.mutate({ action, id }),
         isActionPending: actionMutation.isPending,
         canAdd: can('materials', 'add')

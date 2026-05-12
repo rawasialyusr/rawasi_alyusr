@@ -45,7 +45,6 @@ export function useSubClaimsLogic() {
         }
     });
 
-    // 🛡️ حماية الفلتر
     const filteredContractors = useMemo(() => {
         if (!searchTerm) return contractors || [];
         return (contractors || []).filter((c: any) => 
@@ -80,7 +79,22 @@ export function useSubClaimsLogic() {
                 .select('*, projects(Property)')
                 .eq('contractor_id', selectedContractor.id)
                 .order('created_at', { ascending: false });
-            if (error) throw error; return data || [];
+            if (error) throw error; 
+
+            return (data || []).map((claim: any) => {
+                const net = Number(claim.net_amount || 0);
+                const paid = Number(claim.paid_amount || 0);
+                
+                let pStatus = { label: 'غير مسدد', color: '#ef4444', bg: '#fef2f2' };
+
+                if (paid > 0 && paid < net) {
+                    pStatus = { label: 'مسدد جزئي', color: '#f59e0b', bg: '#fffbeb' };
+                } else if (paid >= net && net > 0) {
+                    pStatus = { label: 'مسدد بالكامل', color: '#16a34a', bg: '#f0fdf4' };
+                }
+
+                return { ...claim, pStatus };
+            });
         }
     });
 
@@ -90,7 +104,6 @@ export function useSubClaimsLogic() {
             return;
         }
 
-        // 🛡️ حماية الفلتر هنا
         const selectedObjects = (assignments || []).filter((a: any) => selectedAssignments.includes(a.id));
         const projectIds = Array.from(new Set(selectedObjects.map((a: any) => a.project_id)));
         
@@ -175,7 +188,8 @@ export function useSubClaimsLogic() {
                 other_deductions: claimData.other_deductions || 0,
                 net_amount: claimData.net_amount,
                 is_posted: false,
-                status: 'مسودة'
+                status: 'مسودة',
+                paid_amount: 0 
             }]).select().single();
 
             if (error) throw new Error(error.message);
@@ -208,7 +222,7 @@ export function useSubClaimsLogic() {
             return claim;
         },
         onSuccess: () => {
-            showToast("تم اعتماد المستخلص وترحيله لحسابات الذمة وقفل مسحوباته بنجاح 🚀", "success");
+            showToast("تم اعتماد المستخلص وترحيله بنجاح 🚀", "success");
             setIsClaimModalOpen(false);
             setSelectedAssignments([]);
             queryClient.invalidateQueries({ queryKey: ['contractor_tasks'] });
@@ -333,6 +347,88 @@ export function useSubClaimsLogic() {
         setIsPrintModalOpen(true);
     };
 
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [paymentRecord, setPaymentRecord] = useState<any>(null);
+    const [partnerBalance, setPartnerBalance] = useState(0);
+    const [isBalanceLoading, setIsBalanceLoading] = useState(false);
+
+    const handleOpenPayment = async (claimRow: any) => {
+        setIsBalanceLoading(true);
+        const remainingAmount = Number(claimRow.net_amount || 0) - Number(claimRow.paid_amount || 0);
+        setPartnerBalance(remainingAmount > 0 ? remainingAmount : 0); 
+        
+        setPaymentRecord({
+            date: new Date().toISOString().split('T')[0],
+            amount: remainingAmount > 0 ? remainingAmount : 0,
+            payee_id: selectedContractor?.id,
+            payee_name: selectedContractor?.name,
+            debit_account_name: 'مقاول باطن',
+            credit_account_name: 'الخزينة الرئيسية',
+            site_ref: claimRow.projects?.Property || 'مجمع مشاريع',
+            description: `سداد قيمة مستخلص مقاول باطن رقم ${claimRow.claim_number} - ${selectedContractor?.name}`,
+            payment_method: 'نقدي',
+            linked_claim_id: claimRow.id 
+        });
+        
+        setIsBalanceLoading(false);
+        setIsPaymentModalOpen(true);
+    };
+
+    // 🚀 التعديل الأهم: مطابقة هيكل جدول payment_vouchers في قاعدة البيانات بدقة
+    const paymentMutation = useMutation({
+        mutationFn: async (record: any) => {
+            
+            // تجهيز البيانات بما يتطابق مع الداتا بيز (بدون أسماء أعمدة غير موجودة)
+            const voucherPayload = {
+                voucher_number: `PV-${Date.now().toString().slice(-6)}`, // حقل إجباري في الداتا بيز
+                date: record.date,
+                amount: record.amount,
+                partner_id: record.payee_id, // ربط المقاول بشكل صحيح
+                payment_method: record.payment_method,
+                site_ref: record.site_ref,
+                description: record.description,
+                status: 'مسودة',
+                // وضعنا أسماء الحسابات هنا مؤقتاً لأن المودال يرسل نص وقاعدة البيانات تطلب UUID
+                notes: `حساب المدين: ${record.debit_account_name} | حساب الدائن: ${record.credit_account_name}`
+            };
+
+            const { error: voucherError } = await supabase.from('payment_vouchers').insert([voucherPayload]);
+
+            if (voucherError) throw new Error(voucherError.message);
+
+            // تحديث المبلغ المدفوع في جدول المستخلصات
+            if (record.linked_claim_id) {
+                const { data: currentClaim, error: fetchError } = await supabase
+                    .from('sub_claims')
+                    .select('paid_amount, net_amount')
+                    .eq('id', record.linked_claim_id)
+                    .single();
+
+                if (fetchError) throw new Error(fetchError.message);
+
+                const newPaidTotal = Number(currentClaim?.paid_amount || 0) + Number(record.amount);
+                const isFullyPaid = newPaidTotal >= Number(currentClaim?.net_amount || 0);
+
+                const { error: claimError } = await supabase.from('sub_claims')
+                    .update({ 
+                        paid_amount: newPaidTotal,
+                        status: isFullyPaid ? 'مدفوع' : 'مسدد جزئي' 
+                    })
+                    .eq('id', record.linked_claim_id);
+
+                if (claimError) throw new Error(claimError.message);
+            }
+        },
+        onSuccess: () => {
+            showToast("تم إنشاء السند وتحديث المبلغ المدفوع للمستخلص ✅", "success");
+            setIsPaymentModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['contractor_claims_history'] });
+        },
+        onError: (err: any) => {
+            showToast(`حدث خطأ أثناء الصرف: ${err.message}`, "error");
+        }
+    });
+
     return {
         contractors: filteredContractors, searchTerm, setSearchTerm,       
         isLoading, selectedContractor, setSelectedContractor,
@@ -357,6 +453,13 @@ export function useSubClaimsLogic() {
         isAssigning: assignWorkMutation.isPending,
         handleEditAssignment, 
         deleteAssignment: (id: string) => deleteAssignmentMutation.mutate(id),
-        projectBoqItems, fetchProjectBoq
+        projectBoqItems, fetchProjectBoq,
+
+        isPaymentModalOpen, setIsPaymentModalOpen,
+        paymentRecord, setPaymentRecord,
+        partnerBalance, isBalanceLoading,
+        handleOpenPayment,
+        handleSavePayment: (data: any) => paymentMutation.mutate(data),
+        isSavingPayment: paymentMutation.isPending
     };
 }

@@ -9,6 +9,7 @@ import AssignWorkModal from './AssignWorkModal';
 import ClaimFormModal from './ClaimFormModal'; 
 import PrintClaimModal from './PrintClaimModal'; 
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
+import PaymentVoucherModal from '../PaymentVouchers/PaymentVoucherModal';
 
 export default function SubContractorClaimsPage() {
     const logic = useSubClaimsLogic();
@@ -67,11 +68,42 @@ export default function SubContractorClaimsPage() {
         { header: 'رقم المستخلص', render: (row: any) => <strong style={{color: THEME.primary}}>{row.claim_number}</strong> },
         { header: 'المشروع المرتبط', render: (row: any) => row.projects?.Property || 'مجمع (عدة عقارات)' },
         { header: 'الصافي للصرف', render: (row: any) => <strong style={{color: THEME.success, fontSize: '15px'}}>{formatCurrency(row.net_amount)}</strong> },
+        
+        // 🚀 العمود الجديد: حالة السداد الذكية
+        { 
+            header: 'حالة السداد', 
+            render: (row: any) => {
+                const status = row.pStatus || { label: 'غير مسدد', color: '#ef4444', bg: '#fef2f2' };
+                return (
+                    <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '5px 12px',
+                        borderRadius: '10px',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        color: status.color,
+                        background: status.bg,
+                        border: `1px solid ${status.color}30`
+                    }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: status.color }}></span>
+                        {status.label}
+                        {row.paid_amount > 0 && row.paid_amount < row.net_amount && 
+                            <span style={{fontSize: '9px', opacity: 0.8, marginRight: '4px'}}>
+                                ({formatCurrency(row.paid_amount)})
+                            </span>
+                        }
+                    </div>
+                );
+            } 
+        },
+
         { 
             header: 'الحالة المحاسبية', 
             render: (row: any) => (
                 <span style={{ background: row.is_posted ? '#dcfce7' : '#fef3c7', color: row.is_posted ? '#166534' : '#b45309', padding: '5px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 900 }}>
-                    {row.status} {row.is_posted ? '✅' : '⏳'}
+                    {row.is_posted ? 'مُرحل ✅' : 'مسودة ⏳'}
                 </span>
             ) 
         },
@@ -79,6 +111,17 @@ export default function SubContractorClaimsPage() {
             header: 'الإجراءات (لحظية)',
             render: (row: any) => (
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                    
+                    {/* 🚀 زر الصرف بيظهر بس لو مُرحل ولسه مامتدفعش بالكامل */}
+                    {row.is_posted && row.pStatus?.label !== 'مسدد بالكامل' && (
+                        <button 
+                            onClick={() => logic.handleOpenPayment(row)} 
+                            style={{ background: '#16a34a', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px', transition: '0.2s', boxShadow: '0 4px 10px rgba(22,163,74,0.3)' }}
+                        >
+                            صرف 💸
+                        </button>
+                    )}
+
                     <button 
                         onClick={() => logic.handlePreparePrint(row)} 
                         style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px', transition: '0.2s' }}
@@ -256,6 +299,20 @@ export default function SubContractorClaimsPage() {
                         assignments={logic.printAssignments} 
                         deductions={logic.printDeductions} // 🚀 تمرير الخصومات هنا
                         contractorName={logic.selectedContractor?.name}
+                    />
+                )}
+
+                {/* 🚀 إضافة مودال السداد اللي بيفتح عند الضغط على صرف */}
+                {logic.isPaymentModalOpen && (
+                    <PaymentVoucherModal 
+                        isOpen={logic.isPaymentModalOpen}
+                        onClose={() => logic.setIsPaymentModalOpen(false)}
+                        record={logic.paymentRecord}
+                        setRecord={logic.setPaymentRecord}
+                        onSave={logic.handleSavePayment}
+                        isSaving={logic.isSavingPayment}
+                        partnerBalance={logic.partnerBalance}
+                        isBalanceLoading={logic.isBalanceLoading}
                     />
                 )}
 

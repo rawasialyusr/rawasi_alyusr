@@ -38,7 +38,18 @@ const mapHeaderToSchema = (sheetName: string, header: string) => {
     if (h.includes('ضريبه') || h.includes('vat')) return 'vat_amount';
   }
 
-  // 🟢 التعديل الجديد: التقاط الـ 3 معرفات مباشرة وبدقة متناهية
+  // 🟢 التعديل الجديد الآمن: بلوك خاص بخامات المستودع عشان ميتعارضش مع الجداول التانية
+  if (sheetName === 'material_receipt_lines') {
+    if (h.includes('ماده') || h.includes('مادة') || h.includes('صنف') || h.includes('خام') || h.includes('item')) return 'item_name';
+    if (h.includes('عقار') || h.includes('مشروع') || h.includes('property') || h.includes('project')) return 'project_id'; 
+    if (h.includes('كميه') || h.includes('كمية') || h.includes('quantity') || h.includes('qty')) return 'quantity';
+    if (h.includes('وحده') || h.includes('وحدة') || h.includes('unit')) return 'unit';
+    if (h.includes('سعر') || h.includes('price')) return 'unit_price';
+    if (h.includes('إجمالي') || h.includes('اجمالي') || h.includes('total')) return 'total_price';
+    if (h.includes('سند') || h.includes('اذن') || h.includes('استلام') || h.includes('receipt')) return 'receipt_id';
+  }
+
+  // 🟢 التقاط الـ 3 معرفات مباشرة وبدقة متناهية
   if (h.includes('partner_id')) return 'partner_id';
   if (h.includes('debit_account_id') || (h.includes('مدين') && h.includes('id'))) return 'debit_account_id';
   if (h.includes('credit_account_id') || (h.includes('دائن') && h.includes('id'))) return 'credit_account_id';
@@ -62,12 +73,20 @@ const mapHeaderToSchema = (sheetName: string, header: string) => {
   if (h.includes('يوميه') || h.includes('اجر') || h.includes('wage')) return 'daily_wage';
   if (h.includes('حضور') || h.includes('ايام') || h.includes('attendance')) return 'attendance_value';
   if (h.includes('انجاز') || h.includes('نسبه') || h.includes('completion')) return 'completion_percentage';
+  
+  // ⚠️ السطور القديمة بتاعتك زي ما هي متلمستش ⚠️
   if (h.includes('عقار') || h.includes('مشروع') || h.includes('property') || h.includes('project')) return 'Property';
   if (h.includes('موقع') || h.includes('site')) return sheetName === 'violations' ? 'site_name' : 'site_ref';
   if (h.includes('بند') || h.includes('عمل') || h.includes('item')) return 'work_item';
   if (h.includes('مقاول') || h.includes('contractor')) return 'sub_contractor';
   if (h.includes('ملاحظات') || h.includes('notes')) return 'notes';
   
+  // (هذه السطور سيتخطاها الخامات بسبب البلوك اللي فوق، وستعمل للجداول الأخرى بشكل طبيعي)
+  if (h.includes('مادة') || h.includes('صنف') || h.includes('item')) return 'item_name';
+  if (h.includes('عقار') || h.includes('مشروع') || h.includes('property')) return 'project_id'; 
+  if (h.includes('إجمالي') || h.includes('اجمالي') || h.includes('total')) return 'total_price';
+  if (h.includes('سند') || h.includes('اذن') || h.includes('استلام') || h.includes('receipt')) return 'receipt_id';
+
   if (h.includes('بيان') || h.includes('وصف') || h.includes('desc') || h.includes('سبب')) {
     if (sheetName === 'emp_adv') return 'Desc';
     if (sheetName === 'labor_daily_logs') return 'production_desc';
@@ -179,27 +198,53 @@ export async function processExcelInBackend(formData: FormData) {
     const bufferData = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(bufferData, { type: 'array' });
 
-    const [projects, partners, accounts, boqItems] = await Promise.all([
-      fetchAllSupabaseData(supabase, 'projects', '*', 'id', false),
+    // 🚀🚀 التعديل الجذري الأول: فلتر "البلدوزر" (يمسح أي مسافات، رموز، أو فراغات مخفية)
+    const cleanMatch = (str: any) => {
+        if (!str) return '';
+        let s = String(str).trim();
+        s = s.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        s = s.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ـ/g, '');
+        // الإبقاء على الحروف والأرقام فقط (أقوى فلتر تطابق)
+        return s.replace(/[^\u0621-\u064A0-9a-zA-Z]/g, '').toLowerCase();
+    };
+
+    // 🚀🚀 التعديل الجذري الثاني: جلب العقارات بـ Loop لتخطي حد الـ 1000 مشروع الخاص بـ Supabase
+    let allProjects: any[] = [];
+    let from = 0, to = 999;
+    let hasMore = true;
+    while(hasMore) {
+        // بنسحب الـ Property والـ project_name بس عشان الأداء يبقى طلقة
+        const { data, error } = await supabase.from('projects').select('id, "Property", project_name').range(from, to);
+        if (data && data.length > 0) {
+            allProjects.push(...data);
+            from += 1000;
+            to += 1000;
+        } else {
+            hasMore = false;
+        }
+    }
+
+    const [partners, accounts, boqItems] = await Promise.all([
       fetchAllSupabaseData(supabase, 'partners', '*', 'id', false),
       fetchAllSupabaseData(supabase, 'accounts', '*', 'id', false),
       fetchAllSupabaseData(supabase, 'boq_items', '*', 'id', false)
     ]);
 
     const projectMap = new Map();
-    projects?.forEach(p => {
-      if (p.Property) projectMap.set(normalizeStr(p.Property), p.id);
-      if (p.project_name) projectMap.set(normalizeStr(p.project_name), p.id);
+    allProjects.forEach(p => {
+      if (p.Property) projectMap.set(cleanMatch(p.Property), p.id);
+      if (p.property) projectMap.set(cleanMatch(p.property), p.id); 
+      if (p.project_name) projectMap.set(cleanMatch(p.project_name), p.id);
     });
 
     const partnerMap = new Map();
-    partners?.forEach(p => partnerMap.set(normalizeStr(p.name), p.id));
+    partners?.forEach(p => partnerMap.set(cleanMatch(p.name), p.id));
 
     const accountMap = new Map();
-    accounts?.forEach(a => accountMap.set(normalizeStr(a.name), a.id));
+    accounts?.forEach(a => accountMap.set(cleanMatch(a.name), a.id));
 
     const boqMap = new Map();
-    boqItems?.forEach(b => boqMap.set(normalizeStr(b.item_name), b.id));
+    boqItems?.forEach(b => boqMap.set(cleanMatch(b.item_name), b.id));
 
     let totalUploaded = 0;
     const CHUNK_SIZE = 100; 
@@ -241,21 +286,26 @@ export async function processExcelInBackend(formData: FormData) {
 
           // 🧠 الربط الذكي للـ IDs بناءً على الأسماء
           if (val !== null && typeof val === 'string') {
-            const searchVal = normalizeStr(val);
+            
+            const searchVal = cleanMatch(val);
 
-            if (dbColumnName === 'Property' || dbColumnName === 'site_ref' || dbColumnName === 'site_name') {
+            if (dbColumnName === 'Property' || dbColumnName === 'site_ref' || dbColumnName === 'site_name' || dbColumnName === 'project_id') {
               const matchedId = projectMap.get(searchVal);
-              if (matchedId) newRow['project_id'] = matchedId;
+              if (matchedId) {
+                  newRow['project_id'] = matchedId;
+                  if (dbColumnName === 'project_id') newRow[dbColumnName] = matchedId;
+              } else if (dbColumnName === 'project_id' && val && !val.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)) {
+                  throw new Error(`❌ خطأ في الصف رقم ${excelRowNumber}: العقار "${val}" غير موجود بقاعدة البيانات! يرجى التأكد من الاسم.`);
+              }
             }
             
-            // 🟢 تعديل جديد: ترجمة اسم المستفيد/الشريك إلى ID
             if (dbColumnName === 'emp_name' || dbColumnName === 'worker_name' || dbColumnName === 'payee_name') {
               const matchedId = partnerMap.get(searchVal);
               if (matchedId) {
                 if (sheetName === 'labor_daily_logs') newRow['worker_partner_id'] = matchedId;
                 else if (sheetName === 'payroll_slips') newRow['emp_id'] = matchedId;
                 else if (sheetName === 'expenses') newRow['payee_id'] = matchedId;
-                else newRow['partner_id'] = matchedId; // هنا بينزل الـ ID لسندات الصرف والقبض
+                else newRow['partner_id'] = matchedId; 
               }
             }
             
@@ -264,15 +314,12 @@ export async function processExcelInBackend(formData: FormData) {
               if (matchedId) newRow['sub_contractor_id'] = matchedId;
             }
             
-            // 🟢 تعديل جديد: ترجمة اسم الحساب إلى ID
-            // 🟢 ترجمة اسم الحساب إلى ID وتوجيهه صح
             if (dbColumnName === 'credit_account_name' || dbColumnName === 'debit_account_name' || dbColumnName === 'account_name') {
               const matchedId = accountMap.get(searchVal);
               if (matchedId) {
                   if (dbColumnName === 'debit_account_name') {
                       newRow['debit_account_id'] = matchedId;
                   } else {
-                      // لو المستخدم كتب "اسم حساب الخزينة" هينزل دايركت في الدائن
                       newRow['credit_account_id'] = matchedId; 
                   }
               }
@@ -286,10 +333,8 @@ export async function processExcelInBackend(formData: FormData) {
         
        const finalRow: any = {};
         Object.keys(newRow).forEach(key => {
-            // تخطي العمود المولد آلياً
             if (key === 'total_price') return; 
 
-            // 🚀 حجب أي أعمدة وهمية أو IDs لا يدعمها جدول المصروفات
             if (sheetName === 'expenses' && [
                 'credit_account_name', 'debit_account_name', 'account_name', 
                 'emp_name', 'sub_contractor_id', 'unit',
@@ -301,7 +346,6 @@ export async function processExcelInBackend(formData: FormData) {
             let value = newRow[key];
             const fakeColumns = ['emp_name', 'worker_name', 'payee_name', 'debit_account_name', 'credit_account_name', 'account_name'];
             
-            // 🟢 استثناء الأعمدة الوهمية مع الحفاظ على البيانات الأساسية للجداول الأخرى
             if (fakeColumns.includes(key) && !['expenses', 'labor_daily_logs', 'violations', 'emp_adv', 'emp_ded', 'housing_services', 'all_emp'].includes(sheetName)) {
                 return; 
             }
@@ -321,27 +365,34 @@ export async function processExcelInBackend(formData: FormData) {
         });
 
         // ====================================================================
-        // 🚀 معالجة وتأمين بيانات "المصروفات" بعد تجميع finalRow وقبل إرسالها
+        // 🚀 تأمين استلام الخامات (material_receipt_lines)
+        // ====================================================================
+        if (sheetName.includes('material_receipt')) { 
+            if (!finalRow.item_name || finalRow.item_name === '') {
+                finalRow.item_name = row['اسم المادة / الصنف'] || row['Item Name'] || row['item_name'] || 'صنف غير محدد';
+            }
+            finalRow.quantity = Number(finalRow.quantity) || Number(row['الكمية']) || 1;
+            finalRow.unit_price = Number(finalRow.unit_price) || Number(row['سعر الوحدة']) || 0;
+            finalRow.unit = finalRow.unit || row['الوحدة'] || 'وحدة';
+            
+            if (!finalRow.total_price) {
+                finalRow.total_price = finalRow.quantity * finalRow.unit_price;
+            }
+        }
+
+        // ====================================================================
+        // 🚀 تأمين بيانات المصروفات (expenses)
         // ====================================================================
         if (sheetName === 'expenses') {
-            // 1. تأمين مصفوفة البنود
             if (!finalRow.lines_data) finalRow.lines_data = [];
-            
-            // 2. 💡 حماية الداتابيز من الأخطاء (لو في خانات إجبارية فاضية في الإكسيل)
-            if (!finalRow.sub_contractor) {
-                finalRow.sub_contractor = 'غير محدد'; 
-            }
-            if (!finalRow.creditor_account) {
-                finalRow.creditor_account = 'مصروفات غير مصنفة'; 
-            }
+            if (!finalRow.sub_contractor) finalRow.sub_contractor = 'غير محدد'; 
+            if (!finalRow.creditor_account) finalRow.creditor_account = 'مصروفات غير مصنفة'; 
 
-            // 3. 🛡️ حماية الأسعار والكميات (لضمان عدم إرسال NULL للداتابيز)
             finalRow.quantity = Number(finalRow.quantity) || 1; 
             finalRow.unit_price = Number(finalRow.unit_price) || 0; 
             finalRow.vat_amount = Number(finalRow.vat_amount) || 0;
             finalRow.discount_amount = Number(finalRow.discount_amount) || 0;
 
-            // 4. 🤖 التصنيف التلقائي الذكي بناءً على البيان
             if (!finalRow.main_category && finalRow.description) {
                 finalRow.main_category = autoCategorizeExpense(finalRow.description);
             } else if (!finalRow.main_category) {
@@ -349,7 +400,6 @@ export async function processExcelInBackend(formData: FormData) {
             }
         }
 
-        // 🛡️ حماية السندات من السطور الصفرية وتوليد أرقام تلقائية
         if (sheetName === 'payment_vouchers') {
            if (!finalRow.amount || finalRow.amount <= 0) return null; 
            if (!finalRow.voucher_number) {
@@ -357,7 +407,6 @@ export async function processExcelInBackend(formData: FormData) {
            }
         }
 
-        // 🛡️ تأمين حقول JSONB مثل lines_data
         if (sheetName === 'invoices' || sheetName === 'expenses') {
             if (!finalRow.lines_data) finalRow.lines_data = [];
         }
