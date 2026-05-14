@@ -107,16 +107,13 @@ export function useSubClaimsLogic() {
         const selectedObjects = (assignments || []).filter((a: any) => selectedAssignments.includes(a.id));
         const projectIds = Array.from(new Set(selectedObjects.map((a: any) => a.project_id)));
         
-        if (projectIds.length > 1) {
-            showToast("⚠️ لا يمكن عمل مستخلص يجمع بنود من عقارات مختلفة. يرجى تحديد بنود لعقار واحد فقط.", "error");
-            return;
-        }
+        // 🚀 تم إزالة شرط (if projectIds.length > 1) للسماح بجمع بنود من عقارات وفلل مختلفة في مستخلص واحد
 
         setCurrentClaim({
             date: new Date().toISOString().split('T')[0],
             retention_percent: 5,
             tax_percent: 15,
-            project_ids: projectIds, 
+            project_ids: projectIds, // 👈 حفظ مصفوفة العقارات بالكامل هنا
             deductions: [],
             materials_deduction: 0,
             other_deductions: 0,
@@ -126,7 +123,9 @@ export function useSubClaimsLogic() {
         setIsClaimModalOpen(true);
     };
 
-    const fetchPendingDeductions = async (contractorId: string, projectId: string) => {
+    // 🚀 التعديل هنا: استقبال مصفوفة (projectIds: string[]) بدلاً من (projectId: string)
+    const fetchPendingDeductions = async (contractorId: string, projectIds: string[]) => {
+        // 1️⃣ جلب المصروفات (سحب كافة المصروفات المعلقة للمقاول بدون تقييد بمشروع معين)
         const { data: expenses, error: expError } = await supabase.from('expenses')
             .select('*')
             .eq('sub_contractor', selectedContractor?.name) 
@@ -135,37 +134,45 @@ export function useSubClaimsLogic() {
 
         if (expError) console.error("Expenses Fetch Error:", expError.message);
 
-        const validExpenses = (expenses || [])
-            .filter(e => e.project_id === projectId || !e.project_id) 
-            .map(e => ({
-                id: e.id,
-                type: 'expense',
-                date: e.expense_date || e.created_at,
-                statement: e.notes || 'مصروف محمل على المقاول',
-                amount: e.amount || e.total_price || 0
-            }));
+        // 🚀 تم إزالة فلتر الـ project_id هنا عشان يجيب كل مديونيات المقاول
+        const validExpenses = (expenses || []).map(e => ({
+            id: e.id,
+            type: 'expense',
+            date: e.expense_date || e.created_at,
+            statement: e.notes || 'مصروف محمل على المقاول',
+            amount: e.amount || e.total_price || 0
+        }));
 
-        const { data: materials, error: matError } = await supabase.from('material_issues')
-            .select('*, lines:material_issue_lines(*)')
-            .eq('subcontractor_id', contractorId)
-            .eq('project_id', projectId)
-            .eq('is_posted', true)
-            .is('claim_id', null);
+        // 2️⃣ جلب الخامات
+        // 🛡️ درع الحماية: تنظيف مصفوفة المشاريع من أي داتا وهمية (مثل "4") والاحتفاظ بالـ UUIDs الصحيحة فقط
+        const safeProjectIds = projectIds.filter(id => id && typeof id === 'string' && id.length > 20);
 
-        if (matError) console.error("Materials Fetch Error:", matError.message);
+        let validMaterials: any[] = [];
+        
+        // لا نرسل الاستعلام إلا لو فيه UUIDs صحيحة لمنع انهيار قاعدة البيانات (Postgres)
+        if (safeProjectIds.length > 0) {
+            const { data: materials, error: matError } = await supabase.from('material_issues')
+                .select('*, lines:material_issue_lines(*)')
+                .eq('subcontractor_id', contractorId)
+                .in('project_id', safeProjectIds) // 🚀 استخدام المصفوفة المنظفة (safeProjectIds) هنا
+                .eq('is_posted', true)
+                .is('claim_id', null);
 
-        const validMaterials = (materials || []).map(m => {
-            const lines = m.lines || m.material_issue_lines || [];
-            const total = lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0) || 0;
-            const desc = lines.map((l:any) => `${l.item_name} (${l.quantity} ${l.unit})`).join(' + ');
-            return {
-                id: m.id,
-                type: 'material',
-                date: m.issue_date,
-                statement: `صرف خامات للموقع: ${desc}`,
-                amount: total
-            };
-        });
+            if (matError) console.error("Materials Fetch Error:", matError.message);
+
+            validMaterials = (materials || []).map(m => {
+                const lines = m.lines || m.material_issue_lines || [];
+                const total = lines.reduce((sum: number, l: any) => sum + (Number(l.total_price) || 0), 0) || 0;
+                const desc = lines.map((l:any) => `${l.item_name} (${l.quantity} ${l.unit})`).join(' + ');
+                return {
+                    id: m.id,
+                    type: 'material',
+                    date: m.issue_date,
+                    statement: `صرف خامات للموقع: ${desc}`,
+                    amount: total
+                };
+            });
+        }
 
         return [...validExpenses, ...validMaterials];
     };
