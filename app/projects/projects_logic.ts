@@ -87,22 +87,20 @@ export function useProjectsLogic() {
       if (!currentProjectRecord.Property) return showToast("اسم العقار/المشروع مطلوب!", "error");
       
       const payload: any = {
-          Property: currentProjectRecord.Property,
-          project_code: currentProjectRecord.project_code || null,
-          unit_type: currentProjectRecord.unit_type || null, 
-          unit_area: Number(currentProjectRecord.unit_area) || 0, 
-          client_id: currentProjectRecord.client_id || null,
-          contract_value: Number(currentProjectRecord.contract_value) || 0,
-          estimated_budget: Number(currentProjectRecord.estimated_budget) || 0,
-          down_payment: Number(currentProjectRecord.down_payment) || 0,
-          start_date: currentProjectRecord.start_date || null,
-          end_date: currentProjectRecord.end_date || null,
-          location_address: currentProjectRecord.location_address || null,
-          project_manager: currentProjectRecord.project_manager || null,
-          status: currentProjectRecord.status || 'قيد الدراسة',
-          current_stage: currentProjectRecord.current_stage || 'تجهيز الموقع',
-          notes: currentProjectRecord.notes || null
-      };
+    project_id: selectedProject.id,
+    parent_id: record.item_type === 'فرعي' ? record.parent_id : null,
+    item_type: record.item_type || 'رئيسي',
+    boq_item_id: record.boq_item_id || null, // 👈 الخط الأحمر هيختفي من هنا
+    work_item: record.work_item,
+    unit: record.unit || 'مقطوعية',
+    contract_quantity: Number(record.contract_quantity) || 0,
+    unit_contract_price: Number(record.unit_contract_price) || 0,
+    estimated_labor_cost: Number(record.estimated_labor_cost) || 0,
+    estimated_operational_cost: Number(record.estimated_operational_cost) || 0,
+    estimated_expenses_cost: Number(record.estimated_expenses_cost) || 0, // 👈 ومن هنا
+    main_category: record.main_category || null, // 👈 ومن هنا
+    sub_category: record.sub_category || null // 👈 ومن هنا
+};
 
       if (currentProjectRecord.id) {
           payload.id = currentProjectRecord.id;

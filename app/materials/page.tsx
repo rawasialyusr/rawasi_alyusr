@@ -38,6 +38,7 @@ export default function MaterialsPage() {
             _selected: logic.selectedIds?.includes(row.id) 
         }));
     }, [logic.data, currentPage, rowsPerPage, logic.selectedIds]);
+    
    const columns = [
         // 1️⃣ عمود التشيك بوكس (مستقل لكل سطر)
         {
@@ -113,12 +114,14 @@ export default function MaterialsPage() {
             ) : null 
         },
 
-        // 5️⃣ المشروع والمورد
+        // 5️⃣ المشروع والمورد والبند 🚀 (تم التحديث هنا)
         { 
-            header: 'التوجيه', 
+            header: 'التوجيه (مشروع / بند / مورد)', 
             render: (row: any) => row ? (
                 <div style={{ minWidth: '150px' }}>
                     <div style={{ fontWeight: 800, color: THEME.coffeeDark, fontSize: '13px' }}>🏢 {row.project?.Property || '---'}</div>
+                    {/* 🚀 إظهار البند هنا إذا كان موجوداً */}
+                    {row.boq_item && <div style={{ fontSize: '11px', color: THEME.goldAccent, marginTop: '2px', fontWeight: 700 }}>📋 {row.boq_item}</div>}
                     <div style={{ fontSize: '11px', color: THEME.ruby, marginTop: '2px', fontWeight: 700 }}>👤 {row.supplier?.name || '---'}</div>
                 </div>
             ) : null 

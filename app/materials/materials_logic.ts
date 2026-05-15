@@ -25,7 +25,7 @@ export function useMaterialsLogic() {
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
 
-    // 🚀 هيكل الفاتورة
+    // 🚀 هيكل الفاتورة (تم إضافة boq_id)
     const initialInvoiceState = {
         id: null, // 👈 مهم جداً عشان نميز بين الإضافة والتعديل
         project_id: '',
@@ -35,13 +35,12 @@ export function useMaterialsLogic() {
         exp_date: new Date().toISOString().split('T')[0],
         notes: '',
         items: [
-            { work_item: '', quantity: 1, unit: 'طن', unit_price: 0, total_price: 0 }
+            { work_item: '', quantity: 1, unit: 'طن', unit_price: 0, total_price: 0, boq_id: null }
         ]
     };
     const [invoiceData, setInvoiceData] = useState<any>(initialInvoiceState);
 
-    // 📥 سحب الخامات مع بيانات الترحيل ونوع التوريد
-   // 📥 سحب الخامات مع بيانات الترحيل ونوع التوريد ورقم السند
+    // 📥 سحب الخامات مع بيانات الترحيل ونوع التوريد ورقم السند والبند
     // 📥 [Query] المحدث بدون تعليقات داخل النص
 const { data: allMaterials = [], isLoading } = useQuery({
     queryKey: ['materials_logs'],
@@ -55,6 +54,8 @@ const { data: allMaterials = [], isLoading } = useQuery({
                 unit, 
                 unit_price, 
                 total_price,
+                boq_id, 
+                boq:boq_budget(work_item), 
                 receipt:material_receipts (
                     id, 
                     receipt_number,
@@ -84,6 +85,8 @@ const { data: allMaterials = [], isLoading } = useQuery({
             unit: line.unit,
             unit_price: line.unit_price,
             total_price: line.total_price,
+            boq_id: line.boq_id,             // 🚀 سحب البند
+            boq_item: line.boq?.work_item,   // 🚀 سحب اسم البند للعرض
             exp_date: line.receipt?.receipt_date,
             created_at: line.receipt?.created_at,
             project_id: line.receipt?.project_id,
@@ -143,7 +146,7 @@ const { data: allMaterials = [], isLoading } = useQuery({
     const handleAddItem = () => {
         setInvoiceData({
             ...invoiceData,
-            items: [...invoiceData.items, { work_item: '', quantity: 1, unit: 'متر', unit_price: 0, total_price: 0 }]
+            items: [...invoiceData.items, { work_item: '', quantity: 1, unit: 'متر', unit_price: 0, total_price: 0, boq_id: null }]
         });
     };
 
@@ -221,14 +224,15 @@ const { data: allMaterials = [], isLoading } = useQuery({
                 receiptId = masterData.id;
             }
 
-            // 4. إدراج السطور (سواء تعديل أو جديد)
+            // 4. إدراج السطور (سواء تعديل أو جديد) + حفظ الـ boq_id
             const linesPayload = invoiceData.items.map((item: any) => ({
                 receipt_id: receiptId,
                 item_name: item.work_item,
                 quantity: Number(item.quantity) || 1,
                 unit: item.unit || 'وحدة',
                 unit_price: Number(item.unit_price) || 0,
-                total_price: Number(item.total_price) || 0
+                total_price: Number(item.total_price) || 0,
+                boq_id: item.boq_id || null // 🚀 حفظ البند في الداتا بيز
             }));
 
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
@@ -325,7 +329,8 @@ const { data: allMaterials = [], isLoading } = useQuery({
                         quantity: l.quantity || 1,
                         unit: l.unit || 'وحدة',
                         unit_price: l.unit_price || 0,
-                        total_price: l.total_price || 0
+                        total_price: l.total_price || 0,
+                        boq_id: l.boq_id || null // 🚀 جلب البند عند التعديل
                     }))
                 });
                 setIsModalOpen(true);

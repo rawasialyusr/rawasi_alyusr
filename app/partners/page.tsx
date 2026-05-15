@@ -1,6 +1,10 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom'; // 🚀 استدعاء الـ Portal لحل مشكلة التمركز
 import { usePartnersLogic } from './partners_logic';
+import SmartCombo from '@/components/SmartCombo';
+import MasterPage from '@/components/MasterPage';
+import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 
 const THEME = {
   sandLight: '#F4F1EE',
@@ -8,19 +12,25 @@ const THEME = {
   coffeeMain: '#8C6A5D',
   coffeeDark: '#43342E',
   goldAccent: '#C5A059',
+  primary: '#0f172a',
+  success: '#10b981',
+  danger: '#ef4444'
 };
 
 export default function PartnersDirectory() {
   const {
     isLoading, searchTerm, setSearchTerm, filterType, setFilterType,
-    isAddModalOpen, setIsAddModalOpen, newPartner, setNewPartner,
-    isSaving, handleSavePartner, filteredPartners, stats, getTypeStyle,
+    isAddModalOpen, setIsAddModalOpen, openAddModal, newPartner, setNewPartner,
+    isSaving, handleSavePartner, filteredPartners, stats,
     handleDelete, exportToExcel, handlePrint, handleEdit, selectedIds, setSelectedIds, editingId,
-    // استدعاء متغيرات الصفحات من اللوجيك
     currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, totalResults
   } = usePartnersLogic();
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // 🚀 حالة للتأكد من تحميل المكون عشان الـ Portal يشتغل بدون أخطاء SSR
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+      setMounted(true);
+  }, []);
 
   const isOneSelected = selectedIds.length === 1;
   const isNoneSelected = selectedIds.length === 0;
@@ -30,7 +40,7 @@ export default function PartnersDirectory() {
       const partnerToEdit = filteredPartners.find(p => p.id === selectedIds[0]);
       if (partnerToEdit) handleEdit(partnerToEdit);
     } else {
-      setIsAddModalOpen(true);
+      openAddModal();
     }
   };
 
@@ -50,221 +60,193 @@ export default function PartnersDirectory() {
     }
   };
 
-  // 🎨 دالة تحديد الألوان لكل تصنيف (Badge Colors)
   const getBadgeStyle = (type: string) => {
     switch (type) {
-      case 'موظف': return { bg: '#E0F2FE', color: '#0369A1' }; // أزرق
-      case 'عامل يومية': return { bg: '#DCFCE7', color: '#166534' }; // أخضر
-      case 'مقاول': return { bg: '#FEF3C7', color: '#B45309' }; // ذهبي/برتقالي
-      case 'عميل': return { bg: '#F3E8FF', color: '#6B21A8' }; // بنفسجي
-      case 'جهة داخلية': return { bg: '#F3F4F6', color: '#374151' }; // رمادي
-      default: return { bg: '#FEE2E2', color: '#991B1B' }; // أحمر
+      case 'موظف': return { bg: '#E0F2FE', color: '#0369A1' }; 
+      case 'عامل يومية': return { bg: '#DCFCE7', color: '#166534' }; 
+      case 'مقاول': return { bg: '#FEF3C7', color: '#B45309' }; 
+      case 'عميل': return { bg: '#F3E8FF', color: '#6B21A8' }; 
+      case 'جهة داخلية': return { bg: '#F3F4F6', color: '#374151' }; 
+      default: return { bg: '#FEE2E2', color: '#991B1B' }; 
     }
   };
 
-  return (
-    <div className="app-container" style={{ direction: 'rtl', backgroundColor: THEME.sandLight, display: 'flex' }}>
+  const sidebarActions = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <button onClick={handleMainAction} className="btn-main-glass" style={{ backgroundColor: isOneSelected ? '#3b82f6' : THEME.goldAccent, color: 'white' }}>
+        {isOneSelected ? '✏️ تعديل الكيان المحدد' : '➕ إضافة كيان جديد'}
+      </button>
       
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+      {selectedIds.length > 0 && (
+        <button onClick={() => selectedIds.forEach(id => handleDelete(id))} className="btn-main-glass" style={{ backgroundColor: THEME.danger, color: 'white' }}>
+          🗑️ مسح المحدد ({selectedIds.length})
+        </button>
+      )}
+
+      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+        <button onClick={exportToExcel} className="btn-main-glass" style={{ backgroundColor: '#166534', color: 'white', flex: 1 }}>📊 إكسل</button>
+        <button onClick={handlePrint} className="btn-main-glass" style={{ backgroundColor: '#f8fafc', color: THEME.primary, border: '1px solid #cbd5e1', flex: 1 }}>🖨️ طباعة</button>
+      </div>
+    </div>
+  );
+
+  const customFilters = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      <div>
+        <label style={{ color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>🔍 بحث سريع:</label>
+        <input type="text" placeholder="الاسم، الكود، الجوال..." className="sidebar-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+      </div>
+
+      <div>
+        <label style={{ color: 'white', fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>🏷️ تصفية بالتصنيف:</label>
+        <select className="sidebar-input" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="الكل" style={{color: 'black'}}>كل التصنيفات</option>
+            <option value="جهة داخلية" style={{color: 'black'}}>جهة داخلية 🏛️</option>
+            <option value="موظف" style={{color: 'black'}}>موظف 👔</option>
+            <option value="مقاول" style={{color: 'black'}}>مقاول 🏗️</option>
+            <option value="عامل يومية" style={{color: 'black'}}>عامل يومية 👷</option>
+            <option value="عميل" style={{color: 'black'}}>عميل 🏢</option>
+            <option value="مورد" style={{color: 'black'}}>مورد 📦</option>
+        </select>
+      </div>
+    </div>
+  );
+
+  const summaryStats = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: 'white' }}>
+      <div className="kpi-box" style={{ borderRight: `4px solid ${THEME.goldAccent}` }}>
+        <span>إجمالي الشركاء</span>
+        <strong>{stats.total} كيان مسجل</strong>
+      </div>
+      <div className="kpi-box" style={{ borderRight: `4px solid #0369A1` }}>
+        <span>موظفين / جهات</span>
+        <strong style={{ color: '#38bdf8' }}>{stats.employees}</strong>
+      </div>
+      <div className="kpi-box" style={{ borderRight: `4px solid #B45309` }}>
+        <span>مقاولين وموردين</span>
+        <strong style={{ color: '#fbbf24' }}>{stats.contractors}</strong>
+      </div>
+      <div className="kpi-box" style={{ borderRight: `4px solid #166534` }}>
+        <span>عمالة يومية</span>
+        <strong style={{ color: '#4ade80' }}>{stats.labor}</strong>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="clean-page">
+      <MasterPage title="دليل الشركاء" subtitle="إدارة الموردين، المقاولين، العملاء، والعمالة برواسي اليسر (V11)">
         
-        /* 🎨 تخصيص السكرول بار (رملي / كافيه فاتح) */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
-        ::-webkit-scrollbar-thumb { background-color: ${THEME.sandDark}; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background-color: ${THEME.coffeeMain}; }
+        <RawasiSidebarManager 
+            summary={summaryStats}
+            actions={sidebarActions}
+            customFilters={customFilters}
+            watchDeps={[selectedIds, searchTerm, filterType, stats]}
+        />
 
-        /* 💡 تنسيق الشاشة فقط */
-        @media screen {
-          .app-container { height: 100vh; width: 100vw; overflow: hidden; }
-          .main-content { flex: 1; height: 100vh; overflow-y: auto; padding: 50px; margin-right: 70px; transition: margin-right 0.4s; }
-          .main-content.sidebar-open { margin-right: 320px; }
-          .print-only { display: none !important; }
-        }
+        <style>{`
+          @media print {
+            @page { size: A4 landscape; margin: 1cm; }
+            .no-print, .MasterPage-Sidebar, button { display: none !important; }
+            .print-only { display: block !important; }
+            .print-header { display: flex !important; justify-content: space-between; align-items: center; border-bottom: 3px solid ${THEME.coffeeDark}; padding-bottom: 15px; margin-bottom: 25px; }
+            .print-table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed; }
+            .print-table th, .print-table td { border: 1px solid #000 !important; padding: 6px 4px !important; text-align: center !important; font-size: 9pt !important; word-wrap: break-word; color: black !important; }
+            .print-table th { background: #f2f2f2 !important; font-weight: 900; }
+            .print-table thead { display: table-header-group !important; }
+            body { counter-reset: page; }
+            .page-num::after { counter-increment: page; content: "صفحة " counter(page); }
+            .print-footer { position: fixed; bottom: 0; left: 0; width: 100%; text-align: center; font-size: 10pt; border-top: 1px solid #ccc; padding: 10px 0; background: white; }
+          }
+          @media screen { .print-only { display: none !important; } }
 
-        /* 🖨️ نظام الطباعة الاحترافي الشامل */
-        @media print {
-          @page { size: A4 landscape; margin: 1cm; }
-          aside, .no-print, .sidebar-input, .floating-row, .table-header-grid, .stat-card, button { 
-            display: none !important; 
+          .floating-row, .table-header-grid {
+            background: white; border-radius: 20px; margin-bottom: 12px; display: grid; 
+            grid-template-columns: 40px 80px 1.5fr 0.8fr 1fr 0.8fr 0.8fr 1.2fr 0.8fr;
+            align-items: center; padding: 15px 15px; border: 1px solid transparent; transition: 0.3s;
           }
-          .app-container, .main-content { 
-            display: block !important; height: auto !important; width: 100% !important; 
-            overflow: visible !important; margin: 0 !important; padding: 0 !important;
-          }
-          .print-only { display: block !important; }
-          .print-header {
-            display: flex !important; justify-content: space-between; align-items: center;
-            border-bottom: 3px solid ${THEME.coffeeDark}; padding-bottom: 15px; margin-bottom: 25px;
-          }
-          .print-table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed; }
-          .print-table th, .print-table td {
-            border: 1px solid #000 !important; padding: 6px 4px !important;
-            text-align: center !important; font-size: 9pt !important; word-wrap: break-word; color: black !important;
-          }
-          .print-table th { background: #f2f2f2 !important; font-weight: 900; }
-          .print-table thead { display: table-header-group !important; }
-          .footer-space { height: 50px; }
-          .print-footer {
-            position: fixed; bottom: 0; left: 0; width: 100%; text-align: center;
-            font-size: 10pt; border-top: 1px solid #ccc; padding: 10px 0; background: white;
-          }
-          body { counter-reset: page; }
-          .page-num::after { counter-increment: page; content: "صفحة " counter(page); }
-        }
-
-        * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-        .floating-row, .table-header-grid {
-          background: white; border-radius: 20px; margin-bottom: 12px; display: grid; 
-          grid-template-columns: 40px 80px 1.8fr 0.8fr 0.8fr 1.1fr 1.1fr 1.1fr 1.4fr 1fr;
-          align-items: center; padding: 15px 15px; border: 1px solid transparent; transition: 0.3s;
-        }
-        .floating-row:hover { border-color: ${THEME.goldAccent}; transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        .data-text { font-weight: 700; font-size: 13px; color: ${THEME.coffeeDark}; }
-        .label-header { font-size: 11px; font-weight: 900; color: ${THEME.coffeeDark}; opacity: 0.7; }
-        .control-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: 900; cursor: pointer; margin-bottom: 10px; }
-        .sidebar-input { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); padding: 12px; border-radius: 12px; color: white; width: 100%; outline: none; }
-        .modal-input { width: 100%; padding: 12px; border-radius: 12px; border: 1.5px solid ${THEME.sandDark}; background: #FFF; color: ${THEME.coffeeDark}; font-weight: 700; outline: none; }
-        
-        /* أدوات التنقل والفلترة المدمجة */
-        .sidebar-select {
-          width: 100%; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.1); color: white; cursor: pointer; outline: none; margin-bottom: 12px; font-size: 12px;
-        }
-        .sidebar-select option { color: ${THEME.coffeeDark}; }
-        .nav-group { display: flex; gap: 8px; margin-bottom: 15px; }
-        .nav-arrow-btn { 
-          flex: 1; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);
-          background: rgba(255,255,255,0.05); color: white; cursor: pointer; font-weight: 900;
-        }
-        .nav-arrow-btn:disabled { opacity: 0.2; cursor: not-allowed; }
-        
-        .filter-btn {
-          width: 100%; padding: 8px 12px; border-radius: 8px; border: none; cursor: pointer;
-          font-weight: 700; text-align: right; font-size: 12px; transition: 0.3s; margin-bottom: 4px;
-        }
-
-        /* 🏷️ كلاس التصنيف الملون */
-        .category-badge {
-          padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; display: inline-block;
-        }
-      `}</style>
-
-      {/* 🟢 السلايدر الجانبي (لوحة التحكم الشاملة) */}
-      <aside 
-        onMouseEnter={() => setIsSidebarOpen(true)} 
-        onMouseLeave={() => setIsSidebarOpen(false)} 
-        className="no-print" 
-        style={{ 
-          width: isSidebarOpen ? '320px' : '70px', 
-          backgroundColor: THEME.coffeeDark, position: 'fixed', right: 0, top: 0, height: '100vh', 
-          zIndex: 1000, borderLeft: `3px solid ${THEME.goldAccent}`, display: 'flex', 
-          flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden', transition: '0.4s' 
-        }}
-      >
-        <div style={{ padding: '30px 25px', width: '320px', opacity: isSidebarOpen ? 1 : 0 }}>
-          <h2 style={{ color: THEME.goldAccent, fontWeight: 900, fontSize: '24px', marginBottom: '25px' }}>لوحة التحكم</h2>
+          .floating-row:hover { border-color: ${THEME.goldAccent}; transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+          .data-text { font-weight: 700; font-size: 13px; color: ${THEME.coffeeDark}; }
+          .label-header { font-size: 11px; font-weight: 900; color: ${THEME.coffeeDark}; opacity: 0.7; }
           
-          {/* العمليات */}
-          <button onClick={handleMainAction} className="control-btn" style={{ backgroundColor: isOneSelected ? THEME.goldAccent : '#FFF', color: THEME.coffeeDark }}>
-            {isOneSelected ? '✏️ تعديل المختار' : '➕ إضافة كيان جديد'}
-          </button>
-          <button onClick={() => selectedIds.forEach(id => handleDelete(id))} className="control-btn" style={{ backgroundColor: isNoneSelected ? 'rgba(255,255,255,0.05)' : '#ef4444', color: '#FFF' }} disabled={isNoneSelected}>
-            🗑️ حذف ({selectedIds.length})
-          </button>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-            <button onClick={exportToExcel} className="control-btn" style={{ backgroundColor: '#166534', color: '#FFF', marginBottom: 0, fontSize: '12px' }}>📊 إكسل</button>
-            <button onClick={handlePrint} className="control-btn" style={{ backgroundColor: THEME.coffeeMain, color: '#FFF', marginBottom: 0, fontSize: '12px' }}>🖨️ طباعة</button>
+          .btn-main-glass { padding: 12px; border-radius: 12px; border: none; font-weight: 900; cursor: pointer; transition: 0.3s; font-size: 13px; width: 100%; }
+          .btn-main-glass:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+          .sidebar-input { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); padding: 12px; border-radius: 12px; color: white; width: 100%; outline: none; font-weight: 700; transition: 0.3s; }
+          .sidebar-input:focus { border-color: ${THEME.goldAccent}; background: rgba(255, 255, 255, 0.1); }
+          .kpi-box { padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); }
+          .kpi-box span { font-size: 11px; opacity: 0.8; }
+          .kpi-box strong { display: block; font-size: 20px; color: white; margin-top: 5px; }
+          .category-badge { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; display: inline-block; }
+
+          /* نافذة المودال */
+          .glass-input-field { width: 100%; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.65); border: 1px solid rgba(255, 255, 255, 0.8); outline: none; transition: 0.2s; font-weight: 700; color: #1e293b; }
+          .glass-input-field:focus { background: #fff; border-color: ${THEME.goldAccent}; box-shadow: 0 0 0 4px rgba(197, 160, 89, 0.15); }
+          .btn-glass-save { background: linear-gradient(135deg, ${THEME.goldAccent}, ${THEME.coffeeMain}); color: white; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(197, 160, 89, 0.4); }
+          .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); }
+          .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
+          .btn-glass-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
+          .nav-btn { padding: 8px 16px; border-radius: 8px; border: none; background: ${THEME.primary}; color: white; cursor: pointer; font-weight: 900; transition: 0.2s; }
+          .nav-btn:disabled { background: ${THEME.sandLight}; color: #94a3b8; cursor: not-allowed; }
+        `}</style>
+
+        {/* المحتوى الرئيسي */}
+        <div className="no-print">
+          <div className="table-header-grid" style={{ opacity: 0.8, marginBottom: '15px' }}>
+             <input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.length === filteredPartners.length && filteredPartners.length > 0} style={{ transform: 'scale(1.2)' }} />
+             {['كود', 'الاسم والمهنة', 'التصنيف', 'الحساب المالي المربوط', 'الهوية والانتهاء', 'الضريبي', 'العنوان', 'الجوال'].map(h => <div key={h} className="label-header">{h}</div>)}
           </div>
 
-          <hr style={{ opacity: 0.1, margin: '15px 0' }} />
+          {isLoading ? (
+             <div style={{ textAlign: 'center', padding: '50px', fontWeight: 900, color: THEME.coffeeMain }}>⏳ جاري تحميل الشركاء...</div>
+          ) : (
+             filteredPartners.map((p) => {
+              const badge = getBadgeStyle(p.type); 
+              return (
+                <div key={p.id} className="floating-row" style={{ border: selectedIds.includes(p.id) ? `1px solid ${THEME.goldAccent}` : '1px solid transparent' }}>
+                  <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={() => toggleSelectRow(p.id)} style={{ transform: 'scale(1.2)', cursor: 'pointer' }} />
+                  <div className="data-text" style={{ color: THEME.goldAccent }}>{p.code}</div>
+                  <div>
+                    <div className="data-text">{p.name}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>{p.role}</div>
+                  </div>
+                  <div><span className="category-badge" style={{ backgroundColor: badge.bg, color: badge.color }}>{p.type}</span></div>
+                  <div className="data-text" style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 900 }}>💳 {p.account_name}</div>
+                  <div>
+                     <div className="data-text">{p.idNumber}</div>
+                     <div style={{ fontSize: '10px', color: '#D946EF' }}>ينتهي: {p.identity_expiry_date || "---"}</div>
+                  </div>
+                  <div className="data-text" style={{ color: THEME.coffeeMain }}>{p.vat_number || "---"}</div>
+                  <div className="data-text" style={{ fontSize: '11px', opacity: 0.7 }}>{p.address}</div>
+                  <div className="data-text">{p.phone}</div>
+                </div>
+              );
+            })
+          )}
 
-          {/* نظام الفلترة المدمج 🟢 */}
-          <label style={{ color: THEME.goldAccent, fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '10px', opacity: 0.6 }}>تصفية حسب التصنيف</label>
-          <div style={{ marginBottom: '20px' }}>
-            {['الكل', 'جهة داخلية', 'موظف', 'مقاول', 'عامل يومية', 'عميل'].map(type => (
-              <button 
-                key={type} 
-                onClick={() => setFilterType(type)} 
-                className="filter-btn"
-                style={{ 
-                  backgroundColor: filterType === type ? 'rgba(255,255,255,0.1)' : 'transparent', 
-                  color: filterType === type ? THEME.goldAccent : THEME.sandLight 
-                }}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-
-          <hr style={{ opacity: 0.1, margin: '15px 0' }} />
-
-          {/* نظام الصفحات 🔢 */}
-          <label style={{ color: THEME.goldAccent, fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px', opacity: 0.6 }}>إعدادات العرض</label>
-          <select className="sidebar-select" value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
-            <option value={50}>إظهار 50 صف</option>
-            <option value={100}>إظهار 100 صف</option>
-            <option value={500}>إظهار 500 صف</option>
-            <option value={1000}>إظهار 1000 صف</option>
-          </select>
-
-          <div className="nav-group">
-            <button className="nav-arrow-btn" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0}>التالي ◀</button>
-            <button className="nav-arrow-btn" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>▶ السابق</button>
-          </div>
-          
-          <div style={{ textAlign: 'center', color: 'white', marginBottom: '20px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 900 }}>صفحة {currentPage} من {totalPages || 1}</div>
-            <div style={{ fontSize: '10px', opacity: 0.5 }}>إجمالي النتائج: {totalResults}</div>
-          </div>
-
-          <hr style={{ opacity: 0.1, margin: '15px 0' }} />
-          <input type="text" placeholder="بحث سريع..." className="sidebar-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        {!isSidebarOpen && <div style={{ fontSize: '28px', textAlign: 'center', marginTop: '40px' }}>⚙️</div>}
-      </aside>
-
-      {/* 🟢 المحتوى الرئيسي */}
-      <main className={`main-content ${isSidebarOpen ? 'sidebar-open' : ''}`}>
-        
-        {/* هيدر الشاشة */}
-        <header className="no-print" style={{ marginBottom: '50px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="print-hide-text">
-            <h1 style={{ fontSize: '52px', fontWeight: 900, color: THEME.coffeeDark, margin: 0 }}>دليل الشركاء</h1>
-            <p style={{ color: THEME.coffeeMain, fontWeight: 700, opacity: 0.8, fontSize: '20px' }}>رواسي اليسر للمقاولات</p>
-          </div>
-          <div className="logo-container" style={{ width: '320px', height: '140px', background: 'white', borderRadius: '24px', border: `1px solid ${THEME.sandDark}`, padding: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-            <img src="/RYC_Logo.png" alt="RYC" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
-        </header>
-
-        {/* هيدر الجدول (شاشة) */}
-        <div className="table-header-grid no-print" style={{ opacity: 0.8, marginBottom: '15px' }}>
-           <input type="checkbox" onChange={toggleSelectAll} checked={selectedIds.length === filteredPartners.length && filteredPartners.length > 0} />
-           {['كود', 'الاسم الكامل', 'التصنيف', 'المهنة', 'الهوية', 'انتهاء الهوية', 'الضريبي', 'العنوان', 'الجوال'].map(h => <div key={h} className="label-header">{h}</div>)}
-        </div>
-
-        {/* بيانات الجدول (شاشة) */}
-        {filteredPartners.map((p) => {
-          const badge = getBadgeStyle(p.type); // تطبيق ستايل الألوان
-          return (
-            <div key={p.id} className="floating-row no-print" style={{ border: selectedIds.includes(p.id) ? `1px solid ${THEME.goldAccent}` : '1px solid transparent' }}>
-              <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={() => toggleSelectRow(p.id)} />
-              <div className="data-text" style={{ color: THEME.goldAccent }}>{p.code}</div>
-              <div className="data-text">{p.name}</div>
-              <div><span className="category-badge" style={{ backgroundColor: badge.bg, color: badge.color }}>{p.type}</span></div>
-              <div className="data-text" style={{ fontSize: '13px', opacity: 0.8 }}>{p.role}</div>
-              <div className="data-text">{p.idNumber}</div>
-              <div className="data-text" style={{ color: '#D946EF' }}>{p.identity_expiry_date || "---"}</div>
-              <div className="data-text" style={{ color: THEME.coffeeMain }}>{p.vat_number || "---"}</div>
-              <div className="data-text" style={{ fontSize: '11px', opacity: 0.7 }}>{p.address}</div>
-              <div className="data-text">{p.phone}</div>
+          {!isLoading && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '15px', background: 'white', borderRadius: '16px', border: `1px solid ${THEME.sandDark}` }}>
+              <div style={{ fontSize: '13px', color: THEME.coffeeDark, fontWeight: 900 }}>
+                إجمالي السجلات: <b style={{ color: THEME.goldAccent, fontSize: '16px' }}>{totalResults}</b>
+              </div>
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <select value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }} style={{ padding: '8px 12px', borderRadius: '8px', border: `2px solid ${THEME.sandDark}`, outline: 'none', fontWeight: 900, cursor: 'pointer' }}>
+                  <option value={50}>50 سجل</option>
+                  <option value={100}>100 سجل</option>
+                  <option value={500}>500 سجل</option>
+                  <option value={1000}>1000 سجل</option>
+                </select>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="nav-btn">السابق</button>
+                  <span style={{ padding: '8px 16px', background: THEME.sandLight, borderRadius: '8px', fontWeight: 900, color: THEME.coffeeDark }}>
+                    {currentPage} / {totalPages || 1}
+                  </span>
+                  <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="nav-btn">التالي</button>
+                </div>
+              </div>
             </div>
-          );
-        })}
+          )}
+        </div>
 
-        {/* 🖨️ نظام الطباعة (يظهر فقط في الورق) */}
         <div className="print-only">
            <div className="print-header">
              <div style={{ textAlign: 'right' }}>
@@ -277,48 +259,118 @@ export default function PartnersDirectory() {
             <thead>
               <tr>
                 <th style={{ width: '60px' }}>كود</th><th style={{ width: '180px' }}>الاسم الكامل</th>
-                <th>التصنيف</th><th>المهنة</th><th>الهوية</th><th>انتهاء</th>
+                <th>التصنيف</th><th>المهنة</th><th>الحساب المالي</th><th>الهوية</th><th>انتهاء</th>
                 <th>الضريبي</th><th style={{ width: '200px' }}>العنوان</th><th>الجوال</th>
               </tr>
             </thead>
             <tbody>
               {filteredPartners.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.code}</td><td style={{ fontWeight: 'bold' }}>{p.name}</td><td>{p.type}</td><td>{p.role}</td><td>{p.idNumber}</td><td>{p.identity_expiry_date}</td><td>{p.vat_number}</td><td style={{ fontSize: '9pt' }}>{p.address}</td><td>{p.phone}</td>
+                  <td>{p.code}</td><td style={{ fontWeight: 'bold' }}>{p.name}</td><td>{p.type}</td><td>{p.role}</td>
+                  <td>{p.account_name}</td><td>{p.idNumber}</td><td>{p.identity_expiry_date}</td><td>{p.vat_number}</td><td style={{ fontSize: '9pt' }}>{p.address}</td><td>{p.phone}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="footer-space"></div>
+          <div style={{ height: '50px' }}></div>
           <div className="print-footer"><span className="page-num"></span><span style={{ marginRight: '40px' }}>تقرير رسمي - رواسي اليسر للمقاولات - {new Date().toLocaleDateString('ar-SA')}</span></div>
         </div>
-      </main>
 
-      {/* 🟢 نافذة المودال (المنبثقة) */}
-      {isAddModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(67, 52, 46, 0.7)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10001 }} onClick={() => setIsAddModalOpen(false)}>
-          <div className="glass-card" style={{ width: '750px', padding: '40px', background: 'white', borderRadius: '30px' }} onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontWeight: 900, color: THEME.coffeeDark, marginBottom: '30px', fontSize: '28px', borderBottom: `2px solid ${THEME.goldAccent}`, paddingBottom: '10px' }}>{editingId ? '✏️ تعديل بيانات الكيان' : '➕ إضافة كيان جديد'}</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <div><label className="label-header">الكود</label><input className="modal-input" value={newPartner.code} onChange={e => setNewPartner({...newPartner, code: e.target.value})} /></div>
-                  <div><label className="label-header">التصنيف</label><select className="modal-input" value={newPartner.type} onChange={e => setNewPartner({...newPartner, type: e.target.value})}><option>موظف</option><option>عامل يومية</option><option>مقاول</option><option>جهة داخلية</option><option>عميل</option></select></div>
-               </div>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <div><label className="label-header">الاسم الكامل</label><input className="modal-input" value={newPartner.name} onChange={e => setNewPartner({...newPartner, name: e.target.value})} /></div>
-                  <div><label className="label-header">المهنة</label><input className="modal-input" value={newPartner.role} onChange={e => setNewPartner({...newPartner, role: e.target.value})} /></div>
-               </div>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <div><label className="label-header">رقم الهوية</label><input className="modal-input" value={newPartner.idNumber} onChange={e => setNewPartner({...newPartner, idNumber: e.target.value})} /></div>
-                  <div><label className="label-header">تاريخ الانتهاء</label><input type="date" className="modal-input" value={newPartner.identity_expiry_date} onChange={e => setNewPartner({...newPartner, identity_expiry_date: e.target.value})} /></div>
-               </div>
-               <div><label className="label-header">الرقم الضريبي</label><input className="modal-input" value={newPartner.vat_number} onChange={e => setNewPartner({...newPartner, vat_number: e.target.value})} /></div>
-               <div><label className="label-header">العنوان</label><input className="modal-input" value={newPartner.address} onChange={e => setNewPartner({...newPartner, address: e.target.value})} /></div>
-               <div><label className="label-header">رقم الجوال</label><input className="modal-input" value={newPartner.phone} onChange={e => setNewPartner({...newPartner, phone: e.target.value})} /></div>
-               <button onClick={handleSavePartner} disabled={isSaving} style={{ backgroundColor: THEME.coffeeDark, color: 'white', padding: '18px', borderRadius: '15px', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px' }}>{isSaving ? 'جاري الحفظ...' : '✅ اعتماد البيانات'}</button>
+      </MasterPage>
+
+      {/* 🚀 السحر هنا: استخدام createPortal لعرض المودال في منتصف الشاشة دائماً */}
+      {isAddModalOpen && mounted && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at center, rgba(40, 24, 10, 0.4) 0%, rgba(15, 7, 0, 0.9) 100%)', backdropFilter: 'blur(20px)', direction: 'rtl' }} onClick={() => setIsAddModalOpen(false)}>
+            <div className="cinematic-scroll" onClick={e => e.stopPropagation()} style={{ width: '900px', maxHeight: '90vh', background: 'rgba(248, 250, 252, 0.9)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.4)', overflowY: 'auto' }}>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: `2px solid ${THEME.goldAccent}50`, paddingBottom: '15px' }}>
+                    <h2 style={{ color: THEME.coffeeDark, fontWeight: 900, margin: 0, fontSize: '26px' }}>
+                        {editingId ? '✏️ تعديل بيانات الكيان' : '➕ تعريف كيان جديد'}
+                    </h2>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>الكود المرجعي *</label>
+                        <input className="glass-input-field" value={newPartner.code} onChange={e => setNewPartner({...newPartner, code: e.target.value})} placeholder="مثال: PRT-001" />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>التصنيف *</label>
+                        <select className="glass-input-field" value={newPartner.type} onChange={e => setNewPartner({...newPartner, type: e.target.value})}>
+                            <option value="موظف">موظف 👔</option>
+                            <option value="عامل يومية">عامل يومية 👷</option>
+                            <option value="مقاول">مقاول 🏗️</option>
+                            <option value="جهة داخلية">جهة داخلية 🏛️</option>
+                            <option value="عميل">عميل 🏢</option>
+                            <option value="مورد">مورد 📦</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>الاسم الكامل *</label>
+                        <input className="glass-input-field" value={newPartner.name} onChange={e => setNewPartner({...newPartner, name: e.target.value})} placeholder="اسم الشخص أو الشركة" />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>المهنة / الدور</label>
+                        <input className="glass-input-field" value={newPartner.role} onChange={e => setNewPartner({...newPartner, role: e.target.value})} placeholder="مثال: نجار، مورد حديد..." />
+                    </div>
+                </div>
+
+                <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: `1px dashed ${THEME.goldAccent}`, marginBottom: '20px', zIndex: 90, position: 'relative' }}>
+                    <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', color: '#0ea5e9' }}>💳 الربط المالي (شجرة الحسابات)</h3>
+                    <SmartCombo 
+                        label="الحساب المحاسبي المرتبط بالكيان" 
+                        table="accounts" 
+                        displayCol="name" 
+                        searchCols="name,code" 
+                        customFilter="is_transactional=eq.true"
+                        value={newPartner.account_id}
+                        onSelect={(v: any) => setNewPartner({ ...newPartner, account_id: v?.id })} 
+                    />
+                    <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#64748b' }}>* بدون ربط الحساب، لن تظهر قيود هذا الشخص في ميزان المراجعة بشكل صحيح.</p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>رقم الهوية / الإقامة</label>
+                        <input className="glass-input-field" value={newPartner.idNumber} onChange={e => setNewPartner({...newPartner, idNumber: e.target.value})} placeholder="أدخل رقم الهوية" />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>تاريخ انتهاء الهوية</label>
+                        <input type="date" className="glass-input-field" value={newPartner.identity_expiry_date} onChange={e => setNewPartner({...newPartner, identity_expiry_date: e.target.value})} />
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>الرقم الضريبي</label>
+                        <input className="glass-input-field" value={newPartner.vat_number} onChange={e => setNewPartner({...newPartner, vat_number: e.target.value})} placeholder="للمقاولين والشركات" />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>رقم الجوال</label>
+                        <input className="glass-input-field" value={newPartner.phone} onChange={e => setNewPartner({...newPartner, phone: e.target.value})} placeholder="05xxxxxxxx" />
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '30px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>العنوان الوطني / الوصف</label>
+                    <input className="glass-input-field" value={newPartner.address} onChange={e => setNewPartner({...newPartner, address: e.target.value})} placeholder="المدينة، الحي، الشارع..." />
+                </div>
+
+                <div style={{ display: 'flex', gap: '15px' }}>
+                    <button onClick={handleSavePartner} disabled={isSaving} className="btn-glass-save" style={{ flex: 2 }}>
+                        {isSaving ? '⏳ جاري الحفظ...' : '✅ اعتماد وحفظ البيانات'}
+                    </button>
+                    <button onClick={() => setIsAddModalOpen(false)} className="btn-glass-cancel" style={{ flex: 1 }}>
+                        إلغاء
+                    </button>
+                </div>
+
             </div>
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

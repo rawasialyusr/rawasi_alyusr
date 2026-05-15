@@ -30,16 +30,18 @@ export function usePartnersLogic() {
     phone: '',
     address: '',
     vat_number: '',   // خاص بعمود الرقم الضريبي
-    identity_expiry_date: '' // 🆕 تاريخ انتهاء الإقامة
+    identity_expiry_date: '', // 🆕 تاريخ انتهاء الإقامة
+    account_id: '' // 🚀 إضافة الحساب المالي
   });
   const [isSaving, setIsSaving] = useState(false);
 
   // 🔄 دالة جلب البيانات
   const fetchPartners = async () => {
     setIsLoading(true);
+    // 🚀 تحديث الاستعلام لسحب اسم الحساب من جدول accounts
     const { data, error } = await supabase
       .from('partners')
-      .select('*')
+      .select('*, account:accounts(name)')
       .order('code', { ascending: true });
     
     if (error) {
@@ -55,7 +57,9 @@ export function usePartnersLogic() {
         phone: p.phone || '---',
         address: p.address || '---',
         vat_number: p.vat_number || '---',
-        identity_expiry_date: p.identity_expiry_date || '' // 🆕
+        identity_expiry_date: p.identity_expiry_date || '',
+        account_id: p.account_id, // 🚀
+        account_name: p.account?.name || 'غير مربوط' // 🚀
       }));
       setPartners(formattedData);
     }
@@ -82,7 +86,8 @@ export function usePartnersLogic() {
       phone: newPartner.phone,
       address: newPartner.address,
       vat_number: newPartner.vat_number,
-      identity_expiry_date: newPartner.identity_expiry_date // 🆕
+      identity_expiry_date: newPartner.identity_expiry_date || null,
+      account_id: newPartner.account_id || null // 🚀 حفظ الحساب في قاعدة البيانات
     };
 
     let error;
@@ -124,13 +129,14 @@ export function usePartnersLogic() {
     setNewPartner({
       type: partner.type,
       name: partner.name,
-      role: partner.role,
+      role: partner.role === '---' ? '' : partner.role,
       idNumber: partner.idNumber === '---' ? '' : partner.idNumber,
       code: partner.code,
       phone: partner.phone === '---' ? '' : partner.phone,
       address: partner.address === '---' ? '' : partner.address,
       vat_number: partner.vat_number === '---' ? '' : partner.vat_number,
-      identity_expiry_date: partner.identity_expiry_date || '' // 🆕
+      identity_expiry_date: partner.identity_expiry_date || '',
+      account_id: partner.account_id || '' // 🚀 تمرير الحساب للتعديل
     });
     setIsAddModalOpen(true);
   };
@@ -138,7 +144,7 @@ export function usePartnersLogic() {
   const closeModal = () => {
     setIsAddModalOpen(false);
     setEditingId(null);
-    setNewPartner({ type: 'عامل يومية', name: '', role: '', idNumber: '', code: '', phone: '', address: '', vat_number: '', identity_expiry_date: '' });
+    setNewPartner({ type: 'عامل يومية', name: '', role: '', idNumber: '', code: '', phone: '', address: '', vat_number: '', identity_expiry_date: '', account_id: '' }); // 🚀 تفريغ الحساب
     setSelectedIds([]);
   };
 
@@ -182,10 +188,11 @@ export function usePartnersLogic() {
 
   // 📤 تصدير إكسل
   const exportToExcel = () => {
-    const dbHeaders = ["code", "name", "partner_type", "job_role", "identity_number", "identity_expiry_date", "phone", "address", "vat_number"];
+    // 🚀 إضافة الحساب المالي في التصدير
+    const dbHeaders = ["code", "name", "partner_type", "job_role", "identity_number", "identity_expiry_date", "phone", "address", "vat_number", "account_name"];
     const rows = allFilteredData.map(p => [
       p.code, p.name, p.type, p.role !== '---' ? p.role : '', p.idNumber !== '---' ? p.idNumber : '', 
-      p.identity_expiry_date, p.phone !== '---' ? p.phone : '', p.address !== '---' ? p.address : '', p.vat_number !== '---' ? p.vat_number : ''
+      p.identity_expiry_date, p.phone !== '---' ? p.phone : '', p.address !== '---' ? p.address : '', p.vat_number !== '---' ? p.vat_number : '', p.account_name
     ]);
     const csvContent = "\ufeff" + [dbHeaders, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -212,7 +219,7 @@ export function usePartnersLogic() {
 
   return {
     isLoading, searchTerm, setSearchTerm, filterType, setFilterType,
-    isAddModalOpen, setIsAddModalOpen: closeModal, handleEdit,
+    isAddModalOpen, setIsAddModalOpen: closeModal, handleEdit, openAddModal: () => setIsAddModalOpen(true), // 🚀 إضافة دالة الفتح المطلوبة للواجهة
     newPartner, setNewPartner, isSaving, handleSavePartner,
     filteredPartners, stats, getTypeStyle, handleDelete, exportToExcel, handlePrint,
     selectedIds, setSelectedIds, editingId,

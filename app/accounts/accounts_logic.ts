@@ -18,17 +18,18 @@ export function useHierarchicalAccountsLogic() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
-  // 🧠 1. جلب البيانات "المطبوخة" من الباك إند (سريعة جداً - 59 صف فقط بدلاً من 13,000)
+  // 🧠 1. جلب البيانات "المطبوخة" من الباك إند (الأرصدة + القيود معاً)
   const { data: accountsReport = [], isLoading } = useQuery({
-    queryKey: ['accounts_report', startDate, endDate],
+    queryKey: ['accounts_report_with_lines', startDate, endDate], // 🚀 تم تحديث مفتاح الكاش
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_accounts_report', {
+      // 🚀 تم تغيير الدالة هنا لاستدعاء الـ RPC المطور اللي بيجيب القيود
+      const { data, error } = await supabase.rpc('get_accounts_report_with_lines', {
         p_date_from: startDate || '1900-01-01',
         p_date_to: endDate || '2099-12-31'
       });
       
       if (error) {
-        console.error("❌ خطأ في جلب تقرير الحسابات:", error);
+        console.error("❌ خطأ في جلب تقرير الحسابات والقيود:", error);
         throw error;
       }
       return data || [];
@@ -48,13 +49,14 @@ export function useHierarchicalAccountsLogic() {
          return codeA.localeCompare(codeB);
     });
 
-    // تجهيز العقد (Nodes) وربط الأرقام القادمة من الداتابيز
+    // تجهيز العقد (Nodes) وربط الأرقام والقيود القادمة من الداتابيز
     sortedAccounts.forEach(acc => {
       const safeId = String(acc.id).trim();
       mapById[safeId] = { 
         ...acc, 
         children: [], 
-        transactions: [], // تم تفريغ القيود هنا لمنع تهنيج المتصفح (تفاصيل القيود تعرض في كشف حساب منفصل)
+        // 🚀 التعديل الجوهري: سحب القيود الفعلية من الداتابيز وتمريرها للعرض بدل تفريغها
+        transactions: acc.transactions || [], 
         totalDebit: Number(acc.total_debit || 0),
         totalCredit: Number(acc.total_credit || 0),
         balance: Number(acc.balance || 0)
@@ -103,13 +105,14 @@ export function useHierarchicalAccountsLogic() {
         if (error) throw error;
     },
     onMutate: async (ids) => {
-        await queryClient.cancelQueries({ queryKey: ['accounts_report'] });
-        const previous = queryClient.getQueryData(['accounts_report']);
-        queryClient.setQueryData(['accounts_report'], (old: any[]) => old?.filter(acc => !ids.includes(acc.id)));
+        // 🚀 تم تحديث مفاتيح الكاش لتتطابق مع الـ Query الجديد
+        await queryClient.cancelQueries({ queryKey: ['accounts_report_with_lines'] });
+        const previous = queryClient.getQueryData(['accounts_report_with_lines']);
+        queryClient.setQueryData(['accounts_report_with_lines'], (old: any[]) => old?.filter(acc => !ids.includes(acc.id)));
         return { previous };
     },
     onError: (err: any, vars, context) => {
-        queryClient.setQueryData(['accounts_report'], context?.previous);
+        queryClient.setQueryData(['accounts_report_with_lines'], context?.previous);
         showToast(`حدث خطأ أثناء الحذف: ${err.message}`, 'error');
     },
     onSuccess: () => {
@@ -118,7 +121,7 @@ export function useHierarchicalAccountsLogic() {
     },
     onSettled: () => {
         // تحديث الـ Cache لتقرير الحسابات
-        queryClient.invalidateQueries({ queryKey: ['accounts_report'] });
+        queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] });
     }
   });
 

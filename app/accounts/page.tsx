@@ -40,7 +40,7 @@ export default function HierarchicalLedgerPage() {
     };
   }, [paginatedTree]);
 
-  // 🚀 تجهيز أزرار السايد بار
+  // 🚀 تجهيز أزرار السايد بار (وتطوير زر الطباعة)
   const sidebarActions = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="accounts" action="create">
@@ -68,7 +68,72 @@ export default function HierarchicalLedgerPage() {
          <button className="btn-main-glass white" style={{flex: 1}} onClick={collapseAll}>🔼 طي الكل</button>
       </div>
 
-      <button className="btn-main-glass white" onClick={() => window.print()}>🖨️ طباعة الميزان</button>
+      {/* 🖨️ زر الطباعة الاحترافي المطور */}
+      <button className="btn-main-glass white" onClick={() => {
+          const printWindow = window.open('', '_blank');
+          if(printWindow) {
+              // دالة تكرارية لرسم الشجرة في الطباعة
+              const generatePrintRows = (nodes: any[], depth = 0): string => {
+                  return nodes.map(n => {
+                      const indent = depth * 20;
+                      const isRoot = depth === 0;
+                      let rowHtml = `
+                          <tr style="${isRoot ? 'background: #f8fafc; font-weight: bold;' : ''}">
+                              <td>${n.code || ''}</td>
+                              <td style="padding-right: ${indent + 10}px;">${isRoot ? '📁' : '📄'} ${n.name}</td>
+                              <td class="text-center text-success">${formatCurrency(n.totalDebit)}</td>
+                              <td class="text-center text-danger">${formatCurrency(n.totalCredit)}</td>
+                              <td class="text-center" style="font-weight: bold;">${formatCurrency(n.balance)}</td>
+                          </tr>
+                      `;
+                      if (n.children && n.children.length > 0) {
+                          rowHtml += generatePrintRows(n.children, depth + 1);
+                      }
+                      return rowHtml;
+                  }).join('');
+              };
+
+              printWindow.document.write(`
+                  <html dir="rtl">
+                  <head>
+                      <title>ميزان المراجعة</title>
+                      <style>
+                          body { font-family: 'Arial', sans-serif; padding: 20px; direction: rtl; }
+                          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                          th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
+                          th { background-color: #f1f5f9; color: #1e293b; font-weight: bold; }
+                          .text-center { text-align: center; }
+                          .text-success { color: #16a34a; }
+                          .text-danger { color: #dc2626; }
+                      </style>
+                  </head>
+                  <body>
+                      <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #ddd; padding-bottom: 15px;">
+                          <h2>ميزان المراجعة الشجري</h2>
+                          <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p>
+                          ${startDate ? `<p>من: ${startDate} | إلى: ${endDate}</p>` : ''}
+                      </div>
+                      <table>
+                          <thead>
+                              <tr>
+                                  <th style="width: 15%;">كود الحساب</th>
+                                  <th style="width: 40%;">اسم الحساب</th>
+                                  <th class="text-center">إجمالي مدين</th>
+                                  <th class="text-center">إجمالي دائن</th>
+                                  <th class="text-center">الرصيد</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              ${generatePrintRows(paginatedTree)}
+                          </tbody>
+                      </table>
+                  </body>
+                  </html>
+              `);
+              printWindow.document.close();
+              setTimeout(() => { printWindow.print(); }, 250); // تأخير بسيط لضمان تحميل الـ CSS
+          }
+      }}>🖨️ طباعة الميزان</button>
     </div>
   );
 
@@ -273,6 +338,7 @@ function AccountNode({ node, expandedIds, toggleExpand, selectedIds, toggleSelec
           {node.children?.map((child: any) => (
             <AccountNode key={child.id} node={child} expandedIds={expandedIds} toggleExpand={toggleExpand} selectedIds={selectedIds} toggleSelection={toggleSelection} depth={depth + 1} />
           ))}
+          {/* 🚀 عرض القيود تحت الحسابات الفرعية */}
           {node.transactions?.map((t: any, idx: number) => (
             <div key={idx} className="entry-line">
               <div style={{ fontWeight: 800, color: THEME.goldAccent }}>{t.date}</div>

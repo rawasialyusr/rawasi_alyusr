@@ -30,24 +30,25 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                     
                     {/* 🚀 السحر هنا: السحب من جدول دليل البنود الموحد */}
                     <div style={{ zIndex: 90, position: 'relative', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
-                        <SmartCombo 
-                            label="اسم البند / المرحلة (من الدليل الموحد) 📚" 
-                            table="boq_items" 
-                            searchCols="item_name,item_code,main_category,sub_category"
-                            displayCol="item_name" 
-                            initialDisplay={record.work_item}
-                            freeText={true} 
-                            onSelect={(b: any) => {
-                                const isObj = typeof b === 'object';
-                                setRecord({
-                                    ...record, 
-                                    work_item: isObj ? b.item_name : b, 
-                                    main_category: isObj ? b.main_category : 'بند عام',
-                                    sub_category: isObj ? b.sub_category : 'مرحلة عامة',
-                                    unit: isObj ? b.unit_of_measure : record.unit || 'مقطوعية'
-                                });
-                            }} 
-                        />
+                       <SmartCombo 
+    label="اسم البند / المرحلة (من الدليل الموحد) 📚" 
+    table="boq_items" 
+    searchCols="item_name,item_code,main_category,sub_category"
+    displayCol="item_name" 
+    initialDisplay={record.work_item}
+    freeText={true} 
+    onSelect={(b: any) => {
+        const isObj = typeof b === 'object' && b !== null;
+        setRecord({
+            ...record, 
+            boq_item_id: isObj ? b.id : null, // 👈 التعديل هنا: حفظ الآيدي بتاع الدليل الموحد
+            work_item: isObj ? b.item_name : b, 
+            main_category: isObj ? b.main_category : 'بند عام',
+            sub_category: isObj ? b.sub_category : 'مرحلة عامة',
+            unit: isObj ? b.unit_of_measure : record.unit || 'مقطوعية'
+        });
+    }} 
+/>
                         
                         {/* مسار الشجرة (Breadcrumbs) بيظهر أوتوماتيك بعد الاختيار */}
                         {record.work_item && (

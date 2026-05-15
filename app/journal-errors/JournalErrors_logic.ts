@@ -21,22 +21,28 @@ export function useJournalErrorsLogic() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     // 🔍 1. محرك الفحص (الرادار المطور)
+    // 🔍 1. محرك الفحص (الرادار المطور)
     const scanForErrors = useCallback(async () => {
         setIsLoading(true);
         try {
-            // جلب البيانات الأساسية (تخطي حد الـ 1000 سطر - الباب الثالث)
-            const headers = await fetchAllSupabaseData(supabase, 'journal_headers', 'id, reference_id, entry_date, description', 'created_at', false) || [];
+            // جلب البيانات الأساسية
+            // 🚀 التعديل 1: إضافة v_type لسحب نوع الفاوتشر
+            const headers = await fetchAllSupabaseData(supabase, 'journal_headers', 'id, reference_id, entry_date, description, v_type', 'created_at', false) || [];
             
-            // 🛠️ التعديل هنا: تم تغيير النجمة '*' إلى 'id' لحل مشكلة ترتيب Supabase المرفوض
-            const lines = await fetchAllSupabaseData(supabase, 'journal_lines', 'id', 'id', false) || [];
+            // 🚀 التعديل هنا: سحب الأعمدة المطلوبة صراحةً لحل مشكلة الترتيب وضمان عمل الرادار
+            const lines = await fetchAllSupabaseData(supabase, 'journal_lines', 'id, header_id, debit, credit, created_at', 'id', false) || [];
             
             const laborLogs = await fetchAllSupabaseData(supabase, 'labor_daily_logs', 'id, is_posted') || [];
             const receipts = await fetchAllSupabaseData(supabase, 'receipt_vouchers', 'id') || [];
             const invoices = await fetchAllSupabaseData(supabase, 'invoices', 'id') || [];
             const expenses = await fetchAllSupabaseData(supabase, 'expenses', 'id') || [];
             const payments = await fetchAllSupabaseData(supabase, 'payment_vouchers', 'id') || [];
+            // 🚀 إضافة جداول المستخلصات والخامات لمنع اعتبار قيودها يتيمة
+            const subClaims = await fetchAllSupabaseData(supabase, 'sub_claims', 'id') || [];
+            const matIssues = await fetchAllSupabaseData(supabase, 'material_issues', 'id') || [];
+            const matReceipts = await fetchAllSupabaseData(supabase, 'material_receipts', 'id') || [];
 
-            // 🛡️ الباب التاسع: صرامة الأنواع (Strict Casting)
+            // 🛡️ صرامة الأنواع
             const headerIdsSet = new Set(headers.map(h => String(h.id).trim().toLowerCase()));
 
             // 👻 فحص الأشباح
@@ -63,12 +69,16 @@ export function useJournalErrorsLogic() {
             });
             setGhostLogs(Object.values(ghostGroups));
 
+            // تجميع المعرفات الصحيحة من كافة الجداول
             const validRefIds = new Set([
                 ...receipts.map(r => String(r.id).trim().toLowerCase()), 
                 ...invoices.map(i => String(i.id).trim().toLowerCase()),
                 ...expenses.map(e => String(e.id).trim().toLowerCase()), 
                 ...payments.map(p => String(p.id).trim().toLowerCase()),
-                ...laborLogs.map(l => String(l.id).trim().toLowerCase())
+                ...laborLogs.map(l => String(l.id).trim().toLowerCase()),
+                ...subClaims.map(x => String(x.id).trim().toLowerCase()),
+                ...matIssues.map(x => String(x.id).trim().toLowerCase()),
+                ...matReceipts.map(x => String(x.id).trim().toLowerCase())
             ]);
 
             const actualPostedIds = new Set(
@@ -77,13 +87,27 @@ export function useJournalErrorsLogic() {
 
             // 🗑️ فحص القيود اليتيمة وتناقضات الحالة
             const orphans = headers.filter(h => {
-                if (!h.reference_id) return false;
+                if (!h.reference_id) {
+                    // 🚀 التعديل 2: لو القيد فيه v_type ومفيش reference_id يبقى يتيم 100%
+                    if (h.v_type && h.v_type.trim() !== '') return true; 
+
+                    const desc = h.description || '';
+                    // 🚀 التعديل 3: إضافة "صرف" و "إثبات"
+                    return desc.includes('إذن') || desc.includes('فاتورة') || desc.includes('مستخلص') || desc.includes('سند') || desc.includes('يومية') || desc.includes('صرف') || desc.includes('إثبات');
+                }
                 const refIdStr = String(h.reference_id).trim().toLowerCase();
                 const isOrphan = !validRefIds.has(refIdStr);
                 const isLaborLog = h.description?.includes('يومية') || h.description?.includes('عامل');
                 const isStatusMismatched = isLaborLog && validRefIds.has(refIdStr) && !actualPostedIds.has(refIdStr);
                 return isOrphan || isStatusMismatched;
             }).map(h => {
+                if(!h.reference_id) return {
+                    ...h,
+                    // 🚀 التعديل 4: عرض نوع الفاوتشر في التشخيص لو موجود
+                    diagnosis: `⚠️ قيد يتيم (أصل السند محذوف). ${h.v_type ? `[النوع: ${h.v_type}]` : ''}`,
+                    solution: "يجب مسح هذا القيد لإعادة التوازن المحاسبي."
+                };
+                
                 const refIdStr = String(h.reference_id).trim().toLowerCase();
                 const isMismatched = validRefIds.has(refIdStr) && !actualPostedIds.has(refIdStr);
                 return {
@@ -99,8 +123,8 @@ export function useJournalErrorsLogic() {
             // ⚖️ فحص الاتزان
             const unbal = headers.filter(h => {
                 const hLines = lines.filter(l => String(l.header_id).trim().toLowerCase() === String(h.id).trim().toLowerCase());
-                const dSum = hLines.reduce((s, l) => s + Number(l.debit), 0);
-                const cSum = hLines.reduce((s, l) => s + Number(l.credit), 0);
+                const dSum = hLines.reduce((s, l) => s + Number(l.debit || 0), 0);
+                const cSum = hLines.reduce((s, l) => s + Number(l.credit || 0), 0);
                 if (dSum === 0 && cSum === 0 && hLines.length === 0) return false; 
                 return Math.abs(dSum - cSum) > 0.01;
             }).map(h => ({
@@ -120,34 +144,31 @@ export function useJournalErrorsLogic() {
         }
     }, [showToast]);
 
-    // 🛡️ 2. محرك الحذف العميق (Deep Cascade Delete)
+    // 🛡️ 2. محرك الحذف العميق
     const deleteHeader = async (id: string, isGhost: boolean = false) => {
         const confirmDelete = confirm("⚠️ سيتم مسح القيد وجميع السطور المرتبطة به نهائياً. هل تريد المتابعة؟");
         if (!confirmDelete) return;
         setIsLoading(true);
         try {
-            // الباب الثاني: الإلغاء المتسلسل وقنص القيود
             if (isGhost && id === "N/A") {
                 await supabase.from('journal_lines').delete().is('header_id', null);
             } else {
-                // 1. قنص السطور أولاً لضمان عدم وجود أخطاء FK
+                // قنص السطور
                 const { error: linesErr } = await supabase.from('journal_lines').delete().eq('header_id', id);
                 if (linesErr) throw linesErr;
                 
-                // 2. محاولة جلب الـ reference_id قبل مسح الرأس لتصفير العدادات (الباب الثاني)
                 const { data: headData } = await supabase.from('journal_headers').select('reference_id, description').eq('id', id).single();
 
-                // 3. مسح الرأس
+                // مسح الرأس
                 const { error: headErr } = await supabase.from('journal_headers').delete().eq('id', id);
                 if (headErr) throw headErr;
 
-                // 4. تصفير العدادات في الجوال (يومية العمال مثلاً) إذا كان القيد يخصها
+                // تصفير العدادات
                 if (headData?.reference_id && (headData.description?.includes('يومية') || headData.description?.includes('عامل'))) {
                     await supabase.from('labor_daily_logs').update({ is_posted: false }).eq('id', headData.reference_id);
                 }
             }
 
-            // تحديث الواجهة فوراً
             setErrorLogs(prev => prev.filter(log => log.id !== id));
             setUnbalancedLogs(prev => prev.filter(log => log.id !== id));
             setGhostLogs(prev => prev.filter(log => log.id !== id));
@@ -162,13 +183,12 @@ export function useJournalErrorsLogic() {
         }
     };
 
-    // 🛡️ 3. المسح الجماعي المحسن (Atomic Chunking)
+    // 🛡️ 3. المسح الجماعي
     const deleteSelected = async () => {
         if (selectedIds.length === 0) return;
         if (!confirm(`⚠️ سيتم تطهير (${selectedIds.length}) قيود تماماً. هل أنت متأكد؟`)) return;
         setIsLoading(true);
         try {
-            // الباب الثالث: التجزئة (Chunking) لمنع الـ Timeout
             const CHUNK_SIZE = 20; 
             const allIds = selectedIds.map(id => String(id));
 
@@ -181,13 +201,11 @@ export function useJournalErrorsLogic() {
                 }
 
                 if (realIds.length > 0) {
-                    // مسح متسلسل لضمان النزاهة
                     await supabase.from('journal_lines').delete().in('header_id', realIds);
                     await supabase.from('journal_headers').delete().in('id', realIds);
                 }
             }
             
-            // تحديث الحالة لجميع المصفوفات
             const filterOut = (prev: any[]) => prev.filter(log => !selectedIds.includes(String(log.id)));
             setErrorLogs(filterOut);
             setUnbalancedLogs(filterOut);
@@ -204,7 +222,7 @@ export function useJournalErrorsLogic() {
         }
     };
 
-    // ⚖️ 4. محرك الموازنة التلقائية (Idempotency Shield)
+    // ⚖️ 4. محرك الموازنة التلقائية
     const forceBalanceJournal = async (headerId: string, diffAmount: number) => {
         const confirmFix = confirm(`إضافة سطر تسوية بـ (${Math.abs(diffAmount).toFixed(2)})؟`);
         if (!confirmFix) return;
@@ -217,7 +235,7 @@ export function useJournalErrorsLogic() {
                 description: 'تسوية آلية - رادار الميثاق V11',
                 debit: isDebitMissing ? Math.abs(diffAmount) : 0,
                 credit: isDebitMissing ? 0 : Math.abs(diffAmount),
-                partner_id: null // الباب الثامن: حسابات التسوية العامة = null
+                partner_id: null 
             };
 
             const { error } = await supabase.from('journal_lines').insert([fixLine]);
@@ -232,7 +250,7 @@ export function useJournalErrorsLogic() {
         }
     };
 
-    // 📊 5. التصدير (Pure Logic)
+    // 📊 5. التصدير
     const exportErrorsToExcel = () => {
         const allErrors = [
             ...errorLogs.map(e => ({ 'النوع': 'قيد يتيم/متناقض', 'ID': e.id, 'التشخيص': e.diagnosis })),

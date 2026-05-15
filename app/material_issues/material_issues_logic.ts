@@ -9,54 +9,68 @@ export function useMaterialIssuesLogic() {
     const { showToast } = useToast();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-    const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
-    
-    // 🚀 حالة تحديد السطور في الجدول
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    
-    // ✏️ حالة التعديل
-    const [editingIssueId, setEditingIssueId] = useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]); // 🚀 للعمليات الجماعية
+    const [editingIssueId, setEditingIssueId] = useState<string | null>(null); // ✏️ أيدي الإذن الجاري تعديله
 
+    // هيكل بيانات الإذن الافتراضي
     const initialIssueState = {
         project_id: '',
         subcontractor_id: '',
         issue_type: 'صرف لمقاول',
         issue_date: new Date().toISOString().split('T')[0],
         notes: '',
-        items: [{ item_name: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0 }]
+        items: [{ item_name: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null }]
     };
 
     const [issueData, setIssueData] = useState<any>(initialIssueState);
 
-    // سحب بيانات أذون الصرف
+    // 📥 سحب بيانات أذونات الصرف
     const { data: issues = [], isLoading } = useQuery({
         queryKey: ['material_issues_list'],
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('material_issue_lines')
                 .select(`
-                    id, item_name, quantity, unit, unit_price, total_price,
-                    issue:material_issues (
-                        id, issue_number, issue_date, issue_type, is_posted, notes, project_id, subcontractor_id,
-                        project:projects(Property),
-                        subcontractor:partners!subcontractor_id(name)
+                    id, item_name, quantity, unit, unit_price, total_price, boq_id,
+                    boq:boq_budget!material_issue_lines_boq_id_fkey(work_item),
+                    issue:material_issues!material_issue_lines_issue_id_fkey (
+                        id, issue_number, issue_date, issue_type, is_posted, notes, project_id, subcontractor_id, created_at,
+                        project:projects!material_issues_project_id_fkey(Property),
+                        subcontractor:partners!material_issues_subcontractor_id_fkey(name)
                     )
-                `).order('id', { ascending: false });
+                `).order('created_at', { foreignTable: 'material_issues', ascending: false });
+            
             if (error) throw error;
+            
             return data.map((line: any) => ({
-                ...line,
-                ...line.issue,
+                id: line.id, // أيدي السطر المستقل للتشيك بوكس
                 issue_id: line.issue?.id, 
+                issue_number: line.issue?.issue_number,
+                item_name: line.item_name,
+                quantity: line.quantity,
+                unit: line.unit,
+                unit_price: line.unit_price,
+                total_price: line.total_price,
+                boq_item: line.boq?.work_item,
+                boq_id: line.boq_id,
+                issue_date: line.issue?.issue_date,
+                issue_type: line.issue?.issue_type,
+                notes: line.issue?.notes,
+                is_posted: line.issue?.is_posted,
+                project_id: line.issue?.project_id,
                 project_name: line.issue?.project?.Property,
+                subcontractor_id: line.issue?.subcontractor_id,
                 subcontractor_name: line.issue?.subcontractor?.name
             }));
         }
     });
 
-    // 🚀 دالة فتح المودال ببيانات الإذن للتعديل
+    // 🚀 فتح المودال لتعديل إذن صرف موجود
     const handleOpenEdit = () => {
-        const idToEdit = selectedIds[0];
+        if(selectedIds.length === 0) return;
+        const idToEdit = issues.find(i => i.id === selectedIds[0])?.issue_id;
+        if(!idToEdit) return;
+
         const linesToEdit = issues.filter((i: any) => i.issue_id === idToEdit);
         if (linesToEdit.length > 0) {
             const master = linesToEdit[0];
@@ -71,7 +85,8 @@ export function useMaterialIssuesLogic() {
                     quantity: l.quantity,
                     unit: l.unit,
                     unit_price: l.unit_price,
-                    total_price: l.total_price
+                    total_price: l.total_price,
+                    boq_id: l.boq_id
                 }))
             });
             setEditingIssueId(idToEdit);
@@ -79,6 +94,7 @@ export function useMaterialIssuesLogic() {
         }
     };
 
+    // تغيير بيانات صنف داخل الجدول
     const handleItemChange = (index: number, field: string, value: any) => {
         const newItems = [...issueData.items];
         newItems[index][field] = value;
@@ -93,17 +109,19 @@ export function useMaterialIssuesLogic() {
         setIssueData({ ...issueData, items: newItems });
     };
 
-    // 💾 دالة الحفظ (تدعم الإضافة والتعديل)
+    // 💾 دالة الحفظ (تعمل للإضافة والتعديل معاً)
     const saveIssueMutation = useMutation({
         mutationFn: async () => {
             if (!issueData.project_id) throw new Error("يرجى اختيار المشروع الصارف");
             if (issueData.issue_type === 'صرف لمقاول' && !issueData.subcontractor_id) throw new Error("يرجى اختيار المقاول المستلم");
 
             const total = issueData.items.reduce((sum: number, i: any) => sum + i.total_price, 0);
-            
-            if (editingIssueId) {
-                // 📝 وضع التعديل (مسح السطور القديمة، تحديث الرأس، وإضافة السطور الجديدة)
-                await supabase.from('material_issue_lines').delete().eq('issue_id', editingIssueId);
+            let currentIssueId = editingIssueId;
+
+            if (currentIssueId) {
+                // 📝 وضع التعديل (فك الترحيل أولاً، ثم التحديث)
+                await supabase.rpc('rpc_unpost_material_issue', { p_id: currentIssueId });
+                await supabase.from('material_issue_lines').delete().eq('issue_id', currentIssueId);
                 
                 const { error: hErr } = await supabase.from('material_issues').update({
                     project_id: issueData.project_id,
@@ -111,23 +129,12 @@ export function useMaterialIssuesLogic() {
                     issue_date: issueData.issue_date,
                     issue_type: issueData.issue_type,
                     total_amount: total,
-                    notes: issueData.notes
-                }).eq('id', editingIssueId);
+                    notes: issueData.notes,
+                    is_posted: false
+                }).eq('id', currentIssueId);
                 if (hErr) throw hErr;
-
-                const lines = issueData.items.map((i: any) => ({ 
-                    issue_id: editingIssueId,
-                    item_name: i.item_name,
-                    quantity: Number(i.quantity) || 0,
-                    unit: i.unit || 'وحدة',
-                    unit_price: Number(i.unit_price) || 0,
-                    total_price: Number(i.total_price) || 0
-                }));
-                const { error: lErr } = await supabase.from('material_issue_lines').insert(lines);
-                if (lErr) throw lErr;
-
             } else {
-                // ✨ وضع الإضافة الجديد
+                // ✨ وضع إضافة إذن جديد
                 const { data: head, error: hErr } = await supabase.from('material_issues').insert([{
                     issue_number: `ISS-${Date.now().toString().slice(-6)}`,
                     project_id: issueData.project_id,
@@ -135,54 +142,69 @@ export function useMaterialIssuesLogic() {
                     issue_date: issueData.issue_date,
                     issue_type: issueData.issue_type,
                     total_amount: total,
-                    notes: issueData.notes
+                    notes: issueData.notes,
+                    is_posted: false
                 }]).select().single();
 
                 if (hErr) throw hErr;
-
-                const lines = issueData.items.map((i: any) => ({ 
-                    issue_id: head.id,
-                    item_name: i.item_name,
-                    quantity: Number(i.quantity) || 0,
-                    unit: i.unit || 'وحدة',
-                    unit_price: Number(i.unit_price) || 0,
-                    total_price: Number(i.total_price) || 0
-                }));
-                const { error: lErr } = await supabase.from('material_issue_lines').insert(lines);
-                if (lErr) throw lErr;
+                currentIssueId = head.id;
             }
+
+            // إدخال السطور الجديدة
+            const lines = issueData.items.map((i: any) => ({ 
+                issue_id: currentIssueId,
+                item_name: i.item_name,
+                quantity: Number(i.quantity) || 0,
+                unit: i.unit || 'وحدة',
+                unit_price: Number(i.unit_price) || 0,
+                total_price: Number(i.total_price) || 0,
+                boq_id: i.boq_id || null
+            }));
+            const { error: lErr } = await supabase.from('material_issue_lines').insert(lines);
+            if (lErr) throw lErr;
+
+            // الترحيل المحاسبي الفوري
+            const { error: rpcError } = await supabase.rpc('rpc_post_material_issue', { p_id: currentIssueId });
+            if (rpcError) throw new Error("تم الحفظ ولكن فشل الترحيل: " + rpcError.message);
         },
         onSuccess: () => {
-            showToast(editingIssueId ? "تم تحديث الإذن بنجاح ✨" : "تم حفظ إذن الصرف كمسودة ⏳", "success");
+            showToast("تم حفظ إذن الصرف وترحيله بنجاح ✨", "success");
             setIsModalOpen(false);
             setEditingIssueId(null);
             setIssueData(initialIssueState);
-            setSelectedIds([]); // تفريغ التحديد بعد الحفظ
+            setSelectedIds([]); 
             queryClient.invalidateQueries({ queryKey: ['material_issues_list'] });
         },
         onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
     });
 
-    // ⚙️ دالة الأكشنز الجماعية (Batch Actions)
+    // ⚙️ العمليات الجماعية (ترحيل، فك، حذف)
     const actionMutation = useMutation({
-        mutationFn: async ({ action, ids }: { action: string, ids: string[] }) => {
+        mutationFn: async ({ action }: { action: 'post' | 'unpost' | 'delete' }) => {
+             // 🧠 استخراج أيدي الإذن الأب بدون تكرار
+             const uniqueIssueIds = Array.from(new Set(
+                issues
+                    .filter((d: any) => selectedIds.includes(d.id))
+                    .map((d: any) => d.issue_id)
+                    .filter(Boolean)
+            ));
+
+            if (uniqueIssueIds.length === 0) return;
+
             let rpcName = '';
             if (action === 'post') rpcName = 'rpc_post_material_issue';
             if (action === 'unpost') rpcName = 'rpc_unpost_material_issue';
             if (action === 'delete') rpcName = 'rpc_delete_material_issue';
 
-            // تنفيذ الـ RPC لكل الـ IDs المحددة في نفس الوقت
-            const promises = ids.map(id => supabase.rpc(rpcName, { p_id: id }));
-            const results = await Promise.all(promises);
-            
-            // فحص الأخطاء
-            const firstError = results.find(r => r.error);
-            if (firstError) throw firstError.error;
+            for (const rId of uniqueIssueIds) {
+                const { error } = await supabase.rpc(rpcName, { p_id: rId });
+                if (error) throw error;
+            }
         },
         onSuccess: (_, variables) => {
-            const msg = variables.action === 'delete' ? "تم الحذف النهائي 🗑️" : "تمت العملية بنجاح ✅";
+            const msg = variables.action === 'delete' ? "تم الحذف النهائي للفواتير המحددة 🗑️" : "تمت العملية بنجاح ✅";
             showToast(msg, "success");
-            setSelectedIds([]); // تفريغ التحديد بعد العملية
+            setSelectedIds([]); 
             queryClient.invalidateQueries({ queryKey: ['material_issues_list'] });
         },
         onError: (err: any) => showToast(`فشلت العملية: ${err.message}`, "error")
@@ -191,18 +213,30 @@ export function useMaterialIssuesLogic() {
     return {
         issues, isLoading, 
         isModalOpen, setIsModalOpen, 
-        isPrintModalOpen, setIsPrintModalOpen,
-        printReceiptId, setPrintReceiptId,
         issueData, setIssueData,
         selectedIds, setSelectedIds, 
-        editingIssueId, // 👈 تم التصدير للواجهة والمودال
-        handleOpenEdit, // 👈 تم التصدير للواجهة للفتح ببيانات التعديل
+        editingIssueId, setEditingIssueId,
+        handleOpenEdit, 
         handleItemChange, handleRemoveItem,
         handleSave: () => saveIssueMutation.mutate(),
         
-        handleBatchAction: (action: string) => actionMutation.mutate({ action, ids: selectedIds }), 
+        // نظام التشيك بوكس
+        handleSelectAll: (e: any) => {
+            if (e.target.checked) {
+                const allLineIds = issues.map((d: any) => d.id).filter(Boolean);
+                setSelectedIds(allLineIds as string[]);
+            } else {
+                setSelectedIds([]);
+            }
+        },
+        handleSelectRow: (id: string) => {
+            setSelectedIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+        },
+
+        handleBatchAction: (action: 'post' | 'unpost' | 'delete') => actionMutation.mutate({ action }), 
         isActionPending: actionMutation.isPending,
         
-        addItem: () => setIssueData({...issueData, items: [...issueData.items, {item_name:'', quantity:1, unit:'وحدة', unit_price:0, total_price:0}]})
+        addItem: () => setIssueData({...issueData, items: [...issueData.items, {item_name:'', quantity:1, unit:'وحدة', unit_price:0, total_price:0, boq_id: null}]}),
+        openAddModal: () => { setIssueData(initialIssueState); setEditingIssueId(null); setIsModalOpen(true); }
     };
 }
