@@ -34,28 +34,53 @@ export const useDashboardLogic = () => {
   const query = useQuery({
     queryKey: ['dashboard_stats_comprehensive'],
     queryFn: async () => {
-      // 1. 📡 سحب كافة البيانات المطلوبة للرادار والماليات
+      // 1. 📡 سحب كافة البيانات
       const [
         expenses, invoices, labor, payments, receipts, advances, deductions, projects,
-        journalLines, accounts // 👈 الجديد لحساب الأصول والخصوم
+        journalLines, accounts, subClaims, materialReceipts
       ] = await Promise.all([
         fetchAllForDashboard('expenses', 'total_price, is_posted, main_category'),
         fetchAllForDashboard('invoices', 'total_amount, status'), 
-        fetchAllForDashboard('labor_daily_logs', 'daily_wage, is_posted'),
-        fetchAllForDashboard('payment_vouchers', 'amount, is_posted, voucher_number'),
+        fetchAllForDashboard('labor_daily_logs', 'daily_wage, attendance_value, is_posted'),
+        fetchAllForDashboard('payment_vouchers', 'amount, is_posted, status'),
         fetchAllForDashboard('receipt_vouchers', 'amount, status'), 
         fetchAllForDashboard('emp_adv', 'amount, is_posted'),
         fetchAllForDashboard('emp_ded', 'amount, is_posted'),
-        fetchAllForDashboard('projects', 'id', [{ col: 'status', val: 'مكتمل', op: 'neq' }]),
+        // 🚀 سحب كل المشاريع (عشان نجيب كل الحالات)
+        fetchAllForDashboard('projects', 'id, status'),
         fetchAllForDashboard('journal_lines', 'debit, credit, account_id'),
-        fetchAllForDashboard('accounts', 'id, account_type')
+        fetchAllForDashboard('accounts', 'id, account_type'),
+        fetchAllForDashboard('sub_claims', 'net_amount, is_posted, status'),
+        fetchAllForDashboard('material_receipts', 'total_amount, is_posted, status')
       ]);
 
-      // --- 🏛️ حساب المركز المالي (الأصول والالتزامات) ---
+      // --- 🏗️ تحليل حالات المشاريع والفلل ---
+      const projectStatusMap: Record<string, number> = {};
+      let activeProjectsCount = 0;
+
+      projects.forEach(p => {
+        let st = p.status || 'قيد الدراسة';
+        // توحيد بعض المسميات المتشابهة عشان الرسم البياني
+        if (st === 'متوقف') st = 'متوقف مؤقتا';
+        if (st === 'جاري تجهيز الموقع') st = 'تجهيز الموقع';
+        
+        projectStatusMap[st] = (projectStatusMap[st] || 0) + 1;
+        
+        // حساب المشاريع النشطة (اللي مش مكتملة ومش متوقفة)
+        if (st !== 'مكتمل' && !st.includes('متوقف')) {
+          activeProjectsCount++;
+        }
+      });
+
+      // تحويل خريطة الحالات لمصفوفة للعرض في الواجهة
+      const projectsStatusData = Object.entries(projectStatusMap)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+
+      // --- 🏛️ حساب المركز المالي ---
       let totalAssets = 0;
       let totalLiabilities = 0;
 
-      // إنشاء قاموس لأنواع الحسابات لتسريع البحث
       const accountTypesMap: Record<string, string> = {};
       accounts.forEach(acc => { accountTypesMap[acc.id] = acc.account_type; });
 
@@ -64,84 +89,109 @@ export const useDashboardLogic = () => {
         const debit = Number(line.debit || 0);
         const credit = Number(line.credit || 0);
 
-        // طبيعة الأصول (مدينة) -> تزيد بالمدين وتقل بالدائن
-        if (type.includes('أصول') || type.includes('Asset')) {
+        if (type.includes('أصول') || type.includes('Asset') || type.includes('مدين')) {
           totalAssets += (debit - credit);
         } 
-        // طبيعة الخصوم والالتزامات (دائنة) -> تزيد بالدائن وتقل بالمدين
-        else if (type.includes('خصوم') || type.includes('التزام') || type.includes('Liability')) {
+        else if (type.includes('خصوم') || type.includes('التزام') || type.includes('Liability') || type.includes('دائن')) {
           totalLiabilities += (credit - debit);
         }
       });
 
       // --- 🧮 إحصائيات الترحيل الشاملة ---
       const getPostingStats = (data: any[], postedKey: string = 'is_posted', postedVal: any = true) => {
-        const posted = data.filter(item => item[postedKey] === postedVal).length;
+        const posted = data.filter(item => {
+          if (Array.isArray(postedVal)) return postedVal.includes(item[postedKey]);
+          return item[postedKey] === postedVal || item[postedKey] === true; 
+        }).length;
         const pending = data.length - posted;
-        return [ { name: 'مرحل', value: posted }, { name: 'معلق', value: pending } ];
+        return [ { name: 'مرحل/معتمد', value: posted }, { name: 'معلق/مسودة', value: pending } ];
       };
+
+      const validStatuses = ['مُعتمد', 'مرحل', 'posted', 'معتمد'];
 
       const postingCharts = {
-        expenses: getPostingStats(expenses),
-        invoices: getPostingStats(invoices, 'status', 'مرحل'),
-        labor: getPostingStats(labor),
-        payments: getPostingStats(payments),
-        receipts: getPostingStats(receipts, 'status', 'مرحل'),
-        advances: getPostingStats(advances),
-        deductions: getPostingStats(deductions)
+        expenses: getPostingStats(expenses, 'is_posted', true),
+        invoices: getPostingStats(invoices, 'status', validStatuses),
+        labor: getPostingStats(labor, 'is_posted', true),
+        payments: getPostingStats(payments, 'is_posted', true),
+        receipts: getPostingStats(receipts, 'status', validStatuses),
+        advances: getPostingStats(advances, 'is_posted', true),
+        deductions: getPostingStats(deductions, 'is_posted', true),
+        subClaims: getPostingStats(subClaims, 'is_posted', true),
+        materialReceipts: getPostingStats(materialReceipts, 'is_posted', true) 
       };
 
-      // --- 🚨 الرادار الأمني الموجه (تنبيهات قابلة للضغط) ---
+      // --- 🚨 الرادار الأمني ---
       const alerts: any[] = [];
       
       const checkPending = (data: any[], label: string, route: string, postedKey: string = 'is_posted', postedVal: any = true) => {
-        const count = data.filter(item => item[postedKey] !== postedVal).length;
+        const count = data.filter(item => {
+          if (Array.isArray(postedVal)) return !postedVal.includes(item[postedKey]);
+          return item[postedKey] !== postedVal && item[postedKey] !== true;
+        }).length;
+
         if (count > 0) {
           alerts.push({ 
             title: `يوجد (${count}) ${label} غير مرحل يحتاج مراجعة`, 
             type: count > 10 ? 'danger' : 'warning',
-            route: route // 👈 المسار الذي سيتم التوجيه إليه
+            route: route 
           });
         }
       };
 
-      // ⚠️ تأكد من أن هذه المسارات تتطابق مع أسماء المجلدات في مجلد `app` لديك
-      checkPending(expenses, 'مصروفات عامة', '/expenses');
-      checkPending(invoices, 'مستخلصات عملاء', '/invoices', 'status', 'مرحل');
-      checkPending(labor, 'يوميات عمالة', '/labor_logs');
-      checkPending(payments, 'سندات صرف', '/payment_vouchers');
-      checkPending(receipts, 'سندات قبض', '/receipt_vouchers', 'status', 'مرحل');
-      checkPending(advances, 'سلف موظفين', '/emp_adv');
-      checkPending(deductions, 'جزاءات ومخالفات', '/emp_ded');
+      checkPending(expenses, 'مصروفات عامة', '/expenses', 'is_posted', true);
+      checkPending(invoices, 'مستخلصات عملاء', '/invoices', 'status', validStatuses); 
+      checkPending(subClaims, 'مستخلصات مقاولي باطن', '/sub_claims', 'is_posted', true); 
+      checkPending(materialReceipts, 'فواتير توريد خامات', '/materials', 'is_posted', true); 
+      checkPending(labor, 'يوميات عمالة', '/labor_logs', 'is_posted', true);
+      checkPending(payments, 'سندات صرف', '/payment_vouchers', 'is_posted', true);
+      checkPending(receipts, 'سندات قبض', '/receipt_vouchers', 'status', validStatuses); 
+      checkPending(advances, 'سلف موظفين', '/emp_adv', 'is_posted', true);
 
-      // --- 💰 الحسابات التشغيلية ---
-      const totalExpenses = expenses.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
+      // --- 💰 الحسابات التشغيلية الشاملة ---
+      const totalExpensesOnly = expenses.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
+      const totalSubContractors = subClaims.reduce((sum, item) => sum + Number(item.net_amount || 0), 0);
+      const totalMaterials = materialReceipts.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+      const totalExpenses = totalExpensesOnly + totalSubContractors + totalMaterials; 
       const totalInvoices = invoices.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
-      const totalWages = labor.reduce((sum, item) => sum + Number(item.daily_wage || 0), 0);
+      const totalWages = labor.reduce((sum, item) => sum + (Number(item.daily_wage || 0) * Number(item.attendance_value || 1)), 0);
 
       // --- 🍩 تجميع المصروفات للرسم البياني ---
       const categoryMap: Record<string, number> = {};
+      
       expenses.forEach(exp => {
-        const cat = exp.main_category || 'غير مصنف';
+        const cat = exp.main_category || 'مصروفات متنوعة';
         categoryMap[cat] = (categoryMap[cat] || 0) + Number(exp.total_price || 0);
       });
-      const expensesByCategory = Object.entries(categoryMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
+      
+      categoryMap['مقاولي الباطن'] = totalSubContractors;
+      categoryMap['توريد خامات'] = totalMaterials;
+
+      const expensesByCategory = Object.entries(categoryMap)
+        .map(([name, value]) => ({ name, value }))
+        .filter(item => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
 
       return {
         totals: {
-          totalExpenses, totalInvoices, totalWages, activeProjects: projects.length,
-          totalAssets, // 👈 الأصول
-          totalLiabilities // 👈 الالتزامات
+          totalExpenses, 
+          totalInvoices, 
+          totalWages, 
+          activeProjects: activeProjectsCount, // 👈 تم التحديث
+          totalAssets, 
+          totalLiabilities 
         },
+        projectsStatusData, // 👈 تصدير حالات المشاريع
         postingCharts,
         expensesByCategory,
         alerts,
         cashFlowData: [
-            { name: 'الشهر الحالي', income: totalInvoices * 0.4, expense: totalExpenses * 0.3 } // أمثلة للرسم
+            { name: 'إجمالي التراكمي', income: totalInvoices, expense: totalExpenses + totalWages } 
         ]
       };
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
   return {

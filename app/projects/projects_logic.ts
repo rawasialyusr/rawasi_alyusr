@@ -87,20 +87,22 @@ export function useProjectsLogic() {
       if (!currentProjectRecord.Property) return showToast("اسم العقار/المشروع مطلوب!", "error");
       
       const payload: any = {
-    project_id: selectedProject.id,
-    parent_id: record.item_type === 'فرعي' ? record.parent_id : null,
-    item_type: record.item_type || 'رئيسي',
-    boq_item_id: record.boq_item_id || null, // 👈 الخط الأحمر هيختفي من هنا
-    work_item: record.work_item,
-    unit: record.unit || 'مقطوعية',
-    contract_quantity: Number(record.contract_quantity) || 0,
-    unit_contract_price: Number(record.unit_contract_price) || 0,
-    estimated_labor_cost: Number(record.estimated_labor_cost) || 0,
-    estimated_operational_cost: Number(record.estimated_operational_cost) || 0,
-    estimated_expenses_cost: Number(record.estimated_expenses_cost) || 0, // 👈 ومن هنا
-    main_category: record.main_category || null, // 👈 ومن هنا
-    sub_category: record.sub_category || null // 👈 ومن هنا
-};
+          project_code: currentProjectRecord.project_code,
+          Property: currentProjectRecord.Property,
+          unit_type: currentProjectRecord.unit_type,
+          unit_area: currentProjectRecord.unit_area,
+          client_id: currentProjectRecord.client_id,
+          contract_value: currentProjectRecord.contract_value,
+          estimated_budget: currentProjectRecord.estimated_budget,
+          down_payment: currentProjectRecord.down_payment,
+          start_date: currentProjectRecord.start_date,
+          end_date: currentProjectRecord.end_date,
+          location_address: currentProjectRecord.location_address,
+          project_manager: currentProjectRecord.project_manager,
+          status: currentProjectRecord.status,
+          current_stage: currentProjectRecord.current_stage,
+          notes: currentProjectRecord.notes
+      };
 
       if (currentProjectRecord.id) {
           payload.id = currentProjectRecord.id;
@@ -115,7 +117,8 @@ export function useProjectsLogic() {
   const [isBoqModalOpen, setIsBoqModalOpen] = useState(false);
   const [currentBoqRecord, setCurrentBoqRecord] = useState<any>({
       item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, 
-      estimated_labor_cost: 0, estimated_operational_cost: 0
+      estimated_labor_cost: 0, estimated_operational_cost: 0,
+      start_date: '', end_date: '' // 👈 تمت الإضافة لتهيئة القيم
   });
 
   const saveBoqMutation = useMutation({
@@ -131,7 +134,13 @@ export function useProjectsLogic() {
               contract_quantity: Number(record.contract_quantity) || 0,
               unit_contract_price: Number(record.unit_contract_price) || 0,
               estimated_labor_cost: Number(record.estimated_labor_cost) || 0,
-              estimated_operational_cost: Number(record.estimated_operational_cost) || 0
+              estimated_operational_cost: Number(record.estimated_operational_cost) || 0,
+              boq_item_id: record.boq_item_id || null, 
+              estimated_expenses_cost: Number(record.estimated_expenses_cost) || 0, 
+              main_category: record.main_category || null, 
+              sub_category: record.sub_category || null,
+              start_date: record.start_date || null, // 👈 دعم الجدول الزمني
+              end_date: record.end_date || null      // 👈 دعم الجدول الزمني
           };
 
           if (record.id) {
@@ -165,6 +174,70 @@ export function useProjectsLogic() {
       },
       onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, "error")
   });
+
+  // 🚀 3. دالة السحب الذكي الجديدة (الاستيراد التلقائي)
+  const importFromLibrary = async (libraryItem: any) => {
+      if (!selectedProject) return;
+      setIsDetailsLoading(true);
+
+      try {
+          let parentId = null;
+          const existingPhase = projectDetails.boq.find(
+              (b: any) => b.item_type === 'رئيسي' && b.work_item === libraryItem.main_category
+          );
+
+          if (existingPhase) {
+              parentId = existingPhase.id;
+          } else {
+              const { data: newPhase, error: phaseErr } = await supabase
+                  .from('boq_budget')
+                  .insert([{
+                      project_id: selectedProject.id,
+                      item_type: 'رئيسي',
+                      work_item: libraryItem.main_category || 'مرحلة عامة',
+                      main_category: libraryItem.main_category || 'مرحلة عامة',
+                      sub_category: 'عام',
+                      start_date: null, // 👈 تهيئة
+                      end_date: null    // 👈 تهيئة
+                  }])
+                  .select()
+                  .single();
+
+              if (phaseErr) throw phaseErr;
+              parentId = newPhase.id;
+          }
+
+          const { error: itemErr } = await supabase
+              .from('boq_budget')
+              .insert([{
+                  project_id: selectedProject.id,
+                  parent_id: parentId, 
+                  item_type: 'فرعي',
+                  boq_item_id: libraryItem.id,
+                  work_item: libraryItem.item_name,
+                  unit: libraryItem.unit_of_measure || 'مقطوعية',
+                  contract_quantity: 0, 
+                  unit_contract_price: Number(libraryItem.default_unit_price) || 0,
+                  estimated_labor_cost: Number(libraryItem.default_labor_price) || 0,
+                  estimated_operational_cost: Number(libraryItem.default_material_price) || 0,
+                  estimated_expenses_cost: 0,
+                  main_category: libraryItem.main_category || 'بند عام',
+                  sub_category: libraryItem.sub_category || 'بند عام',
+                  start_date: null, // 👈 ينتظر من المهندس إدخالها لاحقاً
+                  end_date: null    // 👈 ينتظر من المهندس إدخالها لاحقاً
+              }]);
+
+          if (itemErr) throw itemErr;
+
+          showToast(`تم سحب [${libraryItem.item_name}] ותسكينه بنجاح! 🎯`, "success");
+          loadProjectDetails(selectedProject); 
+
+      } catch (err: any) {
+          showToast(`فشل السحب التلقائي: ${err.message}`, "error");
+      } finally {
+          setIsDetailsLoading(false);
+      }
+  };
 
   const runDiagnostics = async () => {
     if (!selectedProject) {
@@ -244,7 +317,6 @@ export function useProjectsLogic() {
         supabase.from('expenses').select('*, payee:partners!payee_id(name)').eq('project_id', project.id), 
         supabase.from('labor_daily_logs').select('*, worker:partners!worker_partner_id(name)').eq('project_id', project.id),
         supabase.from('invoices').select('*').eq('project_id', project.id),
-        // 🎯 السطر الجديد: سحب مستخلصات مقاولي الباطن المربوطة بالعقار ده
         supabase.from('sub_claims').select('*, contractor:partners!contractor_id(name)').eq('project_id', project.id)
       ]);
 
@@ -265,13 +337,11 @@ export function useProjectsLogic() {
           display_type: `مستخلص مقاول: ${clm.contractor?.name || 'غير معروف'}`,
           description: `مستخلص أعمال مقاولة باطن - ${clm.claim_number}`,
           final_amount: Number(clm.net_amount || 0),
-          allocatedAmount: Number(clm.net_amount || 0) // لتوحيد العرض في الجدول
+          allocatedAmount: Number(clm.net_amount || 0) 
       }));
 
-      // 🎯 دمج النوعين مع بعض عشان يظهروا في تاب الماليّات
       const allFinancials = [...processedInvoices, ...processedSubClaims];
 
-      // بقية الحسابات (العمالة والمصروفات)
       const laborLogs = laborRes.data || [];
       const todayStr = new Date().toISOString().split('T')[0];
       const laborStats = {
@@ -285,7 +355,7 @@ export function useProjectsLogic() {
         stages: stagesRes.data || [],
         boq: boqData,
         expenses: expRes.data || [], 
-        invoices: allFinancials, // 🚀 هنا بقى فيه كل حاجة (عام + مقاولين)
+        invoices: allFinancials, 
         laborStats: laborStats,
         inspections: [] 
       });
@@ -463,6 +533,8 @@ export function useProjectsLogic() {
     setCurrentBoqRecord,
     handleSaveBoq: (data: any) => saveBoqMutation.mutate(data),
     deleteBoqMutation,
-    isSavingBoq: saveBoqMutation.isPending 
+    isSavingBoq: saveBoqMutation.isPending,
+    
+    importFromLibrary 
   };
 }
