@@ -78,6 +78,18 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
              </div>
            </div>
 
+           {/* 🚀 الحقول الجديدة: المهندس المسئول */}
+           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
+             <div>
+                <label className="modal-label" style={{ color: '#0f172a' }}>👨‍🔧 المهندس المسئول (بالموقع)</label>
+                <input type="text" className="glass-input-field" placeholder="اسم المهندس المشرف" value={logic.currentProjectRecord.engineer_in_charge || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, engineer_in_charge: e.target.value})} />
+             </div>
+             <div>
+                <label className="modal-label" style={{ color: '#0f172a' }}>📱 جوال المهندس</label>
+                <input type="text" className="glass-input-field" placeholder="مثال: 05xxxxxxxx" value={logic.currentProjectRecord.engineer_phone || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, engineer_phone: e.target.value})} />
+             </div>
+           </div>
+
            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
              <div>
                 <label className="modal-label">📅 تاريخ البدء</label>
@@ -136,7 +148,7 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
              </button>
              <button onClick={() => {
                  logic.setIsAddProjectModalOpen(false);
-                 logic.setCurrentProjectRecord({ project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', estimated_budget: '', down_payment: '', start_date: '', end_date: '', location_address: '', project_manager: '', status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: '' });
+                 logic.setCurrentProjectRecord({ project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', estimated_budget: '', down_payment: '', start_date: '', end_date: '', location_address: '', project_manager: '', engineer_in_charge: '', engineer_phone: '', status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: '' });
              }} className="btn-glass-cancel" style={{ flex: 1 }}>
                إلغاء
              </button>

@@ -39,8 +39,9 @@ export function useProjectsLogic() {
   const defaultProjectRecord = {
       project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', 
       estimated_budget: '', down_payment: '', start_date: '', end_date: '', 
-      location_address: '', project_manager: '', status: 'قيد الدراسة', 
-      current_stage: 'تجهيز الموقع', notes: ''
+      location_address: '', project_manager: '', 
+      engineer_in_charge: '', engineer_phone: '', // 👈 الحقول الجديدة
+      status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: ''
   };
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [currentProjectRecord, setCurrentProjectRecord] = useState<any>(defaultProjectRecord);
@@ -87,21 +88,23 @@ export function useProjectsLogic() {
       if (!currentProjectRecord.Property) return showToast("اسم العقار/المشروع مطلوب!", "error");
       
       const payload: any = {
-          project_code: currentProjectRecord.project_code,
+          project_code: currentProjectRecord.project_code || null,
           Property: currentProjectRecord.Property,
-          unit_type: currentProjectRecord.unit_type,
-          unit_area: currentProjectRecord.unit_area,
-          client_id: currentProjectRecord.client_id,
-          contract_value: currentProjectRecord.contract_value,
-          estimated_budget: currentProjectRecord.estimated_budget,
-          down_payment: currentProjectRecord.down_payment,
-          start_date: currentProjectRecord.start_date,
-          end_date: currentProjectRecord.end_date,
-          location_address: currentProjectRecord.location_address,
-          project_manager: currentProjectRecord.project_manager,
-          status: currentProjectRecord.status,
-          current_stage: currentProjectRecord.current_stage,
-          notes: currentProjectRecord.notes
+          unit_type: currentProjectRecord.unit_type || null,
+          unit_area: Number(currentProjectRecord.unit_area) || 0,
+          client_id: currentProjectRecord.client_id || null, 
+          contract_value: Number(currentProjectRecord.contract_value) || 0,
+          estimated_budget: Number(currentProjectRecord.estimated_budget) || 0,
+          down_payment: Number(currentProjectRecord.down_payment) || 0,
+          start_date: currentProjectRecord.start_date || null, 
+          end_date: currentProjectRecord.end_date || null,
+          location_address: currentProjectRecord.location_address || null,
+          project_manager: currentProjectRecord.project_manager || null,
+          engineer_in_charge: currentProjectRecord.engineer_in_charge || null, // 👈 الحقل الجديد
+          engineer_phone: currentProjectRecord.engineer_phone || null,         // 👈 الحقل الجديد
+          status: currentProjectRecord.status || 'قيد الدراسة',
+          current_stage: currentProjectRecord.current_stage || 'تجهيز الموقع',
+          notes: currentProjectRecord.notes || null
       };
 
       if (currentProjectRecord.id) {
@@ -118,7 +121,7 @@ export function useProjectsLogic() {
   const [currentBoqRecord, setCurrentBoqRecord] = useState<any>({
       item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, 
       estimated_labor_cost: 0, estimated_operational_cost: 0,
-      start_date: '', end_date: '' // 👈 تمت الإضافة لتهيئة القيم
+      start_date: '', end_date: '' 
   });
 
   const saveBoqMutation = useMutation({
@@ -139,8 +142,8 @@ export function useProjectsLogic() {
               estimated_expenses_cost: Number(record.estimated_expenses_cost) || 0, 
               main_category: record.main_category || null, 
               sub_category: record.sub_category || null,
-              start_date: record.start_date || null, // 👈 دعم الجدول الزمني
-              end_date: record.end_date || null      // 👈 دعم الجدول الزمني
+              start_date: record.start_date || null, 
+              end_date: record.end_date || null 
           };
 
           if (record.id) {
@@ -162,7 +165,6 @@ export function useProjectsLogic() {
       }
   });
 
-  // 🗑️ دالة حذف بند من المقايسة 
   const deleteBoqMutation = useMutation({
       mutationFn: async (id: string) => {
           const { error } = await supabase.from('boq_budget').delete().eq('id', id);
@@ -170,12 +172,11 @@ export function useProjectsLogic() {
       },
       onSuccess: () => {
           showToast("تم حذف البند من المقايسة بنجاح 🗑️", "success");
-          if (selectedProject) loadProjectDetails(selectedProject); // تحديث الجدول فوراً
+          if (selectedProject) loadProjectDetails(selectedProject); 
       },
       onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, "error")
   });
 
-  // 🚀 3. دالة السحب الذكي الجديدة (الاستيراد التلقائي)
   const importFromLibrary = async (libraryItem: any) => {
       if (!selectedProject) return;
       setIsDetailsLoading(true);
@@ -197,8 +198,8 @@ export function useProjectsLogic() {
                       work_item: libraryItem.main_category || 'مرحلة عامة',
                       main_category: libraryItem.main_category || 'مرحلة عامة',
                       sub_category: 'عام',
-                      start_date: null, // 👈 تهيئة
-                      end_date: null    // 👈 تهيئة
+                      start_date: null, 
+                      end_date: null 
                   }])
                   .select()
                   .single();
@@ -223,13 +224,13 @@ export function useProjectsLogic() {
                   estimated_expenses_cost: 0,
                   main_category: libraryItem.main_category || 'بند عام',
                   sub_category: libraryItem.sub_category || 'بند عام',
-                  start_date: null, // 👈 ينتظر من المهندس إدخالها لاحقاً
-                  end_date: null    // 👈 ينتظر من المهندس إدخالها لاحقاً
+                  start_date: null, 
+                  end_date: null 
               }]);
 
           if (itemErr) throw itemErr;
 
-          showToast(`تم سحب [${libraryItem.item_name}] ותسكينه بنجاح! 🎯`, "success");
+          showToast(`تم سحب [${libraryItem.item_name}] وتسكينه بنجاح! 🎯`, "success");
           loadProjectDetails(selectedProject); 
 
       } catch (err: any) {
@@ -310,7 +311,6 @@ export function useProjectsLogic() {
     setIsDetailsLoading(true);
 
     try {
-      // 🚀 سحب البيانات من كل الجداول بما فيها مستخلصات المقاولين الجديدة
       const [stagesRes, boqRes, expRes, laborRes, invRes, subClaimsRes] = await Promise.all([
         supabase.from('project_stages').select('*').eq('project_id', project.id),
         supabase.from('boq_budget').select('*').eq('project_id', project.id), 
@@ -322,7 +322,6 @@ export function useProjectsLogic() {
 
       const boqData = boqRes.data || [];
 
-      // 1️⃣ معالجة الفواتير العامة (Invoices)
       const processedInvoices = (invRes.data || []).map((inv: any) => ({
           ...inv,
           display_number: inv.invoice_number,
@@ -330,7 +329,6 @@ export function useProjectsLogic() {
           final_amount: Number(inv.net_amount || inv.amount || 0)
       }));
 
-      // 2️⃣ معالجة مستخلصات المقاولين (Sub Claims) وتحويلها لنفس شكل الجدول
       const processedSubClaims = (subClaimsRes.data || []).map((clm: any) => ({
           ...clm,
           display_number: clm.claim_number,

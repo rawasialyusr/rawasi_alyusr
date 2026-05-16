@@ -1,5 +1,6 @@
 "use client";
 import React, { useMemo, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useProjectsLogic } from './projects_logic';
 import BoqFormModal from './BoqFormModal';
 import AddProjectModal from './AddProjectModal'; 
@@ -17,6 +18,11 @@ export default function AdvancedProjectsPage() {
     const [isPrintOpen, setIsPrintOpen] = useState(false);
     const [selectedPartnerName, setSelectedPartnerName] = useState('');
 
+    // 🚀 [إضافة جديدة] حالة التحكم في نافذة التأكيد قبل الحذف
+    const [deleteAlert, setDeleteAlert] = useState<{isOpen: boolean, type: string, id: string | null, title: string, message: string}>({
+        isOpen: false, type: '', id: null, title: '', message: ''
+    });
+
     useEffect(() => { setMounted(true); }, []);
 
     // 🚀 حساب المسميات بشكل ديناميكي بناءً على حالة التواريخ
@@ -28,7 +34,7 @@ export default function AdvancedProjectsPage() {
     // 🎛️ تجهيز بيانات الجداول للـ RawasiSmartTable 
     // =========================================================================
     
-    // 🎯 [تحديث جديد] ذكاء عرض المقايسة لتفادي اختفاء البيانات
+    // 🎯 ذكاء عرض المقايسة لتفادي اختفاء البيانات
     const flatBoqData = useMemo(() => {
         if (!logic.projectDetails?.boq || logic.projectDetails.boq.length === 0) return [];
         
@@ -61,18 +67,28 @@ export default function AdvancedProjectsPage() {
               return <span style={{ paddingRight: '25px', color: '#475569', fontWeight: 700 }}>↪️ {row.work_item}</span>;
           }
       },
+      // 🚀 العمود الجديد: عرض الجدول الزمني من الـ Schema المحدثة
+      { 
+          header: 'الجدول الزمني', 
+          render: (row: any) => (
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, minWidth: '120px' }}>
+                  <div style={{ marginBottom: '4px' }}>بداية: <strong style={{color: THEME.success}}>{row.start_date || '---'}</strong></div>
+                  <div>نهاية: <strong style={{color: THEME.danger}}>{row.end_date || '---'}</strong></div>
+              </div>
+          ) 
+      },
       { header: 'الكمية', render: (row: any) => <span style={{ fontWeight: 900 }}>{row.contract_quantity} {row.unit}</span> },
       { header: 'سعر الوحدة', render: (row: any) => <span style={{ fontWeight: 900 }}>{formatCurrency(row.unit_contract_price)}</span> },
       { header: 'عمالة تقديري', render: (row: any) => <span style={{ fontWeight: 900, color: THEME.warning }}>{formatCurrency(row.estimated_labor_cost)}</span> },
       { header: 'تشغيل/خامات تقديري', render: (row: any) => <span style={{ fontWeight: 900, color: THEME.success }}>{formatCurrency(row.estimated_operational_cost)}</span> },
-      // 🚀 العمود الجديد: الإجراءات (تعديل وحذف)
+      // الإجراءات (تعديل وحذف)
       {
           header: 'الإجراءات',
           render: (row: any) => (
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
                   <button 
                       onClick={() => {
-                          logic.setCurrentBoqRecord(row); // 🎯 سحب داتا البند للمودال
+                          logic.setCurrentBoqRecord(row); 
                           logic.setIsBoqModalOpen(true);
                       }} 
                       style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', transition: '0.2s' }}
@@ -82,9 +98,14 @@ export default function AdvancedProjectsPage() {
                   </button>
                   <button 
                       onClick={() => {
-                          if(confirm('هل أنت متأكد من حذف هذا البند نهائياً؟')) {
-                              logic.deleteBoqMutation.mutate(row.id);
-                          }
+                          // 🚀 استدعاء نافذة التأكيد المخصصة بدل المتصفح
+                          setDeleteAlert({
+                              isOpen: true,
+                              type: 'boq',
+                              id: row.id,
+                              title: 'حذف بند مقايسة',
+                              message: `هل أنت متأكد من حذف البند "${row.work_item}"؟`
+                          });
                       }} 
                       style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.8, transition: '0.2s' }}
                       title="حذف البند"
@@ -96,7 +117,6 @@ export default function AdvancedProjectsPage() {
       }
     ];
 
-    // 🚀 [تمت الإضافة هنا] تعريف عواميد جدول الخامات
     const materialsColumns = [
         { header: 'تاريخ السحب', render: (row: any) => row.date || row.created_at?.split('T')[0] || '---' },
         { header: 'اسم الخامة', render: (row: any) => <strong style={{ color: THEME.primary }}>{row.material_name || row.item_name}</strong> },
@@ -111,7 +131,6 @@ export default function AdvancedProjectsPage() {
         header: 'الرقم / البيان', 
         render: (row: any) => (
             <div>
-                {/* 🚀 بيقرأ الرقم سواء كان فاتورة عامة أو مستخلص مقاول CLM */}
                 <strong style={{ color: THEME.primary }}>{row.display_number || row.invoice_number || '---'}</strong><br/>
                 <span style={{ fontSize:'11px', color:'#64748b', fontWeight: 800 }}>{row.display_type || 'مستخلص عام'}</span>
             </div>
@@ -121,7 +140,6 @@ export default function AdvancedProjectsPage() {
         header: 'المبلغ الصافي المعتمد', 
         render: (row: any) => (
             <span style={{ fontWeight: 900, color: THEME.success, fontSize: '14px' }}>
-                {/* 🚀 بيقرأ الصافي المبعوت من اللوجيك المحدث */}
                 {formatCurrency(row.final_amount || row.net_amount || row.amount || 0)}
             </span>
         )
@@ -137,7 +155,7 @@ export default function AdvancedProjectsPage() {
         
         {!logic.selectedProject && (
             <button onClick={() => {
-                logic.setCurrentProjectRecord({ project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', estimated_budget: '', down_payment: '', start_date: '', end_date: '', location_address: '', project_manager: '', status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: '' });
+                logic.setCurrentProjectRecord({ project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', estimated_budget: '', down_payment: '', start_date: '', end_date: '', location_address: '', project_manager: '', engineer_in_charge: '', engineer_phone: '', status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: '' });
                 logic.setIsAddProjectModalOpen(true);
             }} className="btn-main-glass gold">
                 ➕ إضافة مشروع جديد
@@ -155,16 +173,21 @@ export default function AdvancedProjectsPage() {
                 </button>
 
                 <button onClick={() => {
-                    if(confirm('هل أنت متأكد من حذف هذا المشروع بكل بياناته؟ لا يمكن التراجع!')) {
-                        logic.deleteProjectMutation.mutate(logic.selectedProject.id);
-                    }
+                    // 🚀 استدعاء نافذة التأكيد المخصصة لحذف المشروع
+                    setDeleteAlert({
+                        isOpen: true,
+                        type: 'project',
+                        id: logic.selectedProject.id,
+                        title: 'حذف المشروع نهائياً',
+                        message: `هل أنت متأكد من حذف العقار "${logic.selectedProject.Property}" بكل بياناته وحساباته ومقايساته؟ هذا الإجراء لا يمكن التراجع عنه!`
+                    });
                 }} className="btn-main-glass red">
                     🗑️ حذف المشروع نهائياً
                 </button>
 
                 {logic.activeTab === 'boq' && (
                     <button onClick={() => {
-                        logic.setCurrentBoqRecord({ item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, estimated_labor_cost: 0, estimated_operational_cost: 0 });
+                        logic.setCurrentBoqRecord({ item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, estimated_labor_cost: 0, estimated_operational_cost: 0, start_date: '', end_date: '' });
                         logic.setIsBoqModalOpen(true);
                     }} className="btn-main-glass gold">
                         ➕ إضافة بند للمقايسة (WBS)
@@ -232,7 +255,7 @@ export default function AdvancedProjectsPage() {
                   <div className="summary-glass-card">
                       <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>{logic.selectedProject ? 'المشروع الحالي 📍' : 'إجمالي المشاريع النشطة 🏗️'}</span>
                       <div className="val" style={{fontSize:'22px', fontWeight:900, color: THEME.primary, marginTop:'5px'}}>
-                          {logic.selectedProject ? logic.selectedProject.project_code : logic.projects.length}
+                          {logic.selectedProject ? logic.selectedProject.project_code || 'بدون كود' : logic.projects.length}
                       </div>
                   </div>
               }
@@ -292,7 +315,15 @@ export default function AdvancedProjectsPage() {
                                    🏢 {proj.Property} 
                                    {proj.unit_type && <span style={{ fontSize: '13px', color: THEME.goldAccent, marginRight: '8px' }}>({proj.unit_type})</span>}
                                </h3>
-                               <p style={{ margin: '0 0 20px 0', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>العميل: {proj.client?.name || proj.client_name || '---'}</p>
+                               <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>العميل: {proj.client?.name || proj.client_name || '---'}</p>
+                               
+                               {/* 🚀 إظهار المهندس المسئول في الكارت من الـ Schema المحدثة */}
+                               {(proj.engineer_in_charge || proj.engineer_phone) && (
+                                  <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 800, color: '#334155', marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
+                                      <span>👨‍🔧 {proj.engineer_in_charge || 'غير محدد'}</span>
+                                      {proj.engineer_phone && <span>📱 {proj.engineer_phone}</span>}
+                                  </div>
+                               )}
 
                                <div style={{ background: 'rgba(255,255,255,0.5)', padding: '15px', borderRadius: '16px', marginBottom: '20px' }}>
                                    <div className="stat-row">
@@ -331,11 +362,19 @@ export default function AdvancedProjectsPage() {
           ) : (
               <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
                 
+                {/* 🚀 تحديث الهيدر لإظهار بيانات المهندس المسئول */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', background: 'rgba(255,255,255,0.4)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.5)' }}>
-                    <h2 style={{ margin: 0, fontWeight: 900, color: THEME.coffeeDark, fontSize: '24px' }}>
-                        🏢 {logic.selectedProject.Property}
-                        {logic.selectedProject.unit_type && <span style={{ fontSize: '16px', color: THEME.goldAccent, marginRight: '10px' }}>- {logic.selectedProject.unit_type}</span>}
-                    </h2>
+                    <div>
+                        <h2 style={{ margin: 0, fontWeight: 900, color: THEME.coffeeDark, fontSize: '24px' }}>
+                            🏢 {logic.selectedProject.Property}
+                            {logic.selectedProject.unit_type && <span style={{ fontSize: '16px', color: THEME.goldAccent, marginRight: '10px' }}>- {logic.selectedProject.unit_type}</span>}
+                        </h2>
+                        {/* 👨‍🔧 عرض المهندس تحت العنوان */}
+                        <div style={{ display: 'flex', gap: '20px', marginTop: '10px', fontSize: '13px', fontWeight: 800, color: '#475569' }}>
+                            {logic.selectedProject.engineer_in_charge && <span>👨‍🔧 المهندس المسئول: <strong style={{color: THEME.primary}}>{logic.selectedProject.engineer_in_charge}</strong></span>}
+                            {logic.selectedProject.engineer_phone && <span>📱 جوال: <strong style={{color: THEME.primary}}>{logic.selectedProject.engineer_phone}</strong></span>}
+                        </div>
+                    </div>
                     
                     <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                         <span style={{ fontSize: '13px', fontWeight: 900, color: '#64748b' }}>تغيير حالة المشروع:</span>
@@ -360,7 +399,7 @@ export default function AdvancedProjectsPage() {
 
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
                   <TabButton active={logic.activeTab === 'overview'} onClick={() => logic.setActiveTab('overview')} text="📊 النظرة العامة و KPIs" />
-                  <TabButton active={logic.activeTab === 'boq'} onClick={() => logic.setActiveTab('boq')} text="📋 المقايسات (WBS)" />
+                  <TabButton active={logic.activeTab === 'boq'} onClick={() => logic.setActiveTab('boq')} text="📋 المقايسات والجدول الزمني" />
                   <TabButton active={logic.activeTab === 'materials'} onClick={() => logic.setActiveTab('materials')} text="🧱 الخامات المسحوبة" />
                   <TabButton active={logic.activeTab === 'financials'} onClick={() => logic.setActiveTab('financials')} text="💰 المستخلصات والماليات" />
                   <TabButton active={logic.activeTab === 'qc'} onClick={() => logic.setActiveTab('qc')} text="📸 الجودة والصور" />
@@ -462,6 +501,40 @@ export default function AdvancedProjectsPage() {
             )}
 
             <AddProjectModal logic={logic} mounted={mounted} />
+
+            {/* 🚀 نافذة التأكيد الزجاجية (Custom Delete Modal) */}
+            {mounted && deleteAlert.isOpen && createPortal(
+                <div style={{ position: 'fixed', inset: 0, zIndex: 99999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(10px)', direction: 'rtl' }}>
+                    <div style={{ background: 'white', padding: '35px', borderRadius: '24px', maxWidth: '450px', width: '90%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid #fee2e2', animation: 'fadeIn 0.2s ease-out' }}>
+                        <div style={{ fontSize: '55px', marginBottom: '15px', animation: 'pulse-red 2s infinite' }}>⚠️</div>
+                        <h3 style={{ color: THEME.danger, fontWeight: 900, fontSize: '22px', marginBottom: '15px' }}>{deleteAlert.title}</h3>
+                        <p style={{ color: '#475569', fontSize: '15px', fontWeight: 800, marginBottom: '30px', lineHeight: 1.6 }}>{deleteAlert.message}</p>
+                        
+                        <div style={{ display: 'flex', gap: '15px' }}>
+                            <button 
+                                onClick={() => {
+                                    if (deleteAlert.type === 'project' && deleteAlert.id) logic.deleteProjectMutation.mutate(deleteAlert.id);
+                                    if (deleteAlert.type === 'boq' && deleteAlert.id) logic.deleteBoqMutation.mutate(deleteAlert.id);
+                                    setDeleteAlert({ isOpen: false, type: '', id: null, title: '', message: '' });
+                                }} 
+                                style={{ flex: 1, background: THEME.danger, color: 'white', padding: '14px', borderRadius: '14px', border: 'none', fontWeight: 900, fontSize: '15px', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}
+                            >
+                                نعم، تأكيد الحذف
+                            </button>
+                            <button 
+                                onClick={() => setDeleteAlert({ isOpen: false, type: '', id: null, title: '', message: '' })} 
+                                style={{ flex: 1, background: '#f1f5f9', color: '#64748b', padding: '14px', borderRadius: '14px', border: 'none', fontWeight: 900, fontSize: '15px', cursor: 'pointer', transition: '0.2s' }}
+                            >
+                                إلغاء والتراجع
+                            </button>
+                        </div>
+                    </div>
+                    <style>{`
+                        @keyframes pulse-red { 0% { transform: scale(0.95); } 50% { transform: scale(1.1); } 100% { transform: scale(0.95); } }
+                    `}</style>
+                </div>,
+                document.body
+            )}
 
         </MasterPage>
       </div>

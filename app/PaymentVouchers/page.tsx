@@ -10,11 +10,16 @@ import SecureAction from '@/components/SecureAction';
 import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
 import RawasiSmartTable from '@/components/rawasismarttable';
+import { useConfirm } from '@/components/ConfirmContext';
+
 
 import PaymentVoucherModal from './PaymentVoucherModal'; 
 import PaymentPrintModal from './PaymentPrintModal'; 
 
 export default function PaymentVouchersPage() {
+  const { showConfirm } = useConfirm();
+
+    
   const logic = usePaymentVouchersLogic();
   const [mounted, setMounted] = useState(false); 
   const { can, loading: permsLoading } = usePermissions();
@@ -170,7 +175,18 @@ export default function PaymentVouchersPage() {
               <button className="btn-main-glass yellow" onClick={logic.actions.handleUnpostSelected}>↩️ فك الترحيل</button>
             </SecureAction>
             <SecureAction module="payments" action="delete">
-              <button className="btn-main-glass red" onClick={logic.actions.handleDeleteSelected}>🗑️ حذف نهائي</button>
+              <button className="btn-main-glass red" onClick={() => {
+                  showConfirm({
+                      title: 'حذف السجلات نهائياً',
+                      message: `هل أنت متأكد من حذف عدد (${logic.state.selectedIds.length}) سند صرف بشكل نهائي؟ هذا الإجراء لا يمكن التراجع عنه.`,
+                      type: 'danger',
+                      onConfirm: () => {
+                          logic.actions.handleDeleteSelected();
+                      }
+                  });
+              }}>
+                🗑️ حذف نهائي
+              </button>
             </SecureAction>
           </div>
         )}

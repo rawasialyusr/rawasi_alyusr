@@ -14,6 +14,9 @@ import { PermissionsProvider } from '@/lib/PermissionsContext';
 // 🚀 1. استدعاء محرك الأوفلاين والكاش الجديد (V9)
 import QueryProvider from '../components/QueryProvider';
 
+// 🚀 2. استدعاء خدمة رسائل التأكيد المخصصة (V11)
+import { ConfirmProvider } from '../components/ConfirmContext'; 
+
 const cairo = Cairo({ 
   subsets: ["arabic"],
   weight: ["400", "500", "700", "900"], // أضفنا وزن 500 للجماليات
@@ -110,20 +113,23 @@ export default function RootLayout({
             <QueryProvider>
                 <Providers>
                     <ToastProvider>
-                        <AutoLogoutWrapper>
-                            <AuthGuard> 
-                                <PermissionsProvider>
-                                    <SidebarProvider> 
-                                        {/* LayoutClient هو المتحكم في حركة السايد بار والصفحة */}
-                                        <LayoutClient>
-                                            <div style={{ position: 'relative', zIndex: 1 }}>
-                                                {children}
-                                            </div>
-                                        </LayoutClient>
-                                    </SidebarProvider> 
-                                </PermissionsProvider>
-                            </AuthGuard>
-                        </AutoLogoutWrapper>
+                        {/* 🚀 تغليف السيستم بخدمة التأكيد الذكية */}
+                        <ConfirmProvider>
+                            <AutoLogoutWrapper>
+                                <AuthGuard> 
+                                    <PermissionsProvider>
+                                        <SidebarProvider> 
+                                            {/* LayoutClient هو المتحكم في حركة السايد بار والصفحة */}
+                                            <LayoutClient>
+                                                <div style={{ position: 'relative', zIndex: 1 }}>
+                                                    {children}
+                                                </div>
+                                            </LayoutClient>
+                                        </SidebarProvider> 
+                                    </PermissionsProvider>
+                                </AuthGuard>
+                            </AutoLogoutWrapper>
+                        </ConfirmProvider>
                     </ToastProvider>
                 </Providers>
             </QueryProvider>
