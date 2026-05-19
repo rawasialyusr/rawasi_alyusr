@@ -1,0 +1,284 @@
+import React, { useMemo, useState } from 'react';
+import { THEME } from '@/lib/theme';
+import { formatCurrency } from '@/lib/helpers';
+import RawasiSmartTable from '@/components/rawasismarttable';
+import BoqFormModal from './BoqFormModal';
+import ProjectReportModal from './ProjectReportModal'; 
+
+// دالة تطهير النصوص خارج المكون لمنع الـ Loop وتنظيف الكلمات
+const normalizeArabic = (str: string) => {
+  if (!str) return '';
+  return str.trim().toLowerCase()
+    .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ');
+};
+
+export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDeleteAlert: any }) {
+  const [isReportOpen, setIsReportOpen] = useState(false);
+
+  // استخراج الداتا بأمان
+  const boqList = logic.projectDetails?.boq || [];
+  const assignments = logic.projectDetails?.contractorAssignments || [];
+  const expenses = logic.projectDetails?.expenses || [];
+
+  // 1️⃣ ترتيب بنود المقايسة (رئيسي ثم فرعي)
+  const flatBoqData = useMemo(() => {
+      if (boqList.length === 0) return [];
+      const result: any[] = [];
+      const mains = boqList.filter((i: any) => i.item_type === 'رئيسي');
+      
+      mains.forEach((main: any) => {
+          result.push(main);
+          const subs = boqList.filter((sub: any) => sub.parent_id === main.id);
+          result.push(...subs);
+      });
+      const mappedIds = new Set(result.map(r => r.id));
+      const orphans = boqList.filter((b: any) => !mappedIds.has(b.id));
+      return [...result, ...orphans];
+  }, [boqList]);
+
+  // 2️⃣ حساب الإحصائيات الكلية للسامري (مدمج بها المصاريف المحملة والربح الفعلي)
+  const boqStats = useMemo(() => {
+    let totalContractValue = 0, totalEstimatedLabor = 0, totalEstimatedMaterial = 0, totalEstimatedExpenses = 0, subItemsCount = 0;
+    let totalActualLabor = 0, totalActualMaterial = 0, totalDirectExpenses = 0;
+
+    flatBoqData.forEach((item: any) => {
+      const hasChildren = flatBoqData.some((child: any) => child.parent_id === item.id);
+      if (!hasChildren) {
+        subItemsCount++;
+        totalContractValue += (Number(item.contract_quantity || 0) * Number(item.unit_contract_price || 0));
+        totalEstimatedLabor += Number(item.estimated_labor_cost || 0);
+        totalEstimatedMaterial += Number(item.estimated_operational_cost || 0);
+        totalEstimatedExpenses += Number(item.estimated_expenses_cost || 0); 
+        
+        // 🚀 القراءة المباشرة للتكاليف المباشرة من قاعدة البيانات (بدون فلاتر)
+        totalActualLabor += Number(item.actual_labor_cost || 0);
+        totalActualMaterial += Number(item.actual_material_cost || 0);
+        totalDirectExpenses += Number(item.actual_expenses_cost || 0);
+      }
+    });
+
+    // 🚀 سحب إجمالي المصاريف المحملة (الإدارية والتشغيلية) من جدول المصروفات باستبعاد المباشرة
+    const totalAllocatedOverhead = expenses
+        .filter((e: any) => !['direct', 'material', 'labor_direct', 'labor_allocated'].includes(e.row_type))
+        .reduce((sum: number, e: any) => sum + Number(e.amount || e.total_price || 0), 0);
+
+    const totalAssignedContracts = assignments.reduce((sum: number, a: any) => sum + Number(a.total_contract_amount || 0), 0);
+    
+    // حسابات الميزانية التقديرية
+    const totalEstimatedCosts = totalEstimatedLabor + totalEstimatedMaterial + totalEstimatedExpenses;
+    const expectedProfit = totalContractValue - totalEstimatedCosts;
+    const profitMargin = totalContractValue > 0 ? ((expectedProfit / totalContractValue) * 100).toFixed(1) : "0.0";
+    const isLoss = expectedProfit < 0;
+
+    // 🚀 حسابات الموقف المالي الفعلي (التكلفة الحقيقية = مباشر + محمل)
+    const totalActualCosts = totalActualLabor + totalActualMaterial + totalDirectExpenses + totalAllocatedOverhead;
+    const actualProfit = totalContractValue - totalActualCosts;
+    const actualProfitMargin = totalContractValue > 0 ? ((actualProfit / totalContractValue) * 100).toFixed(1) : "0.0";
+    const isActualLoss = actualProfit < 0;
+
+    return { 
+      totalContractValue, totalEstimatedLabor, totalEstimatedMaterial, totalEstimatedExpenses, 
+      subItemsCount, totalAssignedContracts, expectedProfit, profitMargin, isLoss,
+      totalAllocatedOverhead, totalActualCosts, actualProfit, actualProfitMargin, isActualLoss
+    };
+  }, [flatBoqData, assignments, expenses]);
+
+  // 3️⃣ تجهيز أعمدة الجدول الذكي
+  const boqColumns = useMemo(() => [
+    { 
+        header: 'البند / المرحلة', 
+        accessor: 'work_item',
+        render: (row: any) => {
+            if (row.item_type === 'رئيسي') return <span style={{ fontWeight: 900, color: THEME.coffeeDark, fontSize: '15px' }}>📂 {row.work_item}</span>;
+            return <span style={{ paddingRight: '25px', color: '#475569', fontWeight: 800 }}>↪️ {row.work_item}</span>;
+        }
+    },
+    { 
+        header: 'إجمالى البند (البيع)', 
+        render: (row: any) => {
+            const total = Number(row.contract_quantity || 0) * Number(row.unit_contract_price || 0);
+            return <span style={{ fontWeight: 900, color: THEME.coffeeDark, fontSize: '14px' }}>{formatCurrency(total)}</span>;
+        } 
+    },
+    { 
+        header: 'الميزانية المقدرة', 
+        render: (row: any) => {
+            const budget = Number(row.estimated_labor_cost || 0) + Number(row.estimated_operational_cost || 0) + Number(row.estimated_expenses_cost || 0);
+            return <span style={{ fontWeight: 900, color: '#475569', backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>{formatCurrency(budget)}</span>;
+        }
+    },
+    { 
+        header: 'مصروفات مباشرة فعلية', 
+        render: (row: any) => {
+            // 🚀 قراءة مباشرة من عمود المصروفات المباشرة 
+            const actualExp = Number(row.actual_expenses_cost || 0);
+            return <span style={{ fontWeight: 900, color: '#ea580c' }}>{formatCurrency(actualExp)}</span>;
+        }
+    },
+    { 
+        header: 'خامات فعلية', 
+        render: (row: any) => {
+            // 🚀 قراءة مباشرة لعمود الخامات 
+            const actualMat = Number(row.actual_material_cost || 0);
+            return <span style={{ fontWeight: 900, color: THEME.goldAccent }}>{formatCurrency(actualMat)}</span>;
+        }
+    },
+    { 
+        header: 'عمالة فعلية', 
+        render: (row: any) => {
+            // 🚀 قراءة مباشرة لعمود العمالة 
+            const actualLabor = Number(row.actual_labor_cost || 0);
+            return <span style={{ fontWeight: 900, color: '#0369A1' }}>{formatCurrency(actualLabor)}</span>;
+        }
+    },
+    { 
+        header: 'الموقف المالي الحالي للبند', 
+        render: (row: any) => {
+            const itemTotal = Number(row.contract_quantity || 0) * Number(row.unit_contract_price || 0);
+            
+            // 🚀 حساب الموقف المالي بقراءة الأعمدة الثلاثة مباشرة
+            const totalActualSpent = Number(row.actual_expenses_cost || 0) + Number(row.actual_material_cost || 0) + Number(row.actual_labor_cost || 0);
+            
+            const currentBalance = itemTotal - totalActualSpent;
+            const isLoss = currentBalance < 0;
+
+            return (
+              <span style={{ 
+                fontWeight: 900, color: isLoss ? THEME.danger : THEME.success, 
+                backgroundColor: isLoss ? '#FEF2F2' : '#F0FDF4', padding: '4px 8px', borderRadius: '6px', fontSize: '13px', display: 'inline-block'
+              }}>
+                {formatCurrency(currentBalance)}
+              </span>
+            );
+        } 
+    },
+    { 
+        header: 'عقود باطن', 
+        render: (row: any) => {
+            const itemAssignments = assignments.filter((a: any) => a.boq_budget_id === row.id);
+            const assignedTotal = itemAssignments.reduce((sum: number, a: any) => sum + Number(a.total_contract_amount || 0), 0);
+            return <span style={{ fontWeight: 900, color: assignedTotal > 0 ? '#6B21A8' : '#94a3b8', fontSize: '14px' }}>{formatCurrency(assignedTotal)}</span>;
+        } 
+    },
+    {
+        header: 'الإجراءات',
+        render: (row: any) => (
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                <button onClick={() => { logic.setCurrentBoqRecord(row); logic.setIsBoqModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }} title="تعديل البند">✏️</button>
+                <button onClick={() => { setDeleteAlert({ isOpen: true, type: 'boq', id: row.id, title: 'حذف بند مقايسة', message: `هل أنت متأكد من حذف البند "${row.work_item}"؟` }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.8 }} title="حذف البند">🗑️</button>
+            </div>
+        )
+    }
+  ], [assignments, logic, setDeleteAlert]);
+
+  return (
+    <div>
+      {/* 📊 كروت السامري الكلية */}
+      {flatBoqData.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '25px' }}>
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid ${THEME.danger}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>💰 إجمالي قيمة المقايسة</span>
+            <strong style={{ fontSize: '20px', color: THEME.coffeeDark, fontWeight: 900 }}>{formatCurrency(boqStats.totalContractValue)}</strong>
+          </div>
+
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid #475569`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>📋 إجمالي الميزانية التقديرية</span>
+            <strong style={{ fontSize: '20px', color: '#1e293b', fontWeight: 900 }}>{formatCurrency(boqStats.totalEstimatedLabor + boqStats.totalEstimatedMaterial + boqStats.totalEstimatedExpenses)}</strong>
+          </div>
+
+          {/* 🚀 الكارت الجديد: المصروفات المحملة */}
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid #0284C7`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>🏢 المصروفات المحملة (إدارة وتشغيل)</span>
+            <strong style={{ fontSize: '20px', color: '#0284C7', fontWeight: 900 }}>{formatCurrency(boqStats.totalAllocatedOverhead)}</strong>
+          </div>
+
+          <div style={{ 
+              backgroundColor: boqStats.isLoss ? 'rgba(254,226,226,0.8)' : 'rgba(220,252,231,0.6)', 
+              backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', 
+              borderBottom: `4px solid ${boqStats.isLoss ? THEME.danger : THEME.success}`, 
+              boxShadow: '0 4px 15px rgba(0,0,0,0.02)' 
+          }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: boqStats.isLoss ? THEME.danger : '#166534', fontWeight: 900, marginBottom: '5px' }}>
+              <span>{boqStats.isLoss ? '📉 خسارة مقدرة' : '📈 الربح التقديري المتوقع'}</span>
+              <span style={{ background: boqStats.isLoss ? THEME.danger : '#166534', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', direction: 'ltr' }}>
+                {boqStats.profitMargin}%
+              </span>
+            </span>
+            <strong style={{ fontSize: '20px', color: boqStats.isLoss ? THEME.danger : THEME.success, fontWeight: 900, direction: 'ltr' }}>
+              {formatCurrency(boqStats.expectedProfit)}
+            </strong>
+          </div>
+
+          {/* 🚀 الكارت الجديد: الربح الفعلي حتى الآن بناءً على التكاليف المباشرة والمحملة */}
+          <div style={{ 
+              backgroundColor: boqStats.isActualLoss ? 'rgba(254,226,226,0.8)' : 'rgba(220,252,231,0.6)', 
+              backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', 
+              borderBottom: `4px solid ${boqStats.isActualLoss ? THEME.danger : THEME.success}`, 
+              boxShadow: '0 4px 15px rgba(0,0,0,0.02)' 
+          }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: boqStats.isActualLoss ? THEME.danger : '#166534', fontWeight: 900, marginBottom: '5px' }}>
+              <span>{boqStats.isActualLoss ? '📉 خسارة فعلية حتى الآن' : '📊 الربح الفعلي حتى الآن'}</span>
+              <span style={{ background: boqStats.isActualLoss ? THEME.danger : '#166534', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', direction: 'ltr' }}>
+                {boqStats.actualProfitMargin}%
+              </span>
+            </span>
+            <strong style={{ fontSize: '20px', color: boqStats.isActualLoss ? THEME.danger : THEME.success, fontWeight: 900, direction: 'ltr' }}>
+              {formatCurrency(boqStats.actualProfit)}
+            </strong>
+          </div>
+
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid #6B21A8`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>🤝 إجمالي عقود باطن مسندة</span>
+            <strong style={{ fontSize: '20px', color: '#6B21A8', fontWeight: 900 }}>{formatCurrency(boqStats.totalAssignedContracts)}</strong>
+          </div>
+        </div>
+      )}
+
+      {/* 📋 جدول المقايسة الذكي ومتابعة التكاليف الفعلية */}
+      <div className="glass-card" style={{ padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 10px', flexWrap: 'wrap', gap: '15px' }}>
+           <h3 style={{ margin: 0, color: THEME.coffeeDark, fontWeight: 900 }}>📋 مقارنة ومتابعة الميزانيات بالتكاليف الفعلية للبنود</h3>
+           
+           {flatBoqData.length > 0 && (
+             <button 
+               onClick={() => setIsReportOpen(true)}
+               style={{
+                 backgroundColor: THEME.primary, color: 'white', padding: '10px 20px', borderRadius: '10px',
+                 border: 'none', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                 boxShadow: '0 4px 10px rgba(0,0,0,0.1)', transition: 'all 0.3s'
+               }}
+             >
+               <span>🖨️</span> عرض التقرير للطباعة
+             </button>
+           )}
+        </div>
+
+        {flatBoqData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 900 }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
+                لا توجد بنود مقايسة مضافة لهذا المشروع بعد.<br/>
+            </div>
+        ) : (
+            <RawasiSmartTable data={flatBoqData} columns={boqColumns} />
+        )}
+        
+        {logic.isBoqModalOpen && (
+            <BoqFormModal 
+                isOpen={logic.isBoqModalOpen} onClose={() => logic.setIsBoqModalOpen(false)}
+                record={logic.currentBoqRecord} setRecord={logic.setCurrentBoqRecord}
+                onSave={logic.handleSaveBoq} projectBoq={logic.projectDetails.boq}
+            />
+        )}
+
+        <ProjectReportModal 
+          isOpen={isReportOpen} 
+          onClose={() => setIsReportOpen(false)} 
+          logic={logic} 
+          boqStats={boqStats} 
+          flatBoqData={flatBoqData} 
+          normalizeArabic={normalizeArabic}
+        />
+      </div>
+    </div>
+  );
+}

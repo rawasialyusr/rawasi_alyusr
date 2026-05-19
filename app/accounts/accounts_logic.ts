@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/lib/toast-context';
+import * as XLSX from 'xlsx'; // 🚀 استدعاء مكتبة الإكسل
 
 export function useHierarchicalAccountsLogic() {
   const router = useRouter();
@@ -20,9 +21,8 @@ export function useHierarchicalAccountsLogic() {
 
   // 🧠 1. جلب البيانات "المطبوخة" من الباك إند (الأرصدة + القيود معاً)
   const { data: accountsReport = [], isLoading } = useQuery({
-    queryKey: ['accounts_report_with_lines', startDate, endDate], // 🚀 تم تحديث مفتاح الكاش
+    queryKey: ['accounts_report_with_lines', startDate, endDate], 
     queryFn: async () => {
-      // 🚀 تم تغيير الدالة هنا لاستدعاء الـ RPC المطور اللي بيجيب القيود
       const { data, error } = await supabase.rpc('get_accounts_report_with_lines', {
         p_date_from: startDate || '1900-01-01',
         p_date_to: endDate || '2099-12-31'
@@ -42,20 +42,17 @@ export function useHierarchicalAccountsLogic() {
 
     const mapById: Record<string, any> = {};
 
-    // ترتيب الحسابات تصاعدياً بالكود لضمان شكل شجرة احترافي
     const sortedAccounts = [...accountsReport].sort((a: any, b: any) => {
          const codeA = a.code ? String(a.code) : '';
          const codeB = b.code ? String(b.code) : '';
          return codeA.localeCompare(codeB);
     });
 
-    // تجهيز العقد (Nodes) وربط الأرقام والقيود القادمة من الداتابيز
     sortedAccounts.forEach(acc => {
       const safeId = String(acc.id).trim();
       mapById[safeId] = { 
         ...acc, 
         children: [], 
-        // 🚀 التعديل الجوهري: سحب القيود الفعلية من الداتابيز وتمريرها للعرض بدل تفريغها
         transactions: acc.transactions || [], 
         totalDebit: Number(acc.total_debit || 0),
         totalCredit: Number(acc.total_credit || 0),
@@ -105,7 +102,6 @@ export function useHierarchicalAccountsLogic() {
         if (error) throw error;
     },
     onMutate: async (ids) => {
-        // 🚀 تم تحديث مفاتيح الكاش لتتطابق مع الـ Query الجديد
         await queryClient.cancelQueries({ queryKey: ['accounts_report_with_lines'] });
         const previous = queryClient.getQueryData(['accounts_report_with_lines']);
         queryClient.setQueryData(['accounts_report_with_lines'], (old: any[]) => old?.filter(acc => !ids.includes(acc.id)));
@@ -120,10 +116,64 @@ export function useHierarchicalAccountsLogic() {
         showToast('تم حذف الحسابات بنجاح 🗑️', 'success');
     },
     onSettled: () => {
-        // تحديث الـ Cache لتقرير الحسابات
         queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] });
     }
   });
+
+  // 📊 5. تصدير ميزان المراجعة إلى Excel
+  const exportToExcel = () => {
+    if (!accountsReport || accountsReport.length === 0) {
+        showToast("لا توجد بيانات لتصديرها", "error");
+        return;
+    }
+
+    // تجهيز البيانات
+    const excelData = accountsReport.map((acc: any) => ({
+        "كود الحساب": acc.code || '',
+        "اسم الحساب": acc.name || '',
+        "إجمالي مدين": Number(acc.total_debit) || 0,
+        "إجمالي دائن": Number(acc.total_credit) || 0,
+        "رصيد مدين": Number(acc.balance) > 0 ? Number(acc.balance) : 0,
+        "رصيد دائن": Number(acc.balance) < 0 ? Math.abs(Number(acc.balance)) : 0,
+    }));
+
+    // حساب الإجماليات السفلية
+    const totalDebit = excelData.reduce((sum, row) => sum + row["إجمالي مدين"], 0);
+    const totalCredit = excelData.reduce((sum, row) => sum + row["إجمالي دائن"], 0);
+    const totalBalDebit = excelData.reduce((sum, row) => sum + row["رصيد مدين"], 0);
+    const totalBalCredit = excelData.reduce((sum, row) => sum + row["رصيد دائن"], 0);
+
+    // إضافة سطر المجاميع
+    excelData.push({
+        "كود الحساب": "---",
+        "اسم الحساب": "الإجماليات الكلية",
+        "إجمالي مدين": totalDebit,
+        "إجمالي دائن": totalCredit,
+        "رصيد مدين": totalBalDebit,
+        "رصيد دائن": totalBalCredit,
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // تظبيط عرض الأعمدة للإكسل
+    worksheet['!cols'] = [
+        { wch: 15 }, // الكود
+        { wch: 45 }, // الاسم
+        { wch: 20 }, // إجمالي مدين
+        { wch: 20 }, // إجمالي دائن
+        { wch: 20 }, // رصيد مدين
+        { wch: 20 }  // رصيد دائن
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "ميزان المراجعة");
+    
+    // التنزيل الفوري
+    const fileName = `ميزان_المراجعة_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    
+    showToast("تم تصدير ميزان المراجعة بنجاح 📊", "success");
+  };
 
   return { 
     paginatedTree, 
@@ -152,6 +202,7 @@ export function useHierarchicalAccountsLogic() {
             deleteMutation.mutate(ids);
         }
     },
-    isDeleting: deleteMutation.isPending
+    isDeleting: deleteMutation.isPending,
+    exportToExcel // 🚀 تم استخراج دالة التصدير هنا لربطها بالزرار
   };
 }

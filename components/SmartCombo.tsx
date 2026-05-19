@@ -39,6 +39,8 @@ interface SmartComboProps {
     permAction?: string;           // الصلاحية المطلوبة (مثال: financial)
 
     // 🔗 [الجديد السحري]: الفلاتر المتسلسلة (Chained Filters) لسحب البيانات الذكي
+    filterColumn?: string;         // 🚀 إضافة استقبال الفلتر المنفصل المبعوث من الواجهة
+    filterValue?: any;             // 🚀 إضافة استقبال قيمة الفلتر المنفصل المبعوث من الواجهة
     filter?: { column: string; value: any }; 
 }
 
@@ -51,6 +53,8 @@ export default function SmartCombo({
     allowAddNew = false, requiredPermission, onAddNew, isSensitive = false, showRecent = false, 
     enableClear = false, showAvatar = false, isMobileBottomSheet = false,
     permModule, permAction,
+    filterColumn, // 🚀 استلام اسم العمود الفلتر لمنع التكرار
+    filterValue,  // 🚀 استلام قيمة الفلتر لمنع التكرار
     filter // 👈 استلام فلتر التصفية (مثال: project_id)
 }: SmartComboProps) {
     
@@ -155,9 +159,12 @@ export default function SmartCombo({
             
             if (table === 'accounts') q = q.eq('is_transactional', true);
             
-            // 🔗 [تطبيق الفلتر المتسلسل] إذا كان مبعوثاً (مثال: project_id = 123)
-            if (filter && filter.column && filter.value) {
-                q = q.eq(filter.column, filter.value);
+            // 🔗 🚀 [تحديث ذكي]: دمج قراءة الفلتر سواء مبعوث كـ Object أو Props منفصلة لمنع تكرار البنود
+            const activeColumn = filterColumn || filter?.column;
+            const activeValue = filterValue !== undefined ? filterValue : filter?.value;
+
+            if (activeColumn && activeValue) {
+                q = q.eq(activeColumn, activeValue);
             }
 
             if (customQuery) q = customQuery(q);
@@ -179,14 +186,16 @@ export default function SmartCombo({
     // ⏱️ [الحساسية القصوى]: 150ms (ومراقبة الفلتر)
     useEffect(() => {
         const searchLen = search?.length || 0; 
-        if (searchLen < 1 && !show && !filter) { setResults([]); return; }
+        const hasFilter = filter || (filterColumn && filterValue);
+        if (searchLen < 1 && !show && !hasFilter) { setResults([]); return; }
         
         const timer = setTimeout(() => {
             if (show && hasFieldAccess) loadData(search);
         }, 150); 
         
         return () => clearTimeout(timer);
-    }, [search, table, options, show, hasFieldAccess, filter]); // 👈 تحديث نتائج البحث عند تغير الفلتر
+        // 🚀 تم إضافة ومراقبة filterColumn و filterValue لإعادة السحب فوراً عند تغيير الفيلا
+    }, [search, table, options, show, hasFieldAccess, filter, filterColumn, filterValue]); 
 
     // 🖱️ Scroll
     useEffect(() => {

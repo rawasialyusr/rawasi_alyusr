@@ -19,15 +19,12 @@ export default function LaborLogsDirectory() {
 
   const isOneSelected = logic.selectedIds.length === 1;
 
-  // 🚀 التعديل هنا: استخراج *جميع* العناصر المفلترة (وليس الصفحة الحالية فقط) لتحديد الكل
   const allFilteredIds = useMemo(() => {
     return logic.filteredLogs.map((v: any) => String(v.id));
   }, [logic.filteredLogs]);
 
-  // التحقق مما إذا كانت كل العناصر المفلترة محددة
   const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id: string) => logic.selectedIds.includes(id));
 
-  // 📋 تعريف أعمدة الجدول
   const columns = useMemo(() => [
     {
       key: 'select',
@@ -40,10 +37,8 @@ export default function LaborLogsDirectory() {
                   title="تحديد كل السجلات المفلترة"
                   onChange={() => {
                       if (isAllSelected) {
-                          // إلغاء تحديد جميع السجلات المفلترة
                           logic.setSelectedIds(logic.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
                       } else {
-                          // تحديد جميع السجلات المفلترة
                           logic.setSelectedIds([...new Set([...logic.selectedIds, ...allFilteredIds])]);
                       }
                   }}
@@ -273,13 +268,61 @@ export default function LaborLogsDirectory() {
                  <SmartCombo label="👷 اسم العامل" table="partners" displayCol="name" freeText={true} initialDisplay={logic.currentLog.worker_name} onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, worker_name: v?.name || v, worker_partner_id: v?.id || null})} />
                </div>
 
-               {/* الصف الثاني */}
+               {/* الصف الثاني المطور 🚀 */}
                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr', gap: '20px', zIndex: 90 }}>
-                 <SmartCombo label="📍 الموقع / العمارة" table="projects" displayCol="Property" searchCols="Property,project_name,project_code" freeText={false} strict={true} initialDisplay={logic.currentLog.site_ref} onSelect={(v:any)=>logic.setCurrentLog({...logic.currentLog, site_ref: v?.Property || '', project_id: v?.id || null})} />
-                 <SmartCombo label="🔨 البند" table="boq_items" searchCols="item_name,item_code" displayCol="item_name" freeText={true} initialDisplay={logic.currentLog.work_item || ''} onSelect={(v:any) => logic.setCurrentLog({...logic.currentLog, work_item: v?.item_name || v})} />
+                 <SmartCombo 
+                     label="📍 الموقع / العمارة" 
+                     table="projects" 
+                     displayCol="Property" 
+                     searchCols="Property,project_name,project_code" 
+                     freeText={false} 
+                     strict={true} 
+                     initialDisplay={logic.currentLog.site_ref} 
+                     onSelect={(v:any) => logic.setCurrentLog({
+                         ...logic.currentLog, 
+                         site_ref: v?.Property || '', 
+                         project_id: v?.id || null,
+                         work_item: '',
+                         work_item_id: null,
+                         unit: ''
+                     })} 
+                 />
+
+                 <div style={{ position: 'relative' }}>
+                     <SmartCombo 
+                         label="🔨 البند (من المقايسة)" 
+                         table="boq_budget_distinct" // 🚀 تم ربطه بالـ View النظيف لمنع أي تكرار
+                         searchCols="work_item" 
+                         displayCol="work_item" 
+                         freeText={false} 
+                         strict={true} 
+                         filterColumn="project_id" // الفلترة الذكية برقم الفيلا
+                         filterValue={logic.currentLog.project_id}
+                         key={logic.currentLog.project_id || 'empty-project'} 
+                         initialDisplay={logic.currentLog.work_item || ''} 
+                         onSelect={(v:any) => logic.setCurrentLog({
+                             ...logic.currentLog, 
+                             work_item: v?.work_item || '',
+                             work_item_id: v?.boq_item_id || null, 
+                             unit: v?.unit || '',                   
+                             tareeha: v?.tareeha ? String(v.tareeha) : logic.currentLog.tareeha // 🚀 سحب الطريحة أوتوماتيكياً
+                         })} 
+                     />
+                     {!logic.currentLog.project_id && (
+                         <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(255,255,255,0.5)', cursor: 'not-allowed' }} title="يرجى اختيار الموقع أولاً"></div>
+                     )}
+                 </div>
+
                  <div>
                     <label className="modal-label">📏 الوحدة</label>
-                    <input type="text" placeholder="مثال: م2" value={logic.currentLog.unit || ''} onChange={e => logic.setCurrentLog({...logic.currentLog, unit: e.target.value})} className="modal-input" />
+                    <input 
+                        type="text" 
+                        placeholder="تسحب تلقائياً" 
+                        readOnly 
+                        value={logic.currentLog.unit || ''} 
+                        className="modal-input" 
+                        style={{ background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
+                    />
                  </div>
                </div>
 

@@ -88,14 +88,15 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                 .lines-table-container {
                     background: rgba(255, 255, 255, 0.5);
                     border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.7);
-                    overflow: hidden; margin-top: 15px;
+                    overflow: visible; /* تعديل مهم لتجنب قص القوائم المنسدلة */
+                    margin-top: 15px;
                 }
                 .item-row { transition: 0.2s; border-bottom: 1px solid rgba(0,0,0,0.05); }
                 .item-row:hover { background: rgba(255, 255, 255, 0.8); }
             `}</style>
 
             <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ 
-                width: '1100px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.9)', // 👈 تم زيادة العرض قليلاً ليتسع للعمود الجديد
+                width: '1100px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.9)', 
                 backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', 
                 boxShadow: '0 40px 80px rgba(0,0,0,0.4)', overflowY: 'auto', direction: 'rtl'
             }}>
@@ -111,8 +112,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
 
                 {/* 📋 البيانات الأساسية (Master Data) */}
                 <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
-                    <div style={{ zIndex: 90, position: 'relative' }}>
-                        {/* 🚀 تحديث مربع المشروع لكي يُصفّر بنود הـ BOQ عند تغييره */}
+                    <div style={{ zIndex: 100, position: 'relative' }}>
                         <SmartCombo 
                             label="🏢 المشروع المستفيد (مركز التكلفة) *" 
                             icon="🏢" 
@@ -127,13 +127,13 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                             })} 
                         />
                     </div>
-                    <div style={{ zIndex: 80, position: 'relative' }}>
+                    <div style={{ zIndex: 90, position: 'relative' }}>
                         <SmartCombo label="👤 المورد / التاجر *" icon="👤" table="partners" displayCol="name" searchCols="name" customFilter="partner_type=eq.مورد" value={logic.invoiceData.payee_id} onSelect={(v: any) => logic.setInvoiceData({ ...logic.invoiceData, payee_id: v?.id })} />
                     </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '25px', background: '#f8fafc', padding: '25px', borderRadius: '20px', marginBottom: '25px', border: '1px solid #e2e8f0' }}>
-                    <div style={{ zIndex: 70, position: 'relative' }}>
+                    <div style={{ zIndex: 80, position: 'relative' }}>
                         <SmartCombo label="📒 حساب التوجيه المالي (مثال: خامات العملاء) *" icon="💳" table="accounts" displayCol="name" searchCols="name,code" value={logic.invoiceData.account_id} onSelect={(v: any) => logic.setInvoiceData({ ...logic.invoiceData, account_id: v?.id })} />
                     </div>
                     <div>
@@ -142,7 +142,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                     </div>
                 </div>
                 
-                {/* 🚀 قسم إدخال الأصناف (متعدد الأصناف مع الـ BOQ) */}
+                {/* 🚀 قسم إدخال الأصناف (متعدد الأصناف مع الـ BOQ والكتالوج الموحد) */}
                 <div style={{ background: 'rgba(202, 138, 4, 0.05)', padding: '20px', borderRadius: '20px', marginBottom: '25px', border: `1px dashed ${THEME.accent}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: THEME.brand?.coffee || THEME.coffeeDark }}>📦 أصناف الفاتورة (الخامات) وربطها بالبنود</h3>
@@ -155,7 +155,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
                             <thead style={{ background: THEME.primary, color: 'white' }}>
                                 <tr>
-                                    <th style={{ padding: '12px', fontSize: '11px', textAlign: 'right', width: '25%' }}>اسم الخامة والتفاصيل</th>
+                                    <th style={{ padding: '12px', fontSize: '11px', textAlign: 'right', width: '25%' }}>اسم الخامة (من الدليل الموحد)</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '25%' }}>توجيه لبند (BOQ) - اختياري</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '10%' }}>الكمية</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '10%' }}>الوحدة</th>
@@ -167,8 +167,32 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                             <tbody>
                                 {logic.invoiceData.items.map((item: any, idx: number) => (
                                     <tr key={idx} className="item-row">
-                                        <td style={{ padding: '10px' }}>
-                                            <input type="text" placeholder="مثال: حديد تسليح عز" className="glass-input-field" style={{ padding: '8px', background: 'white' }} value={item.work_item} onChange={e => logic.handleItemChange(idx, 'work_item', e.target.value)} />
+                                        {/* 🚀 السحر هنا: استخدام SmartCombo لسحب الخامات من الكتالوج الموحد */}
+                                        <td style={{ padding: '10px', zIndex: 70 - idx, position: 'relative' }}>
+                                            <SmartCombo 
+                                                table="material_items" 
+                                                searchCols="item_name,item_code"
+                                                displayCol="item_name" 
+                                                initialDisplay={item.item_name || item.work_item} 
+                                                freeText={true} 
+                                                onSelect={(selectedItem: any) => {
+                                                    const isObject = typeof selectedItem === 'object' && selectedItem !== null;
+                                                    
+                                                    if (isObject) {
+                                                        // تم الاختيار من الدليل: سحب المعرف، الاسم، الوحدة والسعر
+                                                        logic.handleItemChange(idx, 'item_id', selectedItem.id);
+                                                        logic.handleItemChange(idx, 'item_name', selectedItem.item_name);
+                                                        logic.handleItemChange(idx, 'work_item', selectedItem.item_name);
+                                                        if (selectedItem.default_unit) logic.handleItemChange(idx, 'unit', selectedItem.default_unit);
+                                                        if (selectedItem.default_unit_price) logic.handleItemChange(idx, 'unit_price', selectedItem.default_unit_price);
+                                                    } else {
+                                                        // إدخال حر غير موجود في الدليل
+                                                        logic.handleItemChange(idx, 'item_id', null);
+                                                        logic.handleItemChange(idx, 'item_name', selectedItem);
+                                                        logic.handleItemChange(idx, 'work_item', selectedItem);
+                                                    }
+                                                }} 
+                                            />
                                         </td>
                                         
                                         {/* 🚀 خانة اختيار الـ BOQ (مربوطة بالمشروع) */}

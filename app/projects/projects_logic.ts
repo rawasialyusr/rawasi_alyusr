@@ -4,6 +4,13 @@ import { supabase } from '@/lib/supabase';
 import { useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { useToast } from '@/lib/toast-context'; 
 
+// دالة تطهير النصوص لضمان تطابق البحث في المصروفات
+const normalizeArabic = (str: string) => {
+  if (!str) return '';
+  return str.trim().toLowerCase()
+    .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ');
+};
+
 export function useProjectsLogic() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -12,7 +19,7 @@ export function useProjectsLogic() {
   const [clients, setClients] = useState<any[]>([]); 
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
   const [projectDetails, setProjectDetails] = useState<any>({
-    stages: [], boq: [], expenses: [], invoices: [], inspections: [], laborStats: null
+    stages: [], boq: [], expenses: [], invoices: [], inspections: [], laborStats: null, materials: [], contractorAssignments: []
   });
   
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +47,7 @@ export function useProjectsLogic() {
       project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', 
       estimated_budget: '', down_payment: '', start_date: '', end_date: '', 
       location_address: '', project_manager: '', 
-      engineer_in_charge: '', engineer_phone: '', // 👈 الحقول الجديدة
+      engineer_in_charge: '', engineer_phone: '', 
       status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: ''
   };
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
@@ -100,8 +107,8 @@ export function useProjectsLogic() {
           end_date: currentProjectRecord.end_date || null,
           location_address: currentProjectRecord.location_address || null,
           project_manager: currentProjectRecord.project_manager || null,
-          engineer_in_charge: currentProjectRecord.engineer_in_charge || null, // 👈 الحقل الجديد
-          engineer_phone: currentProjectRecord.engineer_phone || null,         // 👈 الحقل الجديد
+          engineer_in_charge: currentProjectRecord.engineer_in_charge || null, 
+          engineer_phone: currentProjectRecord.engineer_phone || null,        
           status: currentProjectRecord.status || 'قيد الدراسة',
           current_stage: currentProjectRecord.current_stage || 'تجهيز الموقع',
           notes: currentProjectRecord.notes || null
@@ -143,7 +150,7 @@ export function useProjectsLogic() {
               main_category: record.main_category || null, 
               sub_category: record.sub_category || null,
               start_date: record.start_date || null, 
-              end_date: record.end_date || null 
+              end_date: record.end_date || null
           };
 
           if (record.id) {
@@ -253,34 +260,47 @@ export function useProjectsLogic() {
       else console.log(`✅ المقايسات: تم سحب (${boqTest.data?.length}) سجل بنجاح.`, boqTest.data);
 
       console.log("⏳ جاري فحص المصروفات...");
-      const expTest = await supabase.from('expenses').select('*, payee_id').eq('project_id', selectedProject.id);
+      const expTest = await supabase.from('expenses').select('*').eq('project_id', selectedProject.id);
       if (expTest.error) console.error("❌ إيرور في expenses:", expTest.error.message);
       else console.log(`✅ المصروفات: تم سحب (${expTest.data?.length}) سجل بنجاح.`, expTest.data);
 
       console.log("⏳ جاري فحص العمالة...");
-      const laborTest = await supabase.from('labor_daily_logs').select('*, worker_partner_id').eq('project_id', selectedProject.id);
+      const laborTest = await supabase.from('labor_daily_logs').select('*').eq('project_id', selectedProject.id);
       if (laborTest.error) console.error("❌ إيرور في labor_daily_logs:", laborTest.error.message);
       else console.log(`✅ العمالة: تم سحب (${laborTest.data?.length}) سجل بنجاح.`, laborTest.data);
 
       console.log("⏳ جاري فحص المستخلصات...");
-      const invTest = await supabase.from('invoices').select('*').eq('project_id', selectedProject.id);
+      const invTest = await supabase.from('invoices').select('*').contains('project_ids', [selectedProject.id]);
       if (invTest.error) console.error("❌ إيرور في invoices:", invTest.error.message);
       else console.log(`✅ المستخلصات: تم سحب (${invTest.data?.length}) سجل بنجاح.`, invTest.data);
 
-      console.log("=========================================");
+      print("=========================================");
       alert("تم الفحص! راجع الـ Console (F12) لمعرفة التفاصيل.");
     } catch (err) {
       console.error("حدث خطأ غير متوقع أثناء الفحص:", err);
     }
   };
 
+  // =========================================================================
+  // 🚀 3. سحب البيانات المتكاملة للمشاريع وربطها بالـ Dashboard
+  // =========================================================================
   const fetchData = async () => {
     setIsLoading(true);
+    
     const { data: projData } = await supabase
       .from('projects')
       .select(`*, client:partners!client_id(name)`)
       .order('created_at', { ascending: false });
-    if (projData) setProjects(projData);
+    
+    const { data: dashboardData } = await supabase.rpc('get_project_dashboard');
+
+    if (projData) {
+      const enrichedProjects = projData.map(p => {
+         const dStats = (dashboardData || []).find((d: any) => d.project_id === p.id) || {};
+         return { ...p, ...dStats };
+      });
+      setProjects(enrichedProjects);
+    }
 
     const { data: clientData } = await supabase
       .from('partners')
@@ -311,54 +331,58 @@ export function useProjectsLogic() {
     setIsDetailsLoading(true);
 
     try {
-      const [stagesRes, boqRes, expRes, laborRes, invRes, subClaimsRes] = await Promise.all([
-        supabase.from('project_stages').select('*').eq('project_id', project.id),
-        supabase.from('boq_budget').select('*').eq('project_id', project.id), 
-        supabase.from('expenses').select('*, payee:partners!payee_id(name)').eq('project_id', project.id), 
-        supabase.from('labor_daily_logs').select('*, worker:partners!worker_partner_id(name)').eq('project_id', project.id),
-        supabase.from('invoices').select('*').eq('project_id', project.id),
-        supabase.from('sub_claims').select('*, contractor:partners!contractor_id(name)').eq('project_id', project.id)
-      ]);
+      const stagesRes = await supabase.from('project_stages').select('*').eq('project_id', project.id);
 
-      const boqData = boqRes.data || [];
+      const { data: fullDetails, error } = await supabase.rpc('get_project_full_details', { p_project_id: project.id });
+      if (error) throw error;
 
-      const processedInvoices = (invRes.data || []).map((inv: any) => ({
+      const boqData = fullDetails.boq || [];
+      const expensesData = fullDetails.expenses || [];
+      const materialsData = fullDetails.materials || [];
+      const invoicesData = fullDetails.invoices || [];
+      const subClaimsData = fullDetails.sub_claims || [];
+      const contractorAssignmentsData = fullDetails.contractor_assignments || [];
+
+      const processedInvoices = invoicesData.map((inv: any) => ({
           ...inv,
           display_number: inv.invoice_number,
           display_type: 'مستخلص عام / توريد',
-          final_amount: Number(inv.net_amount || inv.amount || 0)
+          final_amount: Number(inv.total_amount || inv.taxable_amount || inv.amount || 0)
       }));
 
-      const processedSubClaims = (subClaimsRes.data || []).map((clm: any) => ({
+      const processedSubClaims = subClaimsData.map((clm: any) => ({
           ...clm,
           display_number: clm.claim_number,
-          display_type: `مستخلص مقاول: ${clm.contractor?.name || 'غير معروف'}`,
-          description: `مستخلص أعمال مقاولة باطن - ${clm.claim_number}`,
-          final_amount: Number(clm.net_amount || 0),
-          allocatedAmount: Number(clm.net_amount || 0) 
+          display_type: `مستخلص مقاول باطن`,
+          description: `أعمال مقاولة باطن - ${clm.contractor?.name || 'مقاول باطن'}`,
+          final_amount: Number(clm.net_amount || clm.total_amount || 0),
+          allocatedAmount: Number(clm.net_amount || clm.total_amount || 0) 
       }));
 
-      const allFinancials = [...processedInvoices, ...processedSubClaims];
-
-      const laborLogs = laborRes.data || [];
+      const laborLogs = expensesData.filter((e: any) => e.row_type === 'labor_direct' || e.row_type === 'labor_allocated');
       const todayStr = new Date().toISOString().split('T')[0];
+      
       const laborStats = {
-        todayWorkers: laborLogs.filter(l => l.work_date === todayStr).reduce((sum, l) => sum + Number(l.attendance_value || 0), 0),
-        totalWorkersToDate: laborLogs.reduce((sum, l) => sum + Number(l.attendance_value || 0), 0),
-        todayCost: laborLogs.filter(l => l.work_date === todayStr).reduce((sum, l) => sum + (Number(l.daily_wage || 0) * Number(l.attendance_value || 0)), 0),
-        totalLaborCost: laborLogs.reduce((sum, l) => sum + (Number(l.daily_wage || 0) * Number(l.attendance_value || 0)), 0),
+        todayWorkers: laborLogs.filter((l: any) => l.display_date === todayStr && l.row_type === 'labor_direct').length,
+        totalWorkersToDate: laborLogs.filter((l: any) => l.row_type === 'labor_direct').length,
+        todayCost: laborLogs.filter((l: any) => l.display_date === todayStr).reduce((sum: number, l: any) => sum + Number(l.amount || 0), 0),
+        totalLaborCost: laborLogs.reduce((sum: number, l: any) => sum + Number(l.amount || 0), 0),
       };
 
       setProjectDetails({
         stages: stagesRes.data || [],
         boq: boqData,
-        expenses: expRes.data || [], 
-        invoices: allFinancials, 
+        expenses: expensesData, 
+        materials: materialsData,
+        invoices: [...processedInvoices, ...processedSubClaims], 
         laborStats: laborStats,
+        contractorAssignments: contractorAssignmentsData, 
         inspections: [] 
       });
-    } catch (error) {
-      console.error(error);
+
+    } catch (err: any) {
+      console.error("❌ خطأ سحب التفاصيل عبر الـ RPC:", err.message);
+      showToast(`حدث خطأ أثناء تحميل تفاصيل المشروع: ${err.message}`, "error");
     } finally {
       setIsDetailsLoading(false);
     }
@@ -394,20 +418,44 @@ export function useProjectsLogic() {
     setSearchQuery(''); setFilterStatus('الكل'); setFilterClient('الكل'); setFilterStage('الكل'); setDateFrom(''); setDateTo('');
   };
 
+  // =========================================================================
+  // 🚀 4. مؤشرات الـ KPIs (محدثة لتقرأ التكاليف الحقيقية بالملّي)
+  // =========================================================================
   const kpis = useMemo(() => {
     if (!selectedProject) return null;
     const totalContract = Number(selectedProject.contract_value) || 0;
     const totalEstimatedBudget = Number(selectedProject.estimated_budget) || 0;
     
-    const expensesCost = projectDetails.expenses.reduce((sum: number, exp: any) => sum + Number(exp.total_price || 0), 0);
-    const laborCost = projectDetails.laborStats?.totalLaborCost || 0;
-    const actualCost = expensesCost + laborCost;
+    // 🚀 حساب التكلفة الفعلية الدقيقة من واقع الـ BOQ (مواد + عمالة + مصروفات مباشرة)
+    let totalActualLabor = 0;
+    let totalActualMaterial = 0;
+    let totalDirectExpenses = 0;
+
+    // بنفلتر البنود الفرعية بس عشان مجمعش الرئيسي مع الفرعي وأعمل تكرار
+    const leafItems = projectDetails.boq.filter((b: any) => !projectDetails.boq.some((child: any) => child.parent_id === b.id));
+    
+    leafItems.forEach((item: any) => {
+      totalActualLabor += Number(item.actual_labor_cost || 0);
+      totalActualMaterial += Number(item.actual_material_cost || 0);
+      
+      const target = normalizeArabic(item.work_item);
+      const directExp = projectDetails.expenses
+        .filter((e: any) => e.row_type === 'direct' && (normalizeArabic(e.boq_work_item) === target || normalizeArabic(e.description).includes(target) || e.boq_id === item.id))
+        .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+      totalDirectExpenses += directExp;
+    });
+
+    // 🚀 سحب المصروفات المحملة (Overhead) من أول سطر في المقايسة
+    const totalAllocatedOverhead = projectDetails.boq.length > 0 ? Number(projectDetails.boq[0].actual_expenses_cost || 0) : 0;
+    
+    // 🎯 التكلفة الفعلية الشاملة للمشروع
+    const actualCost = totalActualLabor + totalActualMaterial + totalDirectExpenses + totalAllocatedOverhead;
 
     const totalRevenue = projectDetails.invoices
-      .filter((i:any) => i.status === 'مُعتمد')
-      .reduce((sum: number, i:any) => sum + (i.allocatedAmount || 0), 0);
+      .reduce((sum: number, i:any) => sum + (i.allocatedAmount || i.final_amount || 0), 0);
       
     const financialProgress = totalContract > 0 ? ((totalRevenue / totalContract) * 100) : 0;
+    const physicalProgress = Number(selectedProject.overall_completion_percentage || 0);
     
     const budgetRatio = totalEstimatedBudget > 0 ? (actualCost / totalEstimatedBudget) : 0;
     let budgetHealth = 'green';
@@ -424,33 +472,41 @@ export function useProjectsLogic() {
       else if (now < start) { timeProgress = 0; timeStatus = 'لم يبدأ بعد ⚪'; }
       else { 
         timeProgress = ((now - start) / (end - start)) * 100; 
-        if (timeProgress > financialProgress + 15) timeStatus = 'تأخر زمني 🟠';
+        if (timeProgress > physicalProgress + 15) timeStatus = 'تأخر زمني 🟠';
       }
     }
 
     const requiredCashflow = totalEstimatedBudget - actualCost;
-
     const alerts = [];
     if (budgetHealth === 'red') alerts.push("🚨 تجاوز الميزانية المعتمدة");
-    if (timeStatus.includes('تأخر')) alerts.push("⚠️ تأخر في الجدول الزمني");
-    if (totalRevenue < actualCost) alerts.push("💸 التدفق النقدي بالسالب (المصروفات أكبر من التحصيل)");
+    if (timeStatus.includes('تأخر')) alerts.push("⚠️ تأخر في الجدول الزمني مقارنة بنسبة الإنجاز");
+    if (totalRevenue < actualCost) alerts.push("💸 التدفق النقدي بالسالب (التكاليف الفعلية أكبر من المحصل)");
 
     return { 
       totalContract, totalEstimatedBudget, actualCost, totalRevenue, 
       financialProgress: financialProgress.toFixed(1), 
+      physicalProgress: physicalProgress.toFixed(1), 
       budgetRatio: (budgetRatio * 100).toFixed(1),
       budgetHealth, timeProgress: timeProgress.toFixed(1), timeStatus, requiredCashflow,
       alerts
     };
   }, [selectedProject, projectDetails]);
 
+  // =========================================================================
+  // 🚀 5. تحديث المقارنات الإنشائية (boqAnalysis) لتقرأ من التريجرات المباشرة
+  // =========================================================================
   const boqAnalysis = useMemo(() => {
     return projectDetails.boq.map((item: any) => {
-      const actualSpentOnItem = projectDetails.expenses
-        .filter((e: any) => e.work_item === item.work_item)
-        .reduce((sum: number, e: any) => sum + Number(e.total_price || 0), 0);
+      const target = normalizeArabic(item.work_item);
+      
+      const directExp = projectDetails.expenses
+        .filter((e: any) => e.row_type === 'direct' && (normalizeArabic(e.boq_work_item) === target || normalizeArabic(e.description).includes(target) || e.boq_id === item.id))
+        .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
 
-      const estimatedCost = Number(item.estimated_labor_cost || 0) + Number(item.estimated_operational_cost || 0);
+      // 🎯 إجمالي التكلفة المباشرة للبند فقط (لعدم تشويه الميزانية بالتكاليف الإدارية المحملة)
+      const actualSpentOnItem = Number(item.actual_material_cost || 0) + Number(item.actual_labor_cost || 0) + directExp;
+
+      const estimatedCost = Number(item.estimated_labor_cost || 0) + Number(item.estimated_operational_cost || 0) + Number(item.estimated_expenses_cost || 0);
       const variance = estimatedCost - actualSpentOnItem;
       
       return {
@@ -462,21 +518,22 @@ export function useProjectsLogic() {
     });
   }, [projectDetails]);
 
+  // 🚀 6. تحديث التحليل الشهري
   const monthlyAnalysis = useMemo(() => {
     if (!projectDetails.expenses.length && !projectDetails.invoices.length) return [];
     
     const monthlyData: Record<string, { exp: number, rev: number }> = {};
 
     projectDetails.expenses.forEach((e: any) => {
-      const month = e.exp_date?.substring(0, 7) || 'غير محدد';
+      const month = e.display_date?.substring(0, 7) || 'غير محدد'; 
       if (!monthlyData[month]) monthlyData[month] = { exp: 0, rev: 0 };
-      monthlyData[month].exp += Number(e.total_price || 0);
+      monthlyData[month].exp += Number(e.amount || 0); 
     });
 
     projectDetails.invoices.forEach((i: any) => {
       const month = i.date?.substring(0, 7) || 'غير محدد';
       if (!monthlyData[month]) monthlyData[month] = { exp: 0, rev: 0 };
-      monthlyData[month].rev += Number(i.net_amount || i.amount || 0);
+      monthlyData[month].rev += Number(i.final_amount || i.net_amount || i.amount || 0);
     });
 
     return Object.entries(monthlyData).sort().map(([month, vals]) => ({

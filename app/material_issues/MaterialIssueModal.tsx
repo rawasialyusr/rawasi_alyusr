@@ -43,10 +43,18 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                 .lines-table-container {
                     background: rgba(255, 255, 255, 0.5);
                     border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.7);
-                    overflow: hidden; margin-top: 15px;
+                    overflow: visible; margin-top: 15px;
                 }
                 .item-row { transition: 0.2s; border-bottom: 1px solid rgba(0,0,0,0.05); }
                 .item-row:hover { background: rgba(255, 255, 255, 0.8); }
+
+                .inventory-dropdown-item {
+                    display: flex; justify-content: space-between; align-items: center; width: 100%;
+                }
+                .inventory-name { font-weight: 800; color: #1e293b; }
+                .inventory-badges { display: flex; gap: 8px; font-size: 11px; font-weight: 900; }
+                .badge-balance { background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; border: 1px solid #bae6fd; }
+                .badge-price { background: #fef3c7; color: #b45309; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a; }
             `}</style>
 
             <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ 
@@ -66,7 +74,6 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                 </div>
 
                 <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px', marginBottom: '25px' }}>
-                    
                     <div style={{ zIndex: 90, position: 'relative' }}>
                         <SmartCombo 
                             label="🏢 العقار/المشروع المستفيد *" 
@@ -114,7 +121,6 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                     <input type="date" className="glass-input-field" style={{maxWidth: '300px'}} value={logic.issueData.issue_date} onChange={e => logic.setIssueData({...logic.issueData, issue_date: e.target.value})} />
                 </div>
                 
-                {/* 📦 جدول الأصناف وإسنادها لبنود الأعمال (BOQ) */}
                 <div style={{ background: 'rgba(202, 138, 4, 0.05)', padding: '20px', borderRadius: '20px', marginBottom: '25px', border: `1px dashed ${THEME.goldAccent || '#ca8a04'}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: THEME.coffeeDark || '#2d1a11' }}>📦 الخامات المنصرفة وربطها بالبنود</h3>
@@ -127,50 +133,101 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
                             <thead style={{ background: THEME.coffeeDark || '#2d1a11', color: 'white' }}>
                                 <tr>
-                                    <th style={{ padding: '12px', fontSize: '11px', textAlign: 'right', width: '25%' }}>بيان الخامة</th>
+                                    <th style={{ padding: '12px', fontSize: '11px', textAlign: 'right', width: '25%' }}>بيان الخامة (من المخزن)</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '25%' }}>تحميل على بند (BOQ) - اختياري</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '10%' }}>الكمية</th>
-                                    <th style={{ padding: '12px', fontSize: '11px', width: '10%' }}>الوحدة</th>
-                                    <th style={{ padding: '12px', fontSize: '11px', width: '10%' }}>السعر</th>
+                                    <th style={{ padding: '12px', fontSize: '11px', width: '8%' }}>الوحدة</th>
+                                    <th style={{ padding: '12px', fontSize: '11px', width: '12%' }}>السعر</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '15%' }}>الإجمالي</th>
                                     <th style={{ padding: '12px', fontSize: '11px', width: '5%' }}>حذف</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {logic.issueData.items.map((item: any, idx: number) => (
-                                    <tr key={idx} className="item-row">
-                                        <td style={{ padding: '10px' }}>
-                                            <input type="text" placeholder="اسم الخامة" className="glass-input-field" style={{ padding: '8px', background: 'white' }} value={item.item_name} onChange={e => logic.handleItemChange(idx, 'item_name', e.target.value)} />
-                                        </td>
-                                        <td style={{ padding: '10px', zIndex: 60 - idx, position: 'relative' }}>
-                                            {/* 🚀 يظهر فقط بنود الـ BOQ الخاصة بالمشروع المختار */}
-                                            <SmartCombo 
-                                                table="boq_budget" 
-                                                displayCol="work_item" 
-                                                customFilter={logic.issueData.project_id ? `project_id=eq.${logic.issueData.project_id}` : 'id=is.null'}
-                                                value={item.boq_id}
-                                                onSelect={(v: any) => logic.handleItemChange(idx, 'boq_id', v?.id)} 
-                                            />
-                                        </td>
-                                        <td style={{ padding: '10px' }}>
-                                            <input type="number" placeholder="0" className="glass-input-field" style={{ padding: '8px', textAlign: 'center', background: 'white' }} value={item.quantity} onChange={e => logic.handleItemChange(idx, 'quantity', e.target.value)} />
-                                        </td>
-                                        <td style={{ padding: '10px' }}>
-                                            <input type="text" placeholder="وحدة" className="glass-input-field" style={{ padding: '8px', textAlign: 'center', background: 'white' }} value={item.unit} onChange={e => logic.handleItemChange(idx, 'unit', e.target.value)} />
-                                        </td>
-                                        <td style={{ padding: '10px' }}>
-                                            <input type="number" placeholder="0.00" className="glass-input-field" style={{ padding: '8px', textAlign: 'center', background: 'white' }} value={item.unit_price} onChange={e => logic.handleItemChange(idx, 'unit_price', e.target.value)} />
-                                        </td>
-                                        <td style={{ padding: '10px', fontWeight: 900, color: THEME.danger || '#ef4444', fontSize: '14px' }}>
-                                            {formatCurrency(item.total_price)}
-                                        </td>
-                                        <td style={{ padding: '10px' }}>
-                                            {idx > 0 ? (
-                                                <button onClick={() => logic.handleRemoveItem(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px' }} title="حذف الصنف">🗑️</button>
-                                            ) : <div style={{width: '24px'}}></div>}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {logic.issueData.items.map((item: any, idx: number) => {
+                                    const totalStock = (Number(item.available_qty) || 0) + (Number(item.old_qty) || 0);
+                                    const isOutOfStock = Number(item.quantity) > totalStock;
+
+                                    return (
+                                        <tr key={idx} className="item-row">
+                                            <td style={{ padding: '10px', zIndex: 60 - idx, position: 'relative' }}>
+                                                {/* 🚀 الداتا بقت تتقرأ من الفيو المحدث مباشرة! */}
+                                                <SmartCombo 
+                                                    table="vw_inventory_balances_v2"
+                                                    displayCol="item_name" 
+                                                    searchCols="item_name,item_code" 
+                                                    value={item.item_id}
+                                                    initialDisplay={item.item_name}
+                                                    placeholder="ابحث عن الخامة..."
+                                                    onSelect={(v: any) => logic.handleItemChange(idx, 'item_selection', v)} 
+                                                    renderListItem={(invItem: any) => (
+                                                        <div className="inventory-dropdown-item">
+                                                            <span className="inventory-name">{invItem.item_name}</span>
+                                                            <div className="inventory-badges">
+                                                                <span className="badge-balance">الرصيد: {invItem.available_quantity || 0}</span>
+                                                                <span className="badge-price">{invItem.last_price || 0} ج</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                />
+                                                {item.item_id && (
+                                                    <div style={{ fontSize: '10px', marginTop: '5px', fontWeight: 900, color: isOutOfStock ? '#ef4444' : '#166534', textAlign: 'right', paddingRight: '5px' }}>
+                                                        {isOutOfStock ? '⚠️ رصيد غير كافٍ!' : '✅ رصيد متوفر'} (المخزن: {totalStock} {item.unit})
+                                                    </div>
+                                                )}
+                                            </td>
+                                            
+                                            <td style={{ padding: '10px', zIndex: 50 - idx, position: 'relative' }}>
+                                                <SmartCombo 
+                                                    table="boq_budget" 
+                                                    displayCol="work_item" 
+                                                    customFilter={logic.issueData.project_id ? `project_id=eq.${logic.issueData.project_id}` : 'id=is.null'}
+                                                    value={item.boq_id}
+                                                    onSelect={(v: any) => logic.handleItemChange(idx, 'boq_id', v?.id)} 
+                                                />
+                                            </td>
+
+                                            <td style={{ padding: '10px' }}>
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="0" 
+                                                    className="glass-input-field" 
+                                                    style={{ padding: '8px', textAlign: 'center', background: 'white', borderColor: isOutOfStock ? '#ef4444' : '', borderWidth: isOutOfStock ? '2px' : '1px' }} 
+                                                    value={item.quantity} 
+                                                    onChange={e => logic.handleItemChange(idx, 'quantity', e.target.value)} 
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="وحدة" 
+                                                    disabled
+                                                    className="glass-input-field" 
+                                                    style={{ padding: '8px', textAlign: 'center', background: '#f8fafc', opacity: 0.8 }} 
+                                                    value={item.unit} 
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="0.00" 
+                                                    className="glass-input-field" 
+                                                    style={{ padding: '8px', textAlign: 'center', background: 'white' }} 
+                                                    value={item.unit_price} 
+                                                    onChange={e => logic.handleItemChange(idx, 'unit_price', e.target.value)} 
+                                                    title="مسحوب بآخر سعر شراء، قابل للتعديل"
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px', fontWeight: 900, color: THEME.danger || '#ef4444', fontSize: '14px' }}>
+                                                {formatCurrency(item.total_price)}
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                {idx > 0 ? (
+                                                    <button onClick={() => logic.handleRemoveItem(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px' }} title="حذف الصنف">🗑️</button>
+                                                ) : <div style={{width: '24px'}}></div>}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -193,7 +250,7 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
 
                 <div className="responsive-actions" style={{ display: 'flex', gap: '20px', marginTop: '35px' }}>
                     <button onClick={logic.handleSave} className="btn-glass-save" style={{ flex: 2 }}>
-                        {logic.editingIssueId ? '✨ تحديث وحفظ الإذن' : '✅ اعتماد وترحيل الإذن'}
+                        {logic.editingIssueId ? '✨ تحديث وحفظ الإذن' : '✅ حفظ إذن الصرف (مسودة)'}
                     </button>
                     <button onClick={onClose} className="btn-glass-cancel" style={{ flex: 1 }}>
                         إلغاء

@@ -10,6 +10,15 @@ import RawasiSmartTable from '@/components/rawasismarttable';
 import { formatCurrency, formatDate } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 
+// 🚀 الاستيرادات من الملفات المنفصلة
+import { StatusBadge, TabButton } from './SharedUI';
+import OverviewTab from './OverviewTab';
+import BoqTab from './BoqTab';
+import MaterialsTab from './MaterialsTab';
+import FinancialsTab from './FinancialsTab';
+import QcTab from './QcTab';
+import ExpensesTab from './ExpensesTab'; // 👈 استدعاء تاب المصروفات الجديد
+
 export default function AdvancedProjectsPage() {
     const logic = useProjectsLogic();
     const [mounted, setMounted] = useState(false);
@@ -18,134 +27,16 @@ export default function AdvancedProjectsPage() {
     const [isPrintOpen, setIsPrintOpen] = useState(false);
     const [selectedPartnerName, setSelectedPartnerName] = useState('');
 
-    // 🚀 [إضافة جديدة] حالة التحكم في نافذة التأكيد قبل الحذف
+    // 🚀 حالة التحكم في نافذة التأكيد قبل الحذف
     const [deleteAlert, setDeleteAlert] = useState<{isOpen: boolean, type: string, id: string | null, title: string, message: string}>({
         isOpen: false, type: '', id: null, title: '', message: ''
     });
 
     useEffect(() => { setMounted(true); }, []);
 
-    // 🚀 حساب المسميات بشكل ديناميكي بناءً على حالة التواريخ
     const isPeriodSelected = Boolean(logic.dateFrom || logic.dateTo);
     const summarySuffix = isPeriodSelected ? 'للفترة المحددة' : '(تراكمي نهائي)';
     const netTitle = isPeriodSelected ? 'صافي حساب الفترة المحددة' : 'صافي الحساب (النهائي)';
-
-    // =========================================================================
-    // 🎛️ تجهيز بيانات الجداول للـ RawasiSmartTable 
-    // =========================================================================
-    
-    // 🎯 ذكاء عرض المقايسة لتفادي اختفاء البيانات
-    const flatBoqData = useMemo(() => {
-        if (!logic.projectDetails?.boq || logic.projectDetails.boq.length === 0) return [];
-        
-        const boqList = logic.projectDetails.boq;
-        const result: any[] = [];
-        
-        // 1. نجيب كل البنود الرئيسية أولاً
-        const mains = boqList.filter((i: any) => i.item_type === 'رئيسي');
-        
-        mains.forEach((main: any) => {
-            result.push(main);
-            // نجيب البنود الفرعية المرتبطة بالرئيسي ده
-            const subs = boqList.filter((sub: any) => sub.parent_id === main.id);
-            result.push(...subs);
-        });
-
-        // 2. حماية إضافية: لو في بنود اتسجلت بدون parent أو مش متحدد نوعها، نعرضها برضه عشان متضيعش
-        const mappedIds = new Set(result.map(r => r.id));
-        const orphans = boqList.filter((b: any) => !mappedIds.has(b.id));
-        
-        return [...result, ...orphans];
-    }, [logic.projectDetails.boq]);
-
-    const boqColumns = [
-      { 
-          header: 'البند / المرحلة', 
-          accessor: 'work_item',
-          render: (row: any) => {
-              if (row.item_type === 'رئيسي') return <span style={{ fontWeight: 900, color: THEME.coffeeDark, fontSize: '15px' }}>📂 {row.work_item}</span>;
-              return <span style={{ paddingRight: '25px', color: '#475569', fontWeight: 700 }}>↪️ {row.work_item}</span>;
-          }
-      },
-      // 🚀 العمود الجديد: عرض الجدول الزمني من الـ Schema المحدثة
-      { 
-          header: 'الجدول الزمني', 
-          render: (row: any) => (
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, minWidth: '120px' }}>
-                  <div style={{ marginBottom: '4px' }}>بداية: <strong style={{color: THEME.success}}>{row.start_date || '---'}</strong></div>
-                  <div>نهاية: <strong style={{color: THEME.danger}}>{row.end_date || '---'}</strong></div>
-              </div>
-          ) 
-      },
-      { header: 'الكمية', render: (row: any) => <span style={{ fontWeight: 900 }}>{row.contract_quantity} {row.unit}</span> },
-      { header: 'سعر الوحدة', render: (row: any) => <span style={{ fontWeight: 900 }}>{formatCurrency(row.unit_contract_price)}</span> },
-      { header: 'عمالة تقديري', render: (row: any) => <span style={{ fontWeight: 900, color: THEME.warning }}>{formatCurrency(row.estimated_labor_cost)}</span> },
-      { header: 'تشغيل/خامات تقديري', render: (row: any) => <span style={{ fontWeight: 900, color: THEME.success }}>{formatCurrency(row.estimated_operational_cost)}</span> },
-      // الإجراءات (تعديل وحذف)
-      {
-          header: 'الإجراءات',
-          render: (row: any) => (
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                  <button 
-                      onClick={() => {
-                          logic.setCurrentBoqRecord(row); 
-                          logic.setIsBoqModalOpen(true);
-                      }} 
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', transition: '0.2s' }}
-                      title="تعديل البند"
-                  >
-                      ✏️
-                  </button>
-                  <button 
-                      onClick={() => {
-                          // 🚀 استدعاء نافذة التأكيد المخصصة بدل المتصفح
-                          setDeleteAlert({
-                              isOpen: true,
-                              type: 'boq',
-                              id: row.id,
-                              title: 'حذف بند مقايسة',
-                              message: `هل أنت متأكد من حذف البند "${row.work_item}"؟`
-                          });
-                      }} 
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.8, transition: '0.2s' }}
-                      title="حذف البند"
-                  >
-                      🗑️
-                  </button>
-              </div>
-          )
-      }
-    ];
-
-    const materialsColumns = [
-        { header: 'تاريخ السحب', render: (row: any) => row.date || row.created_at?.split('T')[0] || '---' },
-        { header: 'اسم الخامة', render: (row: any) => <strong style={{ color: THEME.primary }}>{row.material_name || row.item_name}</strong> },
-        { header: 'الكمية المسحوبة', render: (row: any) => <span style={{ fontWeight: 900 }}>{row.quantity} {row.unit}</span> },
-        { header: 'سعر الوحدة', render: (row: any) => formatCurrency(row.unit_price) },
-        { header: 'إجمالي التكلفة', render: (row: any) => <span style={{ fontWeight: 900, color: THEME.danger }}>{formatCurrency(row.total_price)}</span> },
-        { header: 'المورد / ملاحظات', render: (row: any) => <span style={{ fontSize: '11px', color: '#64748b' }}>{row.supplier_name || row.notes || '---'}</span> },
-    ];
-
-    const invoiceColumns = [
-    { 
-        header: 'الرقم / البيان', 
-        render: (row: any) => (
-            <div>
-                <strong style={{ color: THEME.primary }}>{row.display_number || row.invoice_number || '---'}</strong><br/>
-                <span style={{ fontSize:'11px', color:'#64748b', fontWeight: 800 }}>{row.display_type || 'مستخلص عام'}</span>
-            </div>
-        ) 
-    },
-    { 
-        header: 'المبلغ الصافي المعتمد', 
-        render: (row: any) => (
-            <span style={{ fontWeight: 900, color: THEME.success, fontSize: '14px' }}>
-                {formatCurrency(row.final_amount || row.net_amount || row.amount || 0)}
-            </span>
-        )
-    },
-    { header: 'الحالة', render: (row: any) => <StatusBadge status={row.status} /> },
-  ];
 
     // =========================================================================
     // 🎛️ أزرار وفلاتر السايد بار 
@@ -162,7 +53,6 @@ export default function AdvancedProjectsPage() {
             </button>
         )}
 
-        {/* 🎯 أزرار التحكم بالمشروع المفتوح */}
         {logic.selectedProject && (
             <>
                 <button onClick={() => {
@@ -173,7 +63,6 @@ export default function AdvancedProjectsPage() {
                 </button>
 
                 <button onClick={() => {
-                    // 🚀 استدعاء نافذة التأكيد المخصصة لحذف المشروع
                     setDeleteAlert({
                         isOpen: true,
                         type: 'project',
@@ -237,6 +126,7 @@ export default function AdvancedProjectsPage() {
                   
                   <select className="glass-input-field" value={logic.filterStage} onChange={e => logic.setFilterStage(e.target.value)}>
                       <option value="الكل">كل المراحل الإنشائية 🛠️</option>
+                      <option value="قيد الدراسة">قيد الدراسة</option>
                       {logic.availableStages?.map((stage: string) => (
                           <option key={stage} value={stage}>{stage}</option>
                       ))}
@@ -300,6 +190,10 @@ export default function AdvancedProjectsPage() {
                            else if (now > start) timeProgress = Math.round(((now - start) / (end - start)) * 100);
                        }
 
+                       // 🚀 إظهار نسبة الإنجاز والتكلفة
+                       const physicalProgress = Number(proj.overall_completion_percentage || 0).toFixed(1);
+                       const totalActualCost = Number(proj.total_cost || 0);
+
                        return (
                            <div key={proj.id} className="project-card" onClick={() => logic.loadProjectDetails(proj)}>
                                {proj.current_stage && <div className="stage-badge">⚙️ {proj.current_stage}</div>}
@@ -317,7 +211,6 @@ export default function AdvancedProjectsPage() {
                                </h3>
                                <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>العميل: {proj.client?.name || proj.client_name || '---'}</p>
                                
-                               {/* 🚀 إظهار المهندس المسئول في الكارت من الـ Schema المحدثة */}
                                {(proj.engineer_in_charge || proj.engineer_phone) && (
                                   <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 800, color: '#334155', marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
                                       <span>👨‍🔧 {proj.engineer_in_charge || 'غير محدد'}</span>
@@ -330,21 +223,19 @@ export default function AdvancedProjectsPage() {
                                        <span>💰 الميزانية المعتمدة:</span>
                                        <span style={{ color: THEME.primary, fontWeight: 900 }}>{formatCurrency(proj.estimated_budget || 0)}</span>
                                    </div>
-                                   {proj.unit_area > 0 && (
-                                       <div className="stat-row">
-                                           <span>📏 مساحة العقار:</span>
-                                           <span style={{ color: THEME.primary, fontWeight: 900 }}>{proj.unit_area} م٢</span>
-                                       </div>
-                                   )}
+                                   <div className="stat-row">
+                                       <span>🛠️ التكلفة الفعليّة (مواد+عمالة):</span>
+                                       <span style={{ color: THEME.danger, fontWeight: 900 }}>{formatCurrency(totalActualCost)}</span>
+                                   </div>
                                </div>
 
                                <div>
                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 900, color: THEME.coffeeDark, marginBottom: '8px' }}>
-                                       <span>نسبة الإنجاز الزمني المتوقعة</span>
-                                       <span>{timeProgress}%</span>
+                                       <span>نسبة الإنجاز الفعلي للموقع</span>
+                                       <span>{physicalProgress}%</span>
                                    </div>
                                    <div style={{ height: '8px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
-                                       <div style={{ width: `${timeProgress}%`, height: '100%', backgroundColor: timeProgress === 100 ? THEME.danger : THEME.success, borderRadius: '10px' }}></div>
+                                       <div style={{ width: `${physicalProgress}%`, height: '100%', backgroundColor: Number(physicalProgress) === 100 ? THEME.success : THEME.goldAccent, borderRadius: '10px' }}></div>
                                    </div>
                                </div>
                            </div>
@@ -362,14 +253,12 @@ export default function AdvancedProjectsPage() {
           ) : (
               <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
                 
-                {/* 🚀 تحديث الهيدر لإظهار بيانات المهندس المسئول */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', background: 'rgba(255,255,255,0.4)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.5)' }}>
                     <div>
                         <h2 style={{ margin: 0, fontWeight: 900, color: THEME.coffeeDark, fontSize: '24px' }}>
                             🏢 {logic.selectedProject.Property}
                             {logic.selectedProject.unit_type && <span style={{ fontSize: '16px', color: THEME.goldAccent, marginRight: '10px' }}>- {logic.selectedProject.unit_type}</span>}
                         </h2>
-                        {/* 👨‍🔧 عرض المهندس تحت العنوان */}
                         <div style={{ display: 'flex', gap: '20px', marginTop: '10px', fontSize: '13px', fontWeight: 800, color: '#475569' }}>
                             {logic.selectedProject.engineer_in_charge && <span>👨‍🔧 المهندس المسئول: <strong style={{color: THEME.primary}}>{logic.selectedProject.engineer_in_charge}</strong></span>}
                             {logic.selectedProject.engineer_phone && <span>📱 جوال: <strong style={{color: THEME.primary}}>{logic.selectedProject.engineer_phone}</strong></span>}
@@ -397,105 +286,23 @@ export default function AdvancedProjectsPage() {
                     </div>
                 </div>
 
+                {/* 🚀 إضافة زرار تاب المصروفات المباشرة هنا */}
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
                   <TabButton active={logic.activeTab === 'overview'} onClick={() => logic.setActiveTab('overview')} text="📊 النظرة العامة و KPIs" />
                   <TabButton active={logic.activeTab === 'boq'} onClick={() => logic.setActiveTab('boq')} text="📋 المقايسات والجدول الزمني" />
+                  <TabButton active={logic.activeTab === 'expenses'} onClick={() => logic.setActiveTab('expenses')} text="💸 المصروفات المباشرة" />
                   <TabButton active={logic.activeTab === 'materials'} onClick={() => logic.setActiveTab('materials')} text="🧱 الخامات المسحوبة" />
                   <TabButton active={logic.activeTab === 'financials'} onClick={() => logic.setActiveTab('financials')} text="💰 المستخلصات والماليات" />
                   <TabButton active={logic.activeTab === 'qc'} onClick={() => logic.setActiveTab('qc')} text="📸 الجودة والصور" />
                 </div>
 
-                {logic.activeTab === 'overview' && (
-                  <div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px' }}>
-                      <KpiCard title="قيمة التعاقد" value={logic.kpis?.totalContract} color={THEME.coffeeDark} />
-                      <KpiCard title="الميزانية المعتمدة" value={logic.kpis?.totalEstimatedBudget} color={THEME.goldAccent} />
-                      <KpiCard title="إجمالي الصرف الفعلي" value={logic.kpis?.actualCost} color={logic.kpis?.budgetHealth === 'red' ? THEME.danger : THEME.warning} alert={logic.kpis?.budgetHealth === 'red' ? '🚨 تجاوز للميزانية' : '✅ ضمن الميزانية'} />
-                      <KpiCard title="المحصل (إيرادات مخصصة)" value={logic.kpis?.totalRevenue} color={THEME.success} />
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
-                      <div className="glass-card">
-                        <h3 style={{ margin: '0 0 20px 0', color: THEME.coffeeDark, fontWeight: 900 }}>👷 تقرير العمالة الميدانية</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                          <div className="labor-stat-item"><span style={{fontSize:'11px', color:'#64748b', fontWeight:800}}>عمالة اليوم</span><strong style={{fontSize:'18px'}}>{logic.projectDetails.laborStats?.todayWorkers || 0}</strong></div>
-                          <div className="labor-stat-item"><span style={{fontSize:'11px', color:'#64748b', fontWeight:800}}>تكلفة اليوم</span><strong style={{fontSize:'18px', color: THEME.danger}}>{logic.projectDetails.laborStats?.todayCost?.toLocaleString() || 0} ج.م</strong></div>
-                          <div className="labor-stat-item"><span style={{fontSize:'11px', color:'#64748b', fontWeight:800}}>إجمالي العمالة السابقة</span><strong style={{fontSize:'18px'}}>{logic.projectDetails.laborStats?.totalWorkersToDate || 0}</strong></div>
-                          <div className="labor-stat-item"><span style={{fontSize:'11px', color:'#64748b', fontWeight:800}}>إجمالي الأجور</span><strong style={{fontSize:'18px'}}>{logic.projectDetails.laborStats?.totalLaborCost?.toLocaleString() || 0} ج.م</strong></div>
-                        </div>
-                      </div>
-
-                      <div className="glass-card">
-                        <h3 style={{ margin: '0 0 20px 0', color: THEME.coffeeDark, fontWeight: 900 }}>📈 مؤشر الإنجاز والزمن</h3>
-                        <ProgressBar label="الوقت المنقضي من مدة المشروع" percentage={logic.kpis?.timeProgress} color={THEME.coffeeMain} />
-                        <div style={{height:'15px'}}/>
-                        <ProgressBar label="الإنجاز المالي والتحصيل" percentage={logic.kpis?.financialProgress} color={THEME.goldAccent} />
-                        <div style={{ marginTop: '20px', padding: '12px', backgroundColor: logic.kpis?.timeStatus.includes('متأخر') ? '#FEE2E2' : '#DCFCE7', borderRadius: '12px', fontWeight: 900, textAlign: 'center', color: logic.kpis?.timeStatus.includes('متأخر') ? THEME.danger : THEME.success }}>
-                          حالة الجدول الزمني: {logic.kpis?.timeStatus}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {logic.activeTab === 'boq' && (
-                  <div className="glass-card" style={{ padding: '15px' }}>
-                    {flatBoqData.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 900 }}>
-                            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
-                            لا توجد بنود مقايسة مضافة لهذا المشروع بعد.<br/>
-                            <small style={{ fontWeight: 700, opacity: 0.8 }}>اضغط على "إضافة بند للمقايسة" من القائمة الجانبية للبدء.</small>
-                        </div>
-                    ) : (
-                        <RawasiSmartTable data={flatBoqData} columns={boqColumns} />
-                    )}
-
-                    {logic.isBoqModalOpen && (
-                        <BoqFormModal 
-                            isOpen={logic.isBoqModalOpen}
-                            onClose={() => logic.setIsBoqModalOpen(false)}
-                            record={logic.currentBoqRecord}
-                            setRecord={logic.setCurrentBoqRecord}
-                            onSave={logic.handleSaveBoq}
-                            projectBoq={logic.projectDetails.boq}
-                        />
-                    )}
-                  </div>
-                )}
-
-                {logic.activeTab === 'materials' && (
-                  <div className="glass-card" style={{ padding: '15px' }}>
-                    <RawasiSmartTable 
-                        data={logic.projectDetails.materials || []}
-                        columns={materialsColumns}
-                    />
-                  </div>
-                )}
-
-                {logic.activeTab === 'financials' && (
-                  <div className="glass-card" style={{ padding: '15px' }}>
-                    <RawasiSmartTable data={logic.projectDetails.invoices} columns={invoiceColumns} />
-                  </div>
-                )}
-
-                {logic.activeTab === 'qc' && (
-                  <div className="glass-card">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
-                      {logic.projectDetails.inspections.map((insp:any) => (
-                        <div key={insp.id} style={{ border: '1px solid #eee', borderRadius: '16px', overflow: 'hidden', background: 'white' }}>
-                          <img src={insp.photo} alt={insp.element} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
-                          <div style={{ padding: '15px' }}>
-                            <h4 style={{ margin: '0 0 5px 0', color: THEME.coffeeDark, fontWeight: 900 }}>{insp.element}</h4>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '10px', fontWeight: 700 }}>
-                              <span>{insp.engineer}</span><span>{insp.date}</span>
-                            </div>
-                            <StatusBadge status={insp.status} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* 🚀 استدعاء المكونات (التابات) بناءً على النشط */}
+                {logic.activeTab === 'overview' && <OverviewTab logic={logic} />}
+                {logic.activeTab === 'boq' && <BoqTab logic={logic} setDeleteAlert={setDeleteAlert} />}
+                {logic.activeTab === 'expenses' && <ExpensesTab logic={logic} />} {/* 👈 تاب المصروفات الجديد */}
+                {logic.activeTab === 'materials' && <MaterialsTab logic={logic} />}
+                {logic.activeTab === 'financials' && <FinancialsTab logic={logic} />}
+                {logic.activeTab === 'qc' && <QcTab logic={logic} />}
 
               </div>
             )}
@@ -539,55 +346,4 @@ export default function AdvancedProjectsPage() {
         </MasterPage>
       </div>
     );
-}
-
-// ==========================================
-// 🧩 المكونات المساعدة
-// ==========================================
-function StatusBadge({ status }: { status: string }) {
-  let color = '#555'; let bg = '#eee';
-  if (!status) return null;
-  if (status.includes('تجهيز') || status.includes('دراسة')) { color = '#CA8A04'; bg = '#FEF9C3'; }
-  else if (status.includes('تنفيذ') || status.includes('جاري') || status.includes('مُعتمد')) { color = '#166534'; bg = '#DCFCE7'; }
-  else if (status.includes('مؤقتا')) { color = '#9a3412'; bg = '#ffedd5'; }
-  else if (status.includes('توقف') || status.includes('مرفوض') || status.includes('خطأ')) { color = '#991B1B'; bg = '#FEE2E2'; } 
-  else if (status.includes('منتهي') || status.includes('مكتمل')) { color = '#1e40af'; bg = '#dbeafe'; }
-  return <span style={{ backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 900 }}>{status}</span>;
-}
-
-function KpiCard({ title, value, color, alert }: any) {
-  return (
-    <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '25px', borderRadius: '20px', borderBottom: `4px solid ${color}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', position: 'relative' }}>
-      <span style={{ display: 'block', fontSize: '13px', color: '#64748b', fontWeight: 800, marginBottom: '10px' }}>{title}</span>
-      <strong style={{ fontSize: '26px', color: color, fontWeight: 900 }}>{Number(value || 0).toLocaleString()} <span style={{fontSize:'14px'}}>ج.م</span></strong>
-      {alert && <div style={{ fontSize: '11px', color: color, marginTop: '8px', fontWeight: 800, backgroundColor: 'rgba(255,255,255,0.8)', padding: '6px', borderRadius: '8px' }}>{alert}</div>}
-    </div>
-  );
-}
-
-function ProgressBar({ label, percentage, color }: any) {
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', fontWeight: 800, color: THEME.coffeeDark }}>
-        <span>{label}</span><span>{percentage}%</span>
-      </div>
-      <div style={{ height: '14px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '20px', overflow: 'hidden' }}>
-        <div style={{ width: `${Math.min(Math.max(percentage, 0), 100)}%`, height: '100%', backgroundColor: color, borderRadius: '20px', transition: 'width 1s ease-in-out' }}></div>
-      </div>
-    </div>
-  );
-}
-
-function TabButton({ active, onClick, text }: any) {
-  return (
-      <button onClick={onClick} style={{ 
-          padding: '12px 25px', borderRadius: '14px', border: 'none', fontWeight: 900, cursor: 'pointer', transition: '0.3s', 
-          backgroundColor: active ? THEME.coffeeDark : 'rgba(255,255,255,0.6)', 
-          color: active ? THEME.goldAccent : THEME.coffeeMain, 
-          boxShadow: active ? '0 10px 20px rgba(45,34,30,0.15)' : 'none',
-          whiteSpace: 'nowrap'
-      }}>
-          {text}
-      </button>
-  );
 }

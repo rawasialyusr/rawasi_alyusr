@@ -14,7 +14,8 @@ export default function HierarchicalLedgerPage() {
     paginatedTree, totalPages, currentPage, setCurrentPage,
     isLoading, isDeleting, searchTerm, setSearchTerm, expandedIds, toggleExpand, expandAll, collapseAll, 
     selectedIds, toggleSelection, handleDelete, handleAdd, handleEdit,
-    startDate, setStartDate, endDate, setEndDate
+    startDate, setStartDate, endDate, setEndDate,
+    exportToExcel // 🚀 جلب دالة تصدير الإكسل من اللوجيك
   } = useHierarchicalAccountsLogic();
 
   const [mounted, setMounted] = useState(false);
@@ -40,7 +41,7 @@ export default function HierarchicalLedgerPage() {
     };
   }, [paginatedTree]);
 
-  // 🚀 تجهيز أزرار السايد بار (وتطوير زر الطباعة)
+  // 🚀 تجهيز أزرار السايد بار (وإضافة زر الإكسل)
   const sidebarActions = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="accounts" action="create">
@@ -67,6 +68,15 @@ export default function HierarchicalLedgerPage() {
          <button className="btn-main-glass white" style={{flex: 1}} onClick={expandAll}>🔽 فتح الكل</button>
          <button className="btn-main-glass white" style={{flex: 1}} onClick={collapseAll}>🔼 طي الكل</button>
       </div>
+
+      {/* 📊 زر الإكسل الاحترافي */}
+      <button 
+        className="btn-main-glass" 
+        onClick={exportToExcel}
+        style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }}
+      >
+        📊 تصدير إكسل
+      </button>
 
       {/* 🖨️ زر الطباعة الاحترافي المطور */}
       <button className="btn-main-glass white" onClick={() => {

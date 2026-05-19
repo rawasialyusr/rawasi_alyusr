@@ -25,82 +25,84 @@ export function useMaterialsLogic() {
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
 
-    // 🚀 هيكل الفاتورة (تم إضافة boq_id)
+    // 🚀 هيكل الفاتورة (تم إضافة حقول الأسماء عشان الـ SmartCombo يقراها فوراً في التعديل)
     const initialInvoiceState = {
-        id: null, // 👈 مهم جداً عشان نميز بين الإضافة والتعديل
-        project_id: '',
-        payee_id: '', 
-        account_id: '', 
+        id: null, 
+        project_id: '', project_name: '',
+        payee_id: '', payee_name: '',
+        account_id: '', account_name: '',
         receipt_type: 'توريد شركة',
         exp_date: new Date().toISOString().split('T')[0],
         notes: '',
         items: [
-            { work_item: '', quantity: 1, unit: 'طن', unit_price: 0, total_price: 0, boq_id: null }
+            { item_id: null, item_name: '', work_item: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null, boq_item: '' }
         ]
     };
     const [invoiceData, setInvoiceData] = useState<any>(initialInvoiceState);
 
-    // 📥 سحب الخامات مع بيانات الترحيل ونوع التوريد ورقم السند والبند
-    // 📥 [Query] المحدث بدون تعليقات داخل النص
-const { data: allMaterials = [], isLoading } = useQuery({
-    queryKey: ['materials_logs'],
-    queryFn: async () => {
-        const { data, error } = await supabase
-            .from('material_receipt_lines')
-            .select(`
-                id, 
-                item_name, 
-                quantity, 
-                unit, 
-                unit_price, 
-                total_price,
-                boq_id, 
-                boq:boq_budget(work_item), 
-                receipt:material_receipts (
+    // 📥 سحب الخامات مع بيانات الترحيل
+    const { data: allMaterials = [], isLoading } = useQuery({
+        queryKey: ['materials_logs'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('material_receipt_lines')
+                .select(`
                     id, 
-                    receipt_number,
-                    receipt_date, 
-                    project_id, 
-                    notes, 
-                    status, 
-                    receipt_type, 
-                    is_posted, 
-                    jv_id, 
-                    created_at,
-                    project:projects(Property), 
-                    supplier:partners!supplier_id(id, name), 
-                    account:accounts!account_id(id, name)
-                )
-            `)
-            .order('created_at', { ascending: false });
+                    item_id, 
+                    item_name, 
+                    quantity, 
+                    unit, 
+                    unit_price, 
+                    total_price,
+                    boq_id, 
+                    boq:boq_budget(work_item), 
+                    receipt:material_receipts (
+                        id, 
+                        receipt_number,
+                        receipt_date, 
+                        project_id, 
+                        notes, 
+                        status, 
+                        receipt_type, 
+                        is_posted, 
+                        jv_id, 
+                        created_at,
+                        project:projects(Property), 
+                        supplier:partners!supplier_id(id, name), 
+                        account:accounts!account_id(id, name)
+                    )
+                `)
+                .order('created_at', { ascending: false });
 
-        if (error) throw error;
+            if (error) throw error;
 
-        return (data || []).map((line: any) => ({
-            id: line.id,
-            receipt_id: line.receipt?.id,
-            receipt_no: line.receipt?.receipt_number, // المرجع الأساسي
-            work_item: line.item_name,
-            quantity: line.quantity,
-            unit: line.unit,
-            unit_price: line.unit_price,
-            total_price: line.total_price,
-            boq_id: line.boq_id,             // 🚀 سحب البند
-            boq_item: line.boq?.work_item,   // 🚀 سحب اسم البند للعرض
-            exp_date: line.receipt?.receipt_date,
-            created_at: line.receipt?.created_at,
-            project_id: line.receipt?.project_id,
-            project: line.receipt?.project,
-            supplier: line.receipt?.supplier,
-            account: line.receipt?.account,
-            status: line.receipt?.status,
-            notes: line.receipt?.notes,
-            receipt_type: line.receipt?.receipt_type, 
-            is_posted: line.receipt?.is_posted,
-            jv_id: line.receipt?.jv_id 
-        }));
-    }
-});
+            return (data || []).map((line: any) => ({
+                id: line.id,
+                receipt_id: line.receipt?.id,
+                receipt_no: line.receipt?.receipt_number, 
+                item_id: line.item_id,
+                work_item: line.item_name,
+                item_name: line.item_name,
+                quantity: line.quantity,
+                unit: line.unit,
+                unit_price: line.unit_price,
+                total_price: line.total_price,
+                boq_id: line.boq_id,             
+                boq_item: line.boq?.work_item,   
+                exp_date: line.receipt?.receipt_date,
+                created_at: line.receipt?.created_at,
+                project_id: line.receipt?.project_id,
+                project: line.receipt?.project,
+                supplier: line.receipt?.supplier,
+                account: line.receipt?.account,
+                status: line.receipt?.status,
+                notes: line.receipt?.notes,
+                receipt_type: line.receipt?.receipt_type, 
+                is_posted: line.receipt?.is_posted,
+                jv_id: line.receipt?.jv_id 
+            }));
+        }
+    });
 
     // 📥 سحب المشاريع النشطة للفلترة
     const { data: projects = [] } = useQuery({
@@ -124,7 +126,7 @@ const { data: allMaterials = [], isLoading } = useQuery({
             return matchSearch && matchProject && matchDate;
         });
 
-        // 🚀 الفلترة والترتيب (Sort By)
+        // 🚀 الفلترة والترتيب
         result.sort((a, b) => {
             if (sortBy === 'newest') return new Date(b.created_at || b.exp_date).getTime() - new Date(a.created_at || a.exp_date).getTime();
             if (sortBy === 'oldest') return new Date(a.created_at || a.exp_date).getTime() - new Date(b.created_at || b.exp_date).getTime();
@@ -146,7 +148,7 @@ const { data: allMaterials = [], isLoading } = useQuery({
     const handleAddItem = () => {
         setInvoiceData({
             ...invoiceData,
-            items: [...invoiceData.items, { work_item: '', quantity: 1, unit: 'متر', unit_price: 0, total_price: 0, boq_id: null }]
+            items: [...invoiceData.items, { item_id: null, item_name: '', work_item: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null, boq_item: '' }]
         });
     };
 
@@ -155,7 +157,7 @@ const { data: allMaterials = [], isLoading } = useQuery({
         setInvoiceData({ ...invoiceData, items: newItems });
     };
 
-    const handleItemChange = (index: number, field: string, value: string | number) => {
+    const handleItemChange = (index: number, field: string, value: string | number | null) => {
         const newItems = [...invoiceData.items];
         newItems[index][field] = value;
         if (field === 'quantity' || field === 'unit_price') {
@@ -168,7 +170,7 @@ const { data: allMaterials = [], isLoading } = useQuery({
         return invoiceData.items.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0);
     }, [invoiceData.items]);
 
-    // 💾 دالة الحفظ (تدعم الإضافة والتعديل)
+    // 💾 دالة الحفظ
     const saveMutation = useMutation({
         mutationFn: async () => {
             if (!invoiceData.project_id || !invoiceData.payee_id || !invoiceData.account_id) {
@@ -178,11 +180,8 @@ const { data: allMaterials = [], isLoading } = useQuery({
             let receiptId = invoiceData.id;
 
             if (receiptId) {
-                // 🚀 حالة التعديل
-                // 1. فك الترحيل أولاً لتجنب مشاكل القيود
                 await supabase.rpc('rpc_unpost_material', { p_id: receiptId });
 
-                // 2. تحديث الرأس
                 const { error: masterError } = await supabase
                     .from('material_receipts')
                     .update({
@@ -194,16 +193,14 @@ const { data: allMaterials = [], isLoading } = useQuery({
                         total_amount: grandTotal,
                         notes: invoiceData.notes || 'توريد خامات',
                         status: 'مُعتمد',
-                        is_posted: false
+                        is_posted: false 
                     })
                     .eq('id', receiptId);
                 if (masterError) throw masterError;
 
-                // 3. مسح السطور القديمة
                 await supabase.from('material_receipt_lines').delete().eq('receipt_id', receiptId);
 
             } else {
-                // 🚀 حالة الإضافة الجديدة
                 const { data: masterData, error: masterError } = await supabase
                     .from('material_receipts')
                     .insert([{
@@ -216,7 +213,7 @@ const { data: allMaterials = [], isLoading } = useQuery({
                         total_amount: grandTotal,
                         notes: invoiceData.notes || 'توريد خامات',
                         status: 'مُعتمد',
-                        is_posted: false
+                        is_posted: false 
                     }])
                     .select('id').single();
 
@@ -224,23 +221,19 @@ const { data: allMaterials = [], isLoading } = useQuery({
                 receiptId = masterData.id;
             }
 
-            // 4. إدراج السطور (سواء تعديل أو جديد) + حفظ الـ boq_id
             const linesPayload = invoiceData.items.map((item: any) => ({
                 receipt_id: receiptId,
-                item_name: item.work_item,
+                item_id: item.item_id || null, 
+                item_name: item.work_item || item.item_name,
                 quantity: Number(item.quantity) || 1,
                 unit: item.unit || 'وحدة',
                 unit_price: Number(item.unit_price) || 0,
                 total_price: Number(item.total_price) || 0,
-                boq_id: item.boq_id || null // 🚀 حفظ البند في الداتا بيز
+                boq_id: item.boq_id || null 
             }));
 
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
             if (linesError) throw linesError;
-
-            // 5. ترحيل محاسبي فوري
-            const { error: rpcError } = await supabase.rpc('rpc_post_material', { p_id: receiptId });
-            if (rpcError) throw new Error("تم الحفظ ولكن فشل الترحيل: " + rpcError.message);
 
             return receiptId;
         },
@@ -248,8 +241,8 @@ const { data: allMaterials = [], isLoading } = useQuery({
             queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
             setIsModalOpen(false);
             setInvoiceData(initialInvoiceState);
-            setSelectedIds([]); // تفريغ التحديد بعد النجاح
-            showToast("تم الحفظ والترحيل المحاسبي بنجاح 🧱🚀", "success");
+            setSelectedIds([]); 
+            showToast("تم حفظ الفاتورة بنجاح (معلقة في انتظار الترحيل) ⏳", "success");
         },
         onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
     });
@@ -272,6 +265,38 @@ const { data: allMaterials = [], isLoading } = useQuery({
         onError: (err: any) => showToast(`فشلت العملية: ${err.message}`, "error")
     });
 
+    // 🚀 دالة سحب بيانات الفاتورة المحددة وعرضها
+    const populateEditModal = (receipt_id: string) => {
+        const lines = allMaterials.filter((d: any) => d.receipt_id === receipt_id);
+        if (lines.length > 0) {
+            const first = lines[0];
+            setInvoiceData({
+                id: receipt_id, 
+                project_id: first.project_id || '',
+                project_name: first.project?.Property || '', // 👈 الاسم جاهز للعرض
+                payee_id: first.supplier?.id || '',
+                payee_name: first.supplier?.name || '',      // 👈
+                account_id: first.account?.id || '',
+                account_name: first.account?.name || '',     // 👈
+                receipt_type: first.receipt_type || 'توريد شركة',
+                exp_date: first.exp_date || new Date().toISOString().split('T')[0],
+                notes: first.notes || '',
+                items: lines.map((l: any) => ({
+                    item_id: l.item_id || null,
+                    item_name: l.item_name || '',
+                    work_item: l.work_item || '',
+                    quantity: l.quantity || 1,
+                    unit: l.unit || 'وحدة',
+                    unit_price: l.unit_price || 0,
+                    total_price: l.total_price || 0,
+                    boq_id: l.boq_id || null,
+                    boq_item: l.boq_item || '' // 👈
+                }))
+            });
+            setIsModalOpen(true);
+        }
+    };
+
     return {
         data: filteredData, projects, kpis, isLoading,
         globalSearch, setGlobalSearch, filterProject, setFilterProject, dateFrom, setDateFrom, dateTo, setDateTo,
@@ -280,20 +305,8 @@ const { data: allMaterials = [], isLoading } = useQuery({
         invoiceData, setInvoiceData, handleAddItem, handleRemoveItem, handleItemChange, grandTotal,
         handleSave: () => saveMutation.mutate(),
         
-        // 🚀 حالات وأزرار التشيك بوكس والترتيب
-        // ==========================================
-        // 🚀 إدارة الاختيار (Selection) - تحديث لمنع التداخل
-        // ==========================================
-        sortBy, 
-        setSortBy,
-        selectedIds, 
-        setSelectedIds,
+        sortBy, setSortBy, selectedIds, setSelectedIds,
         
-        // ==========================================
-        // 🚀 إدارة الاختيار (V11 Selection System)
-        // ==========================================
-                
-        // اختيار الكل بناءً على ID السطر الفريد (منع التداخل)
         handleSelectAll: (e: any) => {
             if (e.target.checked) {
                 const allLineIds = filteredData.map((d: any) => d.id).filter(Boolean);
@@ -303,47 +316,29 @@ const { data: allMaterials = [], isLoading } = useQuery({
             }
         },
 
-        // اختيار سطر واحد بشكل مستقل
         handleSelectRow: (id: string) => {
             setSelectedIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
         },
 
-        // ==========================================
-        // 🚀 دالة التعديل (Edit Logic)
-        // ==========================================
-        handleEdit: (receipt_id: string) => {
-            // سحب كافة السطور التابعة للفاتورة المختارة من الذاكرة
-            const lines = allMaterials.filter((d: any) => d.receipt_id === receipt_id);
-            if (lines.length > 0) {
-                const first = lines[0];
-                setInvoiceData({
-                    id: receipt_id, // وجود ID يعني أننا في وضع "تحديث"
-                    project_id: first.project_id || '',
-                    payee_id: first.supplier?.id || '',
-                    account_id: first.account?.id || '',
-                    receipt_type: first.receipt_type || 'توريد شركة',
-                    exp_date: first.exp_date || new Date().toISOString().split('T')[0],
-                    notes: first.notes || '',
-                    items: lines.map((l: any) => ({
-                        work_item: l.work_item || '',
-                        quantity: l.quantity || 1,
-                        unit: l.unit || 'وحدة',
-                        unit_price: l.unit_price || 0,
-                        total_price: l.total_price || 0,
-                        boq_id: l.boq_id || null // 🚀 جلب البند عند التعديل
-                    }))
-                });
-                setIsModalOpen(true);
+        // 🚀 الدوال المتاحة للواجهة لفتح التعديل
+        handleEdit: populateEditModal, 
+        
+        // 🚀 دالة زر "تعديل" من القائمة الجانبية (تسحب الـ ID من السجل المحدد)
+        handleEditSelected: () => {
+            if (selectedIds.length !== 1) {
+                showToast("الرجاء تحديد فاتورة واحدة لتعديلها.", "warning");
+                return;
+            }
+            const selectedLineId = selectedIds[0];
+            const selectedLine = allMaterials.find((d: any) => d.id === selectedLineId);
+            
+            if (selectedLine && selectedLine.receipt_id) {
+                populateEditModal(selectedLine.receipt_id);
             }
         },
 
-        // ==========================================
-        // 🚀 العمليات الجماعية الذكية (V11 Bulk Actions)
-        // ==========================================
         handleBulkAction: async (action: 'post' | 'unpost' | 'delete') => {
             try {
-                // 🧠 ذكاء اصطناعي مدمج: استخراج معرفات الفواتير (الأب) الفريدة فقط
-                // حتى لو اخترت 10 سطور لنفس الفاتورة، سيتم تنفيذ الأمر مرة واحدة عليها
                 const uniqueReceiptIds = Array.from(new Set(
                     allMaterials
                         .filter((d: any) => selectedIds.includes(d.id))
@@ -359,21 +354,19 @@ const { data: allMaterials = [], isLoading } = useQuery({
                     delete: 'rpc_delete_material_receipt' 
                 };
 
-                // تنفيذ الـ RPC على كل فاتورة فريدة
                 for (const rId of uniqueReceiptIds) {
                     const { error } = await supabase.rpc(rpcMap[action], { p_id: rId });
                     if (error) throw error;
                 }
 
                 showToast("تم تنفيذ العملية بنجاح على الفواتير المحددة ✅", "success");
-                setSelectedIds([]); // تفريغ التحديد بعد النجاح
+                setSelectedIds([]); 
                 queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
             } catch (err: any) {
                 showToast(`خطأ في التنفيذ الجماعي: ${err.message}`, "error");
             }
         },
 
-        // الأوامر الفردية (من داخل الجدول)
         handleAction: (action: string, id: string) => actionMutation.mutate({ action, id }),
         isActionPending: actionMutation.isPending,
         canAdd: can('materials', 'add')

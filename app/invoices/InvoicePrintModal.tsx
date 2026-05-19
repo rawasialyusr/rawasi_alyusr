@@ -213,8 +213,8 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
     
     // 🚀 استخراج تاريخ ووقت إنشاء الفاتورة من الداتابيز (created_at) بدلاً من وقت الطباعة
     const creationDateObj = record?.created_at ? new Date(record.created_at) : (record?.date ? new Date(record.date) : new Date());
-    const creationTime = creationDateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const creationDate = creationDateObj.toLocaleDateString('ar-EG');
+    const creationTime = creationDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const creationDate = creationDateObj.toLocaleDateString('en-US');
     
     // 🚀 الباركود يحمل اسم المحاسب الحقيقي والتاريخ والوقت فقط (بدون يوزرنيم للأمان)
     const signatureData = `تم الاعتماد إلكترونياً\nتاريخ الإصدار: ${creationDate}\nوقت الإصدار: ${creationTime}\nبواسطة: ${finalFullName}`;
@@ -234,6 +234,17 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
     
     if (displayLineTotal === 0 && Number(record.taxable_amount) > 0) {
         displayLineTotal = Number(record.taxable_amount) + Number(record.materials_discount || 0);
+    }
+
+    // Custom formatting wrapper to force English numbers
+    const formatNumberEn = (num: number) => {
+        return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+    };
+    
+    // Wrapper for currency if the original function uses Arabic numbers
+    const formatCurrencyEn = (val: any) => {
+        const num = Number(val) || 0;
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'SAR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
     }
 
     // 📦 محتوى المعاينة 
@@ -314,13 +325,13 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 }
                 .box-label { 
                     position: absolute; top: -10px; right: 20px; background: white; 
-                    padding: 0 10px; font-size: 12px; font-weight: 900; color: #475569; 
+                    padding: 0 10px; font-size: 11px; font-weight: 900; color: #475569; 
                     border-radius: 20px; 
                 }
 
                 .inner-table { width: 100%; border-collapse: collapse; }
                 .inner-table td { padding: 4px 0; font-size: 13px; vertical-align: middle; }
-                .label-cell { text-align: left; font-weight: 900; color: #64748b; width: 90px; padding-left: 10px !important; }
+                .label-cell { text-align: left; font-weight: 900; color: #64748b; padding-left: 10px !important; }
                 .value-cell { text-align: right; font-weight: 900; color: #0f172a; }
                 .value-highlight { color: ${THEME.primary}; font-size: 15px; font-weight: 900; }
 
@@ -336,11 +347,11 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 .signature-area { margin-top: 30px; text-align: center; align-self: flex-start; }
                 .signature-title { font-weight: 900; font-size: 13px; color: #64748b; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
 
-                .inv-totals-box { width: 350px; }
-                .inv-total-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; font-weight: 700; color: #334155; }
+                .inv-totals-box { width: 380px; }
+                .inv-total-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; font-weight: 800; color: #334155; align-items: center; }
                 .inv-total-row.tax { color: #0284c7; }
                 .inv-total-row.discount { color: #dc2626; }
-                .inv-total-row.grand-total { border-top: 2px solid #0f172a; padding-top: 12px; margin-top: 12px; font-size: 20px; font-weight: 900; color: #0f172a; background: #f1f5f9; padding: 10px; border-radius: 12px; }
+                .inv-total-row.grand-total { border-top: 2px solid #0f172a; padding-top: 10px; margin-top: 10px; font-size: 16px; font-weight: 900; color: #0f172a; background: #f1f5f9; padding: 10px; border-radius: 12px; }
 
                 .inv-footer-contact { 
                     margin-top: auto !important; 
@@ -438,8 +449,8 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     <div className="header-center">
                         <h1 style={{ fontSize: '18px', fontWeight: 900, color: THEME.primary, margin: '0 0 4px 0' }}>مؤسسة طفله عبد الله السبيعي للمقاولات</h1>
                         <h2 style={{ fontSize: '15px', fontWeight: 900, color: THEME.primary, margin: '0 0 8px 0', letterSpacing: '0.5px' }}>Tifla Abdullah Al-Subaie Est. for Contracting</h2>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>الرقم الضريبي (VAT No): ٣١٢٤٨٧٤٧٧٨٠٠٠٠٣</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155', marginTop: '2px' }}>الرقم الموحد (Unified No): ٧٠٥١٠١٣٥١٩</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155', fontFamily: 'Arial, sans-serif' }}>الرقم الضريبي (VAT No): 312487477800003</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155', marginTop: '2px', fontFamily: 'Arial, sans-serif' }}>الرقم الموحد (Unified No): 7051013519</div>
                     </div>
 
                     <div className="header-logo">
@@ -451,43 +462,48 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     <div className="inv-title">فاتورة ضريبية | TAX INVOICE</div>
                 </div>
 
-                {/* 2️⃣ مربعات البيانات */}
+                {/* 2️⃣ مربعات البيانات (المعدلة عربي/إنجليزي) بخاصية توزيع المساحات المحمية لمنع الالتفاف السعري السفلي */}
                 <div className="info-grid">
                     <div className="info-box">
-                        <span className="box-label">صُدرت إلى | BILLED TO</span>
-                        <table className="inner-table">
-                            <tbody>
-                                <tr>
-                                    <td className="value-cell value-highlight" style={{ paddingBottom: '8px' }}>{record.client_name || record.partners?.name || '---'}</td>
-                                </tr>
-                                <tr>
-                                    <td className="value-cell" style={{ color: '#334155' }}>الرقم الضريبي: {record.partners?.tax_id || record.partners?.vat_number || '---'}</td>
-                                </tr>
-                                <tr>
-                                    <td className="value-cell" style={{ color: '#334155' }}>العنوان: {record.partners?.address || record.address || 'المملكة العربية السعودية'}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <span className="box-label">صُدرت إلى / Invoice To</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                                <span style={{ width: '26%', textAlign: 'right', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>العميل</span>
+                                <span style={{ width: '48%', textAlign: 'center', fontWeight: 900, color: THEME.primary, fontSize: '12px' }}>{record.client_name || record.partners?.name || '---'}</span>
+                                <span style={{ width: '26%', textAlign: 'left', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>Client Name</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                                <span style={{ width: '26%', textAlign: 'right', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>الرقم الضريبي</span>
+                                <span style={{ width: '48%', textAlign: 'center', fontWeight: 900, color: '#334155', fontSize: '12px', fontFamily: 'Arial, sans-serif' }}>{record.partners?.tax_id || record.partners?.vat_number || '---'}</span>
+                                <span style={{ width: '26%', textAlign: 'left', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>VAT No</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ width: '26%', textAlign: 'right', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>العنوان</span>
+                                <span style={{ width: '48%', textAlign: 'center', fontWeight: 900, color: '#334155', fontSize: '11px' }}>{record.partners?.address || record.address || 'المملكة العربية السعودية'}</span>
+                                <span style={{ width: '26%', textAlign: 'left', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>Address</span>
+                            </div>
+                        </div>
                     </div>
                     
                     <div className="info-box">
-                        <span className="box-label">تفاصيل الفاتورة | INVOICE DETAILS</span>
-                        <table className="inner-table">
-                            <tbody>
-                                <tr>
-                                    <td className="value-cell" style={{textAlign: 'left'}}>#{record.invoice_number}</td>
-                                    <td className="label-cell">:رقم الفاتورة</td>
-                                </tr>
-                                <tr>
-                                    <td className="value-cell" style={{textAlign: 'left'}}>{new Date(record.date).toLocaleDateString('ar-EG')}</td>
-                                    <td className="label-cell">:تاريخ الإصدار</td>
-                                </tr>
-                                <tr>
-                                    <td className="value-cell" style={{textAlign: 'left', color: THEME.primary, fontWeight: 900}}>{projectNames}</td>
-                                    <td className="label-cell">:المشروع</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <span className="box-label">بيانات الفاتورة | INVOICE DETAILS</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                                <span style={{ width: '26%', textAlign: 'right', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>رقم الفاتورة</span>
+                                <span style={{ width: '48%', textAlign: 'center', fontWeight: 900, color: '#334155', fontSize: '12px', fontFamily: 'Arial, sans-serif' }}>#{record.invoice_number}</span>
+                                <span style={{ width: '26%', textAlign: 'left', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>Invoice No</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                                <span style={{ width: '26%', textAlign: 'right', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>تاريخ الإصدار</span>
+                                <span style={{ width: '48%', textAlign: 'center', fontWeight: 900, color: '#334155', fontSize: '12px', fontFamily: 'Arial, sans-serif' }}>{new Date(record.date).toLocaleDateString('en-US')}</span>
+                                <span style={{ width: '26%', textAlign: 'left', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>Issue Date</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ width: '26%', textAlign: 'right', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>المشروع</span>
+                                <span style={{ width: '48%', textAlign: 'center', fontWeight: 900, color: THEME.primary, fontSize: '11px' }}>{projectNames}</span>
+                                <span style={{ width: '26%', textAlign: 'left', fontWeight: 900, color: '#64748b', fontSize: '11px', whiteSpace: 'nowrap' }}>Project</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -496,23 +512,23 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     <thead>
                         <tr>
                             <th style={{ width: '40px' }}>#</th>
-                            <th style={{ textAlign: 'right' }}>البيان / الوصف</th>
-                            <th style={{ width: '80px' }}>الوحدة</th>
-                            <th style={{ width: '80px' }}>الكمية</th>
-                            <th style={{ width: '120px' }}>السعر</th>
-                            <th style={{ width: '150px' }}>الإجمالي</th>
+                            <th style={{ textAlign: 'right' }}>البيان / Description</th>
+                            <th style={{ width: '90px' }}>الوحدة / Unit</th>
+                            <th style={{ width: '90px' }}>الكمية / Qty</th>
+                            <th style={{ width: '120px' }}>السعر / Price</th>
+                            <th style={{ width: '150px' }}>الإجمالي / Total</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody style={{ fontFamily: 'Arial, sans-serif' }}>
                         {/* البند الأساسي الأول إن وجد */}
                         {hasMainItem && (
                             <tr>
                                 <td>1</td>
-                                <td className="desc">{record.description || '---'}</td>
+                                <td className="desc" style={{ fontFamily: "'Arial', sans-serif" }}>{record.description || '---'}</td>
                                 <td>{record.unit || '---'}</td>
-                                <td>{record.quantity || '-'}</td>
-                                <td>{formatCurrency(record.unit_price)}</td>
-                                <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrency((Number(record.quantity||0) * Number(record.unit_price||0)))}</td>
+                                <td>{formatNumberEn(record.quantity || 0)}</td>
+                                <td>{formatCurrencyEn(record.unit_price)}</td>
+                                <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrencyEn((Number(record.quantity||0) * Number(record.unit_price||0)))}</td>
                             </tr>
                         )}
                         
@@ -520,15 +536,15 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         {record.lines?.map((line: any, idx: number) => (
                             <tr key={`line-${idx}`}>
                                 <td>{hasMainItem ? idx + 2 : idx + 1}</td>
-                                <td className="desc">{line.description}</td>
+                                <td className="desc" style={{ fontFamily: "'Arial', sans-serif" }}>{line.description}</td>
                                 <td>{line.unit}</td>
-                                <td>{line.quantity}</td>
-                                <td>{formatCurrency(line.unit_price)}</td>
-                                <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrency(line.total_price)}</td>
+                                <td>{formatNumberEn(line.quantity || 0)}</td>
+                                <td>{formatCurrencyEn(line.unit_price)}</td>
+                                <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrencyEn(line.total_price)}</td>
                             </tr>
                         ))}
 
-                        {/* 🚀 الإضافة الجديدة: مصفوفة بيانات lines_data بدون حذف السابق */}
+                        {/* 🚀 مصفوفة بيانات lines_data بدون حذف السابق */}
                         {record.lines_data?.map((line: any, idx: number) => {
                             const rowNum = baseLinesCount + idx + 1;
                             const qty = Number(line.quantity || 0);
@@ -538,11 +554,11 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                             return (
                                 <tr key={`ldata-${idx}`}>
                                     <td>{rowNum}</td>
-                                    <td className="desc">{line.description || line.item_name || line.name || '---'}</td>
+                                    <td className="desc" style={{ fontFamily: "'Arial', sans-serif" }}>{line.description || line.item_name || line.name || '---'}</td>
                                     <td>{line.unit || '---'}</td>
-                                    <td>{line.quantity || '-'}</td>
-                                    <td>{formatCurrency(price)}</td>
-                                    <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrency(total)}</td>
+                                    <td>{formatNumberEn(qty || 0)}</td>
+                                    <td>{formatCurrencyEn(price)}</td>
+                                    <td style={{ fontWeight: 900, color: '#0f172a' }}>{formatCurrencyEn(total)}</td>
                                 </tr>
                             );
                         })}
@@ -560,41 +576,40 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                             <div className="signature-title">معتمد إلكترونياً من / E-Signature</div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <QRCodeSVG value={signatureData} size={75} level="M" />
-                                {/* 👈 النص المطبوع: الاسم الفعلي للمحاسب فقط */}
+                                {/* النص المطبوع: الاسم الفعلي للمحاسب فقط */}
                                 <div style={{ fontSize: '14px', fontWeight: 900, marginTop: '8px', color: THEME.primary }}>{finalFullName}</div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="inv-totals-box">
+                    <div className="inv-totals-box" style={{ fontFamily: 'Arial, sans-serif' }}>
                         <div className="inv-total-row">
-                            <span>إجمالي الأعمال:</span>
-                            {/* 🚀 الحل هنا: دمج حقل السجل مع الإجمالي المستنتج لحظياً */}
-                            <span>{formatCurrency(record.line_total || displayLineTotal)}</span>
+                            <span style={{ fontFamily: "'Arial', sans-serif" }}>إجمالي الأعمال / Subtotal:</span>
+                            <span>{formatCurrencyEn(record.line_total || displayLineTotal)}</span>
                         </div>
                         {Number(record.materials_discount) > 0 && (
                             <div className="inv-total-row discount">
-                                <span>يخصم (مواد):</span>
-                                <span>{formatCurrency(record.materials_discount)} -</span>
+                                <span style={{ fontFamily: "'Arial', sans-serif" }}>يخصم (مواد) / Mat. Discount:</span>
+                                <span>{formatCurrencyEn(record.materials_discount)} -</span>
                             </div>
                         )}
                         <div className="inv-total-row">
-                            <span>الخاضع للضريبة:</span>
-                            <span>{formatCurrency(record.taxable_amount)}</span>
+                            <span style={{ fontFamily: "'Arial', sans-serif" }}>الخاضع للضريبة / Taxable:</span>
+                            <span>{formatCurrencyEn(record.taxable_amount)}</span>
                         </div>
                         <div className="inv-total-row tax">
-                            <span>ضريبة القيمة المضافة (15%):</span>
-                            <span>{formatCurrency(record.tax_amount)}</span>
+                            <span style={{ fontFamily: "'Arial', sans-serif" }}>الضريبة (15%) / VAT (15%):</span>
+                            <span>{formatCurrencyEn(record.tax_amount)}</span>
                         </div>
                         {Number(record.guarantee_amount) > 0 && (
                             <div className="inv-total-row discount">
-                                <span>يخصم ضمان أعمال ({record.guarantee_percent}%):</span>
-                                <span>{formatCurrency(record.guarantee_amount)} -</span>
+                                <span style={{ fontFamily: "'Arial', sans-serif" }}>ضمان أعمال / Guarantee ({record.guarantee_percent}%):</span>
+                                <span>{formatCurrencyEn(record.guarantee_amount)} -</span>
                             </div>
                         )}
                         <div className="inv-total-row grand-total">
-                            <span>الصافي المستحق:</span>
-                            <span>{formatCurrency(record.total_amount)}</span>
+                            <span style={{ fontFamily: "'Arial', sans-serif" }}>الصافي المستحق / Grand Total:</span>
+                            <span>{formatCurrencyEn(record.total_amount)}</span>
                         </div>
                     </div>
                 </div>

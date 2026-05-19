@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react'; 
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
@@ -9,8 +9,36 @@ export function useMaterialIssuesLogic() {
     const { showToast } = useToast();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedIds, setSelectedIds] = useState<string[]>([]); // 🚀 للعمليات الجماعية
-    const [editingIssueId, setEditingIssueId] = useState<string | null>(null); // ✏️ أيدي الإذن الجاري تعديله
+    const [selectedIds, setSelectedIds] = useState<string[]>([]); 
+    const [editingIssueId, setEditingIssueId] = useState<string | null>(null); 
+
+    // 📦 قائمة الخامات والأرصدة من الـ View
+    const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+
+    // دالة جلب الخامات المتاحة من الـ View وتجهيزها للكومبوننت
+    // دالة جلب الخامات المتاحة باستخدام الـ RPC الجديد
+    const fetchInventoryItems = async () => {
+        try {
+            // 🚀 مناداة الفانكشن بدلاً من الفيو المباشر لتخطي مشاكل الصلاحيات
+            const { data, error } = await supabase.rpc('rpc_get_inventory_balances');
+
+            if (error) throw error;
+            
+            // تجهيز الداتا وإضافة حقل id عشان الـ SmartCombo يشتغل بكفاءة
+            const formattedData = data?.map((d: any) => ({
+                ...d,
+                id: d.item_id 
+            })) || [];
+
+            setInventoryItems(formattedData);
+        } catch (err: any) {
+            console.error("خطأ في جلب أرصدة المخازن عبر RPC:", err.message);
+        }
+    };
+    // جلب أرصدة المخازن فور تحميل الهوك
+    useEffect(() => {
+        fetchInventoryItems();
+    }, []);
 
     // هيكل بيانات الإذن الافتراضي
     const initialIssueState = {
@@ -19,7 +47,7 @@ export function useMaterialIssuesLogic() {
         issue_type: 'صرف لمقاول',
         issue_date: new Date().toISOString().split('T')[0],
         notes: '',
-        items: [{ item_name: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null }]
+        items: [{ item_id: null, item_name: '', quantity: 1, available_qty: 0, old_qty: 0, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null }]
     };
 
     const [issueData, setIssueData] = useState<any>(initialIssueState);
@@ -31,10 +59,10 @@ export function useMaterialIssuesLogic() {
             const { data, error } = await supabase
                 .from('material_issue_lines')
                 .select(`
-                    id, item_name, quantity, unit, unit_price, total_price, boq_id,
+                    id, item_id, item_name, quantity, unit, unit_price, total_price, boq_id,
                     boq:boq_budget!material_issue_lines_boq_id_fkey(work_item),
                     issue:material_issues!material_issue_lines_issue_id_fkey (
-                        id, issue_number, issue_date, issue_type, is_posted, notes, project_id, subcontractor_id, created_at,
+                        id, issue_number, issue_date, issue_type, is_posted, notes, project_id, subcontractor_id, contractor_text_name, created_at,
                         project:projects!material_issues_project_id_fkey(Property),
                         subcontractor:partners!material_issues_subcontractor_id_fkey(name)
                     )
@@ -43,9 +71,10 @@ export function useMaterialIssuesLogic() {
             if (error) throw error;
             
             return data.map((line: any) => ({
-                id: line.id, // أيدي السطر المستقل للتشيك بوكس
+                id: line.id, 
                 issue_id: line.issue?.id, 
                 issue_number: line.issue?.issue_number,
+                item_id: line.item_id, 
                 item_name: line.item_name,
                 quantity: line.quantity,
                 unit: line.unit,
@@ -60,15 +89,15 @@ export function useMaterialIssuesLogic() {
                 project_id: line.issue?.project_id,
                 project_name: line.issue?.project?.Property,
                 subcontractor_id: line.issue?.subcontractor_id,
-                subcontractor_name: line.issue?.subcontractor?.name
+                subcontractor_name: line.issue?.subcontractor?.name,
+                contractor_text_name: line.issue?.contractor_text_name 
             }));
         }
     });
 
-    // 🚀 فتح المودال لتعديل إذن صرف موجود
     const handleOpenEdit = () => {
         if(selectedIds.length === 0) return;
-        const idToEdit = issues.find(i => i.id === selectedIds[0])?.issue_id;
+        const idToEdit = issues.find((i:any) => i.id === selectedIds[0])?.issue_id;
         if(!idToEdit) return;
 
         const linesToEdit = issues.filter((i: any) => i.issue_id === idToEdit);
@@ -80,26 +109,41 @@ export function useMaterialIssuesLogic() {
                 issue_type: master.issue_type,
                 issue_date: master.issue_date,
                 notes: master.notes || '',
-                items: linesToEdit.map((l: any) => ({
-                    item_name: l.item_name,
-                    quantity: l.quantity,
-                    unit: l.unit,
-                    unit_price: l.unit_price,
-                    total_price: l.total_price,
-                    boq_id: l.boq_id
-                }))
+                items: linesToEdit.map((l: any) => {
+                    const inventoryItem = inventoryItems.find(inv => inv.item_id === l.item_id);
+                    return {
+                        item_id: l.item_id || null,
+                        item_name: l.item_name,
+                        quantity: l.quantity,
+                        old_qty: l.quantity, 
+                        available_qty: inventoryItem?.available_quantity || 0, 
+                        unit: l.unit,
+                        unit_price: l.unit_price,
+                        total_price: l.total_price,
+                        boq_id: l.boq_id
+                    };
+                })
             });
             setEditingIssueId(idToEdit);
             setIsModalOpen(true);
         }
     };
 
-    // تغيير بيانات صنف داخل الجدول
     const handleItemChange = (index: number, field: string, value: any) => {
         const newItems = [...issueData.items];
-        newItems[index][field] = value;
-        if (field === 'quantity' || field === 'unit_price') {
-            newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (Number(newItems[index].unit_price) || 0);
+        
+        if (field === 'item_selection') {
+            newItems[index].item_id = value?.item_id || null;
+            newItems[index].item_name = value?.item_name || '';
+            newItems[index].unit = value?.unit || 'وحدة';
+            newItems[index].unit_price = value?.last_price || 0; 
+            newItems[index].available_qty = value?.available_quantity || 0; 
+            newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (value?.last_price || 0);
+        } else {
+            newItems[index][field] = value;
+            if (field === 'quantity' || field === 'unit_price') {
+                newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (Number(newItems[index].unit_price) || 0);
+            }
         }
         setIssueData({ ...issueData, items: newItems });
     };
@@ -109,17 +153,24 @@ export function useMaterialIssuesLogic() {
         setIssueData({ ...issueData, items: newItems });
     };
 
-    // 💾 دالة الحفظ (تعمل للإضافة والتعديل معاً)
     const saveIssueMutation = useMutation({
         mutationFn: async () => {
             if (!issueData.project_id) throw new Error("يرجى اختيار المشروع الصارف");
             if (issueData.issue_type === 'صرف لمقاول' && !issueData.subcontractor_id) throw new Error("يرجى اختيار المقاول المستلم");
 
+            for (const item of issueData.items) {
+                if (item.item_id) {
+                    const totalAvailable = (Number(item.available_qty) || 0) + (Number(item.old_qty) || 0);
+                    if (Number(item.quantity) > totalAvailable) {
+                        throw new Error(`⚠️ نفاذ مخزون! الكمية المطلوبة لـ "${item.item_name}" (${item.quantity}) أكبر من المتاح (${totalAvailable}).`);
+                    }
+                }
+            }
+
             const total = issueData.items.reduce((sum: number, i: any) => sum + i.total_price, 0);
             let currentIssueId = editingIssueId;
 
             if (currentIssueId) {
-                // 📝 وضع التعديل (فك الترحيل أولاً، ثم التحديث)
                 await supabase.rpc('rpc_unpost_material_issue', { p_id: currentIssueId });
                 await supabase.from('material_issue_lines').delete().eq('issue_id', currentIssueId);
                 
@@ -134,7 +185,6 @@ export function useMaterialIssuesLogic() {
                 }).eq('id', currentIssueId);
                 if (hErr) throw hErr;
             } else {
-                // ✨ وضع إضافة إذن جديد
                 const { data: head, error: hErr } = await supabase.from('material_issues').insert([{
                     issue_number: `ISS-${Date.now().toString().slice(-6)}`,
                     project_id: issueData.project_id,
@@ -150,9 +200,9 @@ export function useMaterialIssuesLogic() {
                 currentIssueId = head.id;
             }
 
-            // إدخال السطور الجديدة
             const lines = issueData.items.map((i: any) => ({ 
                 issue_id: currentIssueId,
+                item_id: i.item_id || null, 
                 item_name: i.item_name,
                 quantity: Number(i.quantity) || 0,
                 unit: i.unit || 'وحدة',
@@ -163,25 +213,20 @@ export function useMaterialIssuesLogic() {
             const { error: lErr } = await supabase.from('material_issue_lines').insert(lines);
             if (lErr) throw lErr;
 
-            // الترحيل المحاسبي الفوري
-            const { error: rpcError } = await supabase.rpc('rpc_post_material_issue', { p_id: currentIssueId });
-            if (rpcError) throw new Error("تم الحفظ ولكن فشل الترحيل: " + rpcError.message);
         },
         onSuccess: () => {
-            showToast("تم حفظ إذن الصرف وترحيله بنجاح ✨", "success");
+            showToast("تم حفظ إذن الصرف بنجاح (مسودة بانتظار الترحيل) ✨", "success");
             setIsModalOpen(false);
             setEditingIssueId(null);
             setIssueData(initialIssueState);
             setSelectedIds([]); 
             queryClient.invalidateQueries({ queryKey: ['material_issues_list'] });
         },
-        onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
+        onError: (err: any) => showToast(err.message, "error") 
     });
 
-    // ⚙️ العمليات الجماعية (ترحيل، فك، حذف)
     const actionMutation = useMutation({
         mutationFn: async ({ action }: { action: 'post' | 'unpost' | 'delete' }) => {
-             // 🧠 استخراج أيدي الإذن الأب بدون تكرار
              const uniqueIssueIds = Array.from(new Set(
                 issues
                     .filter((d: any) => selectedIds.includes(d.id))
@@ -202,7 +247,7 @@ export function useMaterialIssuesLogic() {
             }
         },
         onSuccess: (_, variables) => {
-            const msg = variables.action === 'delete' ? "تم الحذف النهائي للفواتير המحددة 🗑️" : "تمت العملية بنجاح ✅";
+            const msg = variables.action === 'delete' ? "تم الحذف النهائي للفواتير المحددة 🗑️" : "تمت العملية بنجاح ✅";
             showToast(msg, "success");
             setSelectedIds([]); 
             queryClient.invalidateQueries({ queryKey: ['material_issues_list'] });
@@ -212,6 +257,7 @@ export function useMaterialIssuesLogic() {
 
     return {
         issues, isLoading, 
+        inventoryItems, 
         isModalOpen, setIsModalOpen, 
         issueData, setIssueData,
         selectedIds, setSelectedIds, 
@@ -220,7 +266,6 @@ export function useMaterialIssuesLogic() {
         handleItemChange, handleRemoveItem,
         handleSave: () => saveIssueMutation.mutate(),
         
-        // نظام التشيك بوكس
         handleSelectAll: (e: any) => {
             if (e.target.checked) {
                 const allLineIds = issues.map((d: any) => d.id).filter(Boolean);
@@ -236,7 +281,7 @@ export function useMaterialIssuesLogic() {
         handleBatchAction: (action: 'post' | 'unpost' | 'delete') => actionMutation.mutate({ action }), 
         isActionPending: actionMutation.isPending,
         
-        addItem: () => setIssueData({...issueData, items: [...issueData.items, {item_name:'', quantity:1, unit:'وحدة', unit_price:0, total_price:0, boq_id: null}]}),
+        addItem: () => setIssueData({...issueData, items: [...issueData.items, {item_id: null, item_name:'', quantity:1, available_qty:0, old_qty:0, unit:'وحدة', unit_price:0, total_price:0, boq_id: null}]}),
         openAddModal: () => { setIssueData(initialIssueState); setEditingIssueId(null); setIsModalOpen(true); }
     };
 }

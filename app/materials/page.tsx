@@ -8,9 +8,11 @@ import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import MaterialInvoiceModal from './MaterialInvoiceModal';
 import MaterialReceiptPrintModal from './MaterialReceiptPrintModal';
+import { useConfirm } from '@/components/ConfirmContext'; // 👈 استدعاء خدمة التأكيد الذكية
 
 export default function MaterialsPage() {
     const logic = useMaterialsLogic();
+    const { showConfirm } = useConfirm(); // 👈 تفعيل الخدمة
 
     // =========================================================================
     // 🔢 نظام تقسيم الصفحات (Pagination) حسب ميثاق V11
@@ -26,7 +28,6 @@ export default function MaterialsPage() {
     const totalPages = Math.ceil((logic.data?.length || 0) / rowsPerPage);
 
     // 🚀 الخدعة السحرية: دمج (التشيك بوكس) مع (البيانات المقسمة) لإجبار الجدول على التحديث اللحظي
-    // 🚀 تحديث نظام جلب البيانات المقسمة (Paginated Data) لضمان استقلالية الاختيار
     const paginatedData = useMemo(() => {
         const startIndex = (currentPage - 1) * rowsPerPage;
         const sliced = (logic.data || []).slice(startIndex, startIndex + rowsPerPage);
@@ -34,7 +35,6 @@ export default function MaterialsPage() {
         return sliced.map((row: any) => ({
             ...row,
             // 🛡️ التعديل الجوهري: الربط بـ row.id بدلاً من receipt_id
-            // ده بيضمن إنك لما تختار سطر، السطور التانية اللي في نفس الفاتورة ميتعلمش عليها تلقائياً
             _selected: logic.selectedIds?.includes(row.id) 
         }));
     }, [logic.data, currentPage, rowsPerPage, logic.selectedIds]);
@@ -114,13 +114,12 @@ export default function MaterialsPage() {
             ) : null 
         },
 
-        // 5️⃣ المشروع والمورد والبند 🚀 (تم التحديث هنا)
+        // 5️⃣ المشروع والمورد والبند 🚀 
         { 
             header: 'التوجيه (مشروع / بند / مورد)', 
             render: (row: any) => row ? (
                 <div style={{ minWidth: '150px' }}>
                     <div style={{ fontWeight: 800, color: THEME.coffeeDark, fontSize: '13px' }}>🏢 {row.project?.Property || '---'}</div>
-                    {/* 🚀 إظهار البند هنا إذا كان موجوداً */}
                     {row.boq_item && <div style={{ fontSize: '11px', color: THEME.goldAccent, marginTop: '2px', fontWeight: 700 }}>📋 {row.boq_item}</div>}
                     <div style={{ fontSize: '11px', color: THEME.ruby, marginTop: '2px', fontWeight: 700 }}>👤 {row.supplier?.name || '---'}</div>
                 </div>
@@ -159,7 +158,7 @@ export default function MaterialsPage() {
             ) : null 
         },
 
-        // 8️⃣ إجراءات الإذن (بدون زر الحذف)
+        // 8️⃣ إجراءات الإذن (التعديل والطباعة والترحيل)
         { 
             header: 'الإجراءات', 
             render: (row: any) => row ? (
@@ -175,7 +174,7 @@ export default function MaterialsPage() {
 
                     {!row.is_posted ? (
                         <>
-                            {/* زر التعديل */}
+                            {/* 🚀 زر التعديل (يسحب تفاصيل الفاتورة من اللوجيك) */}
                             <button 
                                 onClick={() => logic.handleEdit(row.receipt_id)} 
                                 style={{ padding: '6px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px' }}
@@ -201,8 +200,6 @@ export default function MaterialsPage() {
                             🔓 فك الترحيل
                         </button>
                     )}
-
-                    {/* 🛡️ تم إزالة زر الحذف من هنا بناءً على طلبك لضمان عدم مسح سطر بالخطأ */}
                 </div>
             ) : null 
         },
@@ -213,104 +210,105 @@ export default function MaterialsPage() {
             <MasterPage title="مركز توريد خامات المشاريع" subtitle="إصدار فواتير الخامات، توجيهها للمشاريع، وربطها بحسابات الموردين والعملاء للخصم التلقائي">
                 
                 <RawasiSidebarManager 
-    actions={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* 1️⃣ زر إضافة فاتورة جديدة */}
-            <button onClick={logic.openAddModal} className="btn-main-glass gold">
-                🛒 إصدار فاتورة توريد جديدة
-            </button>
-            
-            {/* 2️⃣ زر التعديل الذكي (يظهر عند تحديد سطر واحد فقط) */}
-            {logic.selectedIds?.length === 1 && (() => {
-                // البحث عن السطر المختار لاستخراج رقم الفاتورة الأب
-                const selectedRow = logic.data?.find((r: any) => r.id === logic.selectedIds[0]);
-                return selectedRow ? (
-                    <button 
-                        onClick={() => logic.handleEdit(selectedRow.receipt_id)} 
-                        className="btn-main-glass" 
-                        style={{ background: '#3b82f6' }}
-                    >
-                        ✏️ تعديل الفاتورة المحددة
-                    </button>
-                ) : null;
-            })()}
+                    actions={
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {/* 1️⃣ زر إضافة فاتورة جديدة */}
+                            <button onClick={logic.openAddModal} className="btn-main-glass gold">
+                                🛒 إصدار فاتورة توريد جديدة
+                            </button>
+                            
+                            {/* 2️⃣ زر التعديل الذكي (يظهر عند تحديد سطر واحد فقط) */}
+                            {logic.selectedIds?.length === 1 && (
+                                <button 
+                                    onClick={logic.handleEditSelected} // 👈 تم الربط باللوجيك مباشرة وبشكل نظيف
+                                    className="btn-main-glass" 
+                                    style={{ background: '#3b82f6', color: 'white' }}
+                                >
+                                    ✏️ تعديل الفاتورة المحددة
+                                </button>
+                            )}
 
-            {/* 3️⃣ أزرار التحكم الجماعي (تظهر عند تحديد سطر أو أكثر) */}
-            {logic.selectedIds?.length > 0 && (
-                <>
-                    <button 
-                        onClick={() => logic.handleBulkAction('post')} 
-                        className="btn-main-glass" 
-                        style={{ background: THEME.success }}
-                    >
-                        🚀 ترحيل المحدد ({logic.selectedIds.length})
-                    </button>
-                    <button 
-                        onClick={() => logic.handleBulkAction('unpost')} 
-                        className="btn-main-glass" 
-                        style={{ background: '#f59e0b' }}
-                    >
-                        🔓 فك ترحيل المحدد ({logic.selectedIds.length})
-                    </button>
-                    <button 
-                        onClick={() => { 
-                            if (confirm(`تحذير: هل أنت متأكد من مسح الفواتير التابعة لـ ${logic.selectedIds.length} سطر محدد؟`)) 
-                                logic.handleBulkAction('delete'); 
-                        }} 
-                        className="btn-main-glass" 
-                        style={{ background: '#ef4444' }}
-                    >
-                        🗑️ مسح المحدد ({logic.selectedIds.length})
-                    </button>
-                </>
-            )}
-        </div>
-    }
-    summary={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: 'white' }}>
-            <div className="kpi-box danger">
-                <span>إجمالي قيمة الخامات الموردة</span>
-                <strong>{formatCurrency(logic.kpis.totalCost)}</strong>
-            </div>
-            <div className="kpi-box secondary">
-                <span>عدد بنود التوريد</span>
-                <strong>{logic.kpis.totalTransactions} بند</strong>
-            </div>
-        </div>
-    }
-    customFilters={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <input 
-                type="text" 
-                placeholder="🔍 ابحث باسم الخامة أو المورد..." 
-                className="glass-input-field" 
-                value={logic.globalSearch} 
-                onChange={e => logic.setGlobalSearch(e.target.value)} 
-            />
-            
-            <select className="glass-input-field" value={logic.filterProject} onChange={e => logic.setFilterProject(e.target.value)}>
-                <option value="الكل">كل المشاريع 🏢</option>
-                {logic.projects?.map((p: any) => (
-                    <option key={p.id} value={p.id}>{p.Property}</option>
-                ))}
-            </select>
+                            {/* 3️⃣ أزرار التحكم الجماعي (تظهر عند تحديد سطر أو أكثر) */}
+                            {logic.selectedIds?.length > 0 && (
+                                <>
+                                    <button 
+                                        onClick={() => logic.handleBulkAction('post')} 
+                                        className="btn-main-glass" 
+                                        style={{ background: THEME.success, color: 'white' }}
+                                    >
+                                        🚀 ترحيل المحدد ({logic.selectedIds.length})
+                                    </button>
+                                    <button 
+                                        onClick={() => logic.handleBulkAction('unpost')} 
+                                        className="btn-main-glass" 
+                                        style={{ background: '#f59e0b', color: 'white' }}
+                                    >
+                                        🔓 فك ترحيل المحدد ({logic.selectedIds.length})
+                                    </button>
+                                    
+                                    {/* 🚀 زر الحذف مربوط بخدمة التأكيد الزجاجية الفخمة */}
+                                    <button 
+                                        onClick={() => { 
+                                            showConfirm({
+                                                title: 'مسح فواتير التوريد',
+                                                message: `تحذير: هل أنت متأكد من مسح الفواتير التابعة لـ ${logic.selectedIds.length} سطر محدد بشكل نهائي؟`,
+                                                type: 'danger',
+                                                onConfirm: () => logic.handleBulkAction('delete')
+                                            });
+                                        }} 
+                                        className="btn-main-glass" 
+                                        style={{ background: '#ef4444', color: 'white' }}
+                                    >
+                                        🗑️ مسح المحدد ({logic.selectedIds.length})
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    }
+                    summary={
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: 'white' }}>
+                            <div className="kpi-box danger">
+                                <span>إجمالي قيمة الخامات الموردة</span>
+                                <strong>{formatCurrency(logic.kpis.totalCost)}</strong>
+                            </div>
+                            <div className="kpi-box secondary">
+                                <span>عدد بنود التوريد</span>
+                                <strong>{logic.kpis.totalTransactions} بند</strong>
+                            </div>
+                        </div>
+                    }
+                    customFilters={
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <input 
+                                type="text" 
+                                placeholder="🔍 ابحث باسم الخامة أو المورد..." 
+                                className="glass-input-field" 
+                                value={logic.globalSearch} 
+                                onChange={e => logic.setGlobalSearch(e.target.value)} 
+                            />
+                            
+                            <select className="glass-input-field" value={logic.filterProject} onChange={e => logic.setFilterProject(e.target.value)}>
+                                <option value="الكل">كل المشاريع 🏢</option>
+                                {logic.projects?.map((p: any) => (
+                                    <option key={p.id} value={p.id}>{p.Property}</option>
+                                ))}
+                            </select>
 
-            <select className="glass-input-field" value={logic.sortBy} onChange={e => logic.setSortBy(e.target.value)}>
-                <option value="newest">⏳ الأحدث إضافة</option>
-                <option value="oldest">⌛ الأقدم</option>
-                <option value="highest_price">💰 السعر: الأعلى أولاً</option>
-                <option value="lowest_price">🪙 السعر: الأقل أولاً</option>
-            </select>
+                            <select className="glass-input-field" value={logic.sortBy} onChange={e => logic.setSortBy(e.target.value)}>
+                                <option value="newest">⏳ الأحدث إضافة</option>
+                                <option value="oldest">⌛ الأقدم</option>
+                                <option value="highest_price">💰 السعر: الأعلى أولاً</option>
+                                <option value="lowest_price">🪙 السعر: الأقل أولاً</option>
+                            </select>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
-                <input type="date" className="glass-input-field" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
-                <input type="date" className="glass-input-field" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
-            </div>
-        </div>
-    }
-    // 🛡️ مراقبة التبعات لضمان تحديث الشريط الجانبي فور التحديد
-    watchDeps={[logic.kpis, logic.globalSearch, logic.filterProject, logic.dateFrom, logic.dateTo, logic.selectedIds, logic.sortBy, currentPage, rowsPerPage]}
-/>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                                <input type="date" className="glass-input-field" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
+                                <input type="date" className="glass-input-field" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
+                            </div>
+                        </div>
+                    }
+                    watchDeps={[logic.kpis, logic.globalSearch, logic.filterProject, logic.dateFrom, logic.dateTo, logic.selectedIds, logic.sortBy, currentPage, rowsPerPage]}
+                />
 
                 <style>{`
                     .glass-input-field { width: 100%; padding: 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); outline: none; font-weight: 700; color: white; transition: 0.3s; }
@@ -326,7 +324,6 @@ export default function MaterialsPage() {
                     .kpi-box.danger strong { color: #ef4444; }
                 `}</style>
 
-                {/* 🚀 إرسال الداتا المقسمة والمحقونة بحالة التشيك بوكس للجدول */}
                 <RawasiSmartTable 
                     data={paginatedData}
                     columns={columns}
@@ -334,7 +331,6 @@ export default function MaterialsPage() {
                     enableExport={true}
                 />
 
-                {/* 🔢 شريط التحكم في الصفحات (Pagination) المعتمد في الميثاق */}
                 {!logic.isLoading && (logic.data?.length || 0) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid ${THEME.sandDark}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
                         <div style={{ fontSize: '13px', color: THEME.coffeeMain, fontWeight: 900 }}>
@@ -375,6 +371,7 @@ export default function MaterialsPage() {
                     </div>
                 )}
 
+                {/* 📝 مودال إضافة وتعديل الفاتورة */}
                 <MaterialInvoiceModal 
                     isOpen={logic.isModalOpen} 
                     onClose={() => logic.setIsModalOpen(false)} 

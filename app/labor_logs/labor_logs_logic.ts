@@ -25,7 +25,7 @@ export function useLaborLogsLogic() {
     const CREDIT_ACCOUNT_ID = '39f878cd-dc58-4a2a-a199-50f6fca983d4'; 
 
     const [searchTerm, setSearchTerm] = useState(''); 
-    const deferredSearch = useDeferredValue(searchTerm); // 🚀 تأخير ذكي لمنع التقطيع أثناء الكتابة
+    const deferredSearch = useDeferredValue(searchTerm);
     const [filterStatus, setFilterStatus] = useState('الكل');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -35,7 +35,7 @@ export function useLaborLogsLogic() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    // 🚀 تحديث Default Log (بدون مقاول وبدون استقطاع)
+    // 🚀 تحديث Default Log (تم إزالة boq_budget_id ليتطابق مع الإسكيمة الجديدة)
     const defaultLog = { 
         work_date: new Date().toISOString().split('T')[0], 
         worker_name: '', site_ref: '', work_item: '', 
@@ -43,6 +43,8 @@ export function useLaborLogsLogic() {
         tareeha: '', productivity: '', completion_percentage: '', 
         daily_wage: '', attendance_value: 1, notes: '',
         worker_partner_id: '', project_id: '',
+        work_item_id: null, 
+        sub_contractor: '', sub_contractor_id: null,
         credit_account_id: CREDIT_ACCOUNT_ID, credit_account_name: 'رواتب وأجور مستحقة'
     };
     
@@ -63,7 +65,6 @@ export function useLaborLogsLogic() {
     const workersList = useMemo(() => partners.filter((p: any) => p.partner_type === 'عامل يومية' || p.partner_type === 'موظف'), [partners]);
     const sitesList = useMemo(() => partners.filter((p: any) => p.partner_type === 'جهة داخلية' || p.partner_type === 'عميل' || p.partner_type === 'مقاول'), [partners]);
 
-    // 🌟 دعم الفلترة القادمة من الواجهة العامة للمشروع
     useEffect(() => {
         const handleDateChange = (e: any) => { setDateFrom(e.detail?.start || ''); setDateTo(e.detail?.end || ''); setCurrentPage(1); };
         const handleSearchChange = (e: any) => { setSearchTerm(e.detail || ''); setCurrentPage(1); };
@@ -75,7 +76,6 @@ export function useLaborLogsLogic() {
         };
     }, []);
 
-    // 🚀 الفلترة الأساسية الصاروخية
     const allFiltered = useMemo(() => {
         if (!logs) return [];
         const uniqueLogsMap = new Map();
@@ -105,7 +105,6 @@ export function useLaborLogsLogic() {
         });
     }, [logs, deferredSearch, filterStatus, dateFrom, dateTo]);
 
-    // 💰 تحديث الأرقام الإجمالية
     const stats = useMemo(() => {
         if (!allFiltered || allFiltered.length === 0) return { sum: 0, attendance: 0, count: 0 };
         const sum = allFiltered.reduce((acc: number, row: any) => {
@@ -118,7 +117,6 @@ export function useLaborLogsLogic() {
 
     const totalPages = Math.max(1, Math.ceil(allFiltered.length / rowsPerPage));
 
-    // 💾 التحديث الذكي للحفظ (الكاش)
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
             if (editingId) {
@@ -156,10 +154,12 @@ export function useLaborLogsLogic() {
         let finalPercentage = currentLog.completion_percentage;
         const t = parseFloat(currentLog.tareeha);
         const p = parseFloat(currentLog.productivity);
+        
         if (!isNaN(t) && t > 0 && !isNaN(p)) {
             finalPercentage = Math.round((p / t) * 100);
         }
 
+        // 🛡️ تأمين البيانات وإزالة boq_budget_id
         const payload = {
             work_date: currentLog.work_date, 
             worker_name: currentLog.worker_name, 
@@ -168,17 +168,21 @@ export function useLaborLogsLogic() {
             unit: currentLog.unit || null,                                   
             skill_level: currentLog.skill_level || null,                     
             production_desc: currentLog.production_desc || null,             
-            tareeha: currentLog.tareeha || null, 
-            productivity: currentLog.productivity || null, 
-            completion_percentage: finalPercentage ? Number(finalPercentage) : null, 
+            tareeha: currentLog.tareeha ? String(currentLog.tareeha) : null,
+            productivity: currentLog.productivity ? String(currentLog.productivity) : null,
+            completion_percentage: finalPercentage ? Number(finalPercentage) : null,
             daily_wage: Number(currentLog.daily_wage) || 0,
             attendance_value: Number(currentLog.attendance_value ?? 1), 
             notes: currentLog.notes || null,
             worker_partner_id: currentLog.worker_partner_id || null,
             project_id: currentLog.project_id || null,
+            work_item_id: currentLog.work_item_id || null, // ✅ سحب ID البند المرجعي (يكفي الآن)
+            sub_contractor: currentLog.sub_contractor || null,
+            sub_contractor_id: currentLog.sub_contractor_id || null,
             credit_account_id: CREDIT_ACCOUNT_ID,
             debit_account_id: DEBIT_ACCOUNT_ID
         };
+        
         saveMutation.mutate(payload);
     };
 
@@ -284,7 +288,7 @@ export function useLaborLogsLogic() {
         searchTerm, setSearchTerm: (term: string) => { setSearchTerm(term); setCurrentPage(1); }, 
         filterStatus, setFilterStatus: (status: string) => { setFilterStatus(status); setCurrentPage(1); }, 
         dateFrom, setDateFrom, dateTo, setDateTo,
-        filteredLogs: allFiltered, // 🚀 بنبعت الداتا المفلترة كلها للجدول الذكي وهو يقسمها
+        filteredLogs: allFiltered, 
         stats, totalResults: allFiltered.length,
         selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, totalPages, 
         isAddModalOpen, setIsAddModalOpen, currentLog, setCurrentLog, defaultLog,
