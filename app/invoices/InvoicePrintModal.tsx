@@ -302,26 +302,51 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                     box-sizing: border-box !important; 
                 }
 
-                .inv-header { display: grid; grid-template-columns: 180px 1fr 180px; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; width: 100%; gap: 15px; }
+                .inv-header { display: grid; grid-template-columns: 120px 1fr 120px; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 15px; width: 100%; gap: 10px; position: relative; z-index: 99; }
                 
-                .header-qr { display: flex; justify-content: flex-start; } 
+                .header-qr { display: flex; justify-content: flex-start; align-items: flex-start; position: relative; z-index: 100; } 
                 .header-center { text-align: center; }
-                .header-logo { display: flex; justify-content: flex-end; } 
-                .header-logo img { max-height: 120px; width: auto; max-width: 100%; object-fit: contain; } 
+                .header-logo { display: flex; justify-content: flex-end; align-items: center; } 
                 
-                .qr-container { padding: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
+                .header-logo img { max-height: 80px; width: auto; max-width: 100%; object-fit: contain; } 
+                
+                .qr-container { 
+                    width: 80px !important; 
+                    height: 80px !important; 
+                    min-width: 80px !important;
+                    min-height: 80px !important;
+                    display: flex !important; 
+                    justify-content: center !important; 
+                    align-items: center !important; 
+                    padding: 3px !important; 
+                    background: #fff !important; 
+                    border: 1.5px solid #cbd5e1 !important; 
+                    border-radius: 6px !important; 
+                    position: relative !important;
+                    z-index: 9999999 !important; 
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important; 
+                    overflow: hidden !important;
+                }
+                
+                .qr-container svg, .qr-container canvas, .qr-container img, .qr-container > div {
+                    max-width: 100% !important;
+                    max-height: 100% !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    display: block !important;
+                }
 
-                .inv-title-box { text-align: center; margin-bottom: 25px; }
-                .inv-title { font-size: 22px; font-weight: 900; border: 2.5px solid #000; padding: 8px 35px; display: inline-block; background: #f8fafc; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; border-radius: 12px; }
+                .inv-title-box { text-align: center; margin-bottom: 15px; }
+                .inv-title { font-size: 18px; font-weight: 900; border: 2.5px solid #000; padding: 4px 25px; display: inline-block; background: #f8fafc; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; border-radius: 10px; }
 
-                .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+                .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
                 
                 .info-box { 
                     border: 1.5px solid #cbd5e1; 
                     border-radius: 16px !important; 
-                    padding: 18px 15px 12px 15px; 
+                    padding: 16px 15px 10px 15px; 
                     display: flex; flex-direction: column; justify-content: center;
-                    position: relative; background: #fff; min-height: 90px; 
+                    position: relative; background: #fff; min-height: 85px; 
                 }
                 .box-label { 
                     position: absolute; top: -10px; right: 20px; background: white; 
@@ -335,30 +360,32 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 .value-cell { text-align: right; font-weight: 900; color: #0f172a; }
                 .value-highlight { color: ${THEME.primary}; font-size: 15px; font-weight: 900; }
 
-                .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px; border-radius: 12px; overflow: hidden; }
-                .inv-table th { background: #f8fafc; padding: 12px; text-align: center; border-bottom: 2px solid #94a3b8; border-top: 2px solid #94a3b8; color: #0f172a; font-weight: 900; }
-                .inv-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #1e293b; font-weight: 700; }
-                .inv-table td.desc { text-align: right; font-weight: 900; }
+                .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; border-radius: 8px; overflow: hidden; }
+                .inv-table th { background: #f8fafc; padding: 6px 4px; text-align: center; border-bottom: 2px solid #94a3b8; border-top: 2px solid #94a3b8; color: #0f172a; font-weight: 900; font-size: 12px; }
+                .inv-table td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #1e293b; font-weight: 700; font-size: 12px; }
+                .inv-table td.desc { text-align: right; font-weight: 900; font-size: 13px; line-height: 1.5; }
 
-                .inv-footer-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; flex-grow: 1; gap: 40px; }
-                .inv-amount-words { flex: 1; display: flex; flex-direction: column; }
-                .inv-amount-words .words-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 15px; border-radius: 16px; font-weight: 900; font-size: 15px; color: #0f172a; line-height: 1.6; }
+                /* 🚀 جعلنا المربعات السفلية متوازية (align-items: flex-end) بدلا من flex-start */
+                .inv-footer-flex { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; flex-grow: 1; gap: 30px; }
+                .inv-amount-words { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+                .inv-amount-words .words-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 12px; font-weight: 900; font-size: 13px; color: #0f172a; line-height: 1.5; }
                 
-                .signature-area { margin-top: 30px; text-align: center; align-self: flex-start; }
-                .signature-title { font-weight: 900; font-size: 13px; color: #64748b; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+                .signature-area { margin-top: 20px; text-align: center; align-self: flex-start; }
+                .signature-title { font-weight: 900; font-size: 12px; color: #64748b; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
 
-                .inv-totals-box { width: 380px; }
-                .inv-total-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; font-weight: 800; color: #334155; align-items: center; }
+                /* 🚀 تم تكبير السامري وزيادة عرضة (420px) والخطوط جواه */
+                .inv-totals-box { width: 420px; }
+                .inv-total-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; font-weight: 800; color: #334155; align-items: center; }
                 .inv-total-row.tax { color: #0284c7; }
                 .inv-total-row.discount { color: #dc2626; }
-                .inv-total-row.grand-total { border-top: 2px solid #0f172a; padding-top: 10px; margin-top: 10px; font-size: 16px; font-weight: 900; color: #0f172a; background: #f1f5f9; padding: 10px; border-radius: 12px; }
+                .inv-total-row.grand-total { border-top: 2px solid #0f172a; padding-top: 10px; margin-top: 10px; font-size: 17px; font-weight: 900; color: #0f172a; background: #f1f5f9; padding: 10px; border-radius: 10px; }
 
                 .inv-footer-contact { 
                     margin-top: auto !important; 
                     border-top: 2px solid #e2e8f0; 
                     padding-top: 15px; 
                     text-align: center; 
-                    font-size: 13px; 
+                    font-size: 12px; 
                     color: #64748b; 
                     font-weight: 700; 
                 }
@@ -439,6 +466,7 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                 {/* 1️⃣ رأس الفاتورة */}
                 <div className="inv-header">
                     <div className="header-qr">
+                        {/* 🚀 باركود الزكاة والضريبة */}
                         {!record.skip_zatca && (
                             <div className="qr-container">
                                 <ZatcaQRCode record={record} />
@@ -520,7 +548,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         </tr>
                     </thead>
                     <tbody style={{ fontFamily: 'Arial, sans-serif' }}>
-                        {/* البند الأساسي الأول إن وجد */}
                         {hasMainItem && (
                             <tr>
                                 <td>1</td>
@@ -532,7 +559,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                             </tr>
                         )}
                         
-                        {/* مصفوفة البنود الإضافية (lines) */}
                         {record.lines?.map((line: any, idx: number) => (
                             <tr key={`line-${idx}`}>
                                 <td>{hasMainItem ? idx + 2 : idx + 1}</td>
@@ -544,7 +570,6 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                             </tr>
                         ))}
 
-                        {/* 🚀 مصفوفة بيانات lines_data بدون حذف السابق */}
                         {record.lines_data?.map((line: any, idx: number) => {
                             const rowNum = baseLinesCount + idx + 1;
                             const qty = Number(line.quantity || 0);
@@ -571,12 +596,10 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
                         <div style={{ fontSize: '13px', fontWeight: 900, marginBottom: '6px', color: '#64748b' }}>المبلغ الإجمالي كتابة (Amount in Words):</div>
                         <div className="words-box">{amountInWords}</div>
                         
-                        {/* 🚀 التوقيع الإلكتروني والباركود */}
                         <div className="signature-area">
                             <div className="signature-title">معتمد إلكترونياً من / E-Signature</div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <QRCodeSVG value={signatureData} size={75} level="M" />
-                                {/* النص المطبوع: الاسم الفعلي للمحاسب فقط */}
                                 <div style={{ fontSize: '14px', fontWeight: 900, marginTop: '8px', color: THEME.primary }}>{finalFullName}</div>
                             </div>
                         </div>
@@ -616,7 +639,7 @@ export default function InvoicePrintModal({ isOpen, onClose, record, setRecord =
 
                 {/* 5️⃣ الفوتر الثابت أسفل الصفحة */}
                 <div className="inv-footer-contact">
-                    الدمام - حي الفيصليه - شارع السعيره &nbsp;|&nbsp; rawasi.alyusr@gmail.com &nbsp;|&nbsp; 0547606876 - 0578018944
+                    الدمام - حي الفيصليه - شارع السعيره &nbsp;|&nbsp; rawasi.alyusr@gmail.com &nbsp;|&nbsp;   
                 </div>
 
             </div>
