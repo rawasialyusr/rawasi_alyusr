@@ -223,7 +223,8 @@ export function useSubClaimsLogic() {
                 }
             }
 
-            const { error: rpcError } = await supabase.rpc('rpc_post_claim', { p_id: claim.id });
+            // تم تصحيح اسم الـ RPC هنا لتطابق قاعدة البيانات (post_sub_claim)
+            const { error: rpcError } = await supabase.rpc('post_sub_claim', { p_id: claim.id });
             if (rpcError) throw new Error(rpcError.message);
 
             return claim;
@@ -294,7 +295,8 @@ export function useSubClaimsLogic() {
     const actionMutation = useMutation({
         mutationFn: async ({ action, id }: { action: string, id: string }) => {
             let rpcName = '';
-            if (action === 'post') rpcName = 'rpc_post_claim';
+            // تم تصحيح اسم الـ RPC هنا لتطابق قاعدة البيانات (post_sub_claim)
+            if (action === 'post') rpcName = 'post_sub_claim';
             if (action === 'unpost') rpcName = 'rpc_unpost_claim';
             if (action === 'delete') rpcName = 'rpc_delete_claim';
 

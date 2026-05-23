@@ -15,7 +15,7 @@ export function useMaterialsLogic() {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     
-    // 🚀 حالات التشيك بوكس والترتيب الجديدة
+    // 🚀 حالات التشيك بوكس والترتيب
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [sortBy, setSortBy] = useState('newest');
 
@@ -25,7 +25,7 @@ export function useMaterialsLogic() {
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
 
-    // 🚀 هيكل الفاتورة (تم إضافة حقول الأسماء عشان الـ SmartCombo يقراها فوراً في التعديل)
+    // 🚀 هيكل الفاتورة
     const initialInvoiceState = {
         id: null, 
         project_id: '', project_name: '',
@@ -54,7 +54,7 @@ export function useMaterialsLogic() {
                     unit, 
                     unit_price, 
                     total_price,
-                    boq_id, 
+                    boq_item_id, 
                     boq:boq_budget(work_item), 
                     receipt:material_receipts (
                         id, 
@@ -72,7 +72,8 @@ export function useMaterialsLogic() {
                         account:accounts!account_id(id, name)
                     )
                 `)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(100000); // 🚀 كسر حاجز الـ 1000 سطر لسحب كل الفواتير
 
             if (error) throw error;
 
@@ -87,7 +88,7 @@ export function useMaterialsLogic() {
                 unit: line.unit,
                 unit_price: line.unit_price,
                 total_price: line.total_price,
-                boq_id: line.boq_id,             
+                boq_id: line.boq_item_id,            // 🚀 تصحيح المسمى حسب الداتابيز
                 boq_item: line.boq?.work_item,   
                 exp_date: line.receipt?.receipt_date,
                 created_at: line.receipt?.created_at,
@@ -120,7 +121,8 @@ export function useMaterialsLogic() {
         let result = allMaterials.filter(mat => {
             const matchSearch = !globalSearch || 
                 mat.work_item?.toLowerCase().includes(globalSearch.toLowerCase()) || 
-                mat.supplier?.name?.toLowerCase().includes(globalSearch.toLowerCase());
+                mat.supplier?.name?.toLowerCase().includes(globalSearch.toLowerCase()) ||
+                mat.receipt_no?.toLowerCase().includes(globalSearch.toLowerCase());
             const matchProject = filterProject === 'الكل' || mat.project_id === filterProject;
             const matchDate = (!dateFrom || mat.exp_date >= dateFrom) && (!dateTo || mat.exp_date <= dateTo);
             return matchSearch && matchProject && matchDate;
@@ -229,7 +231,7 @@ export function useMaterialsLogic() {
                 unit: item.unit || 'وحدة',
                 unit_price: Number(item.unit_price) || 0,
                 total_price: Number(item.total_price) || 0,
-                boq_id: item.boq_id || null 
+                boq_item_id: item.boq_id || null  // 🚀 تصحيح المسمى حسب الداتابيز
             }));
 
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
@@ -273,11 +275,11 @@ export function useMaterialsLogic() {
             setInvoiceData({
                 id: receipt_id, 
                 project_id: first.project_id || '',
-                project_name: first.project?.Property || '', // 👈 الاسم جاهز للعرض
+                project_name: first.project?.Property || '', 
                 payee_id: first.supplier?.id || '',
-                payee_name: first.supplier?.name || '',      // 👈
+                payee_name: first.supplier?.name || '',      
                 account_id: first.account?.id || '',
-                account_name: first.account?.name || '',     // 👈
+                account_name: first.account?.name || '',     
                 receipt_type: first.receipt_type || 'توريد شركة',
                 exp_date: first.exp_date || new Date().toISOString().split('T')[0],
                 notes: first.notes || '',
@@ -289,8 +291,8 @@ export function useMaterialsLogic() {
                     unit: l.unit || 'وحدة',
                     unit_price: l.unit_price || 0,
                     total_price: l.total_price || 0,
-                    boq_id: l.boq_id || null,
-                    boq_item: l.boq_item || '' // 👈
+                    boq_id: l.boq_id || null, // 🚀 مسحوبة صح من فوق
+                    boq_item: l.boq_item || '' 
                 }))
             });
             setIsModalOpen(true);
@@ -307,10 +309,11 @@ export function useMaterialsLogic() {
         
         sortBy, setSortBy, selectedIds, setSelectedIds,
         
+        // 🚀 متوافقة مع الشجرة (تعمل بالفاتورة وليس السطر)
         handleSelectAll: (e: any) => {
             if (e.target.checked) {
-                const allLineIds = filteredData.map((d: any) => d.id).filter(Boolean);
-                setSelectedIds(allLineIds as string[]);
+                const allReceiptIds = Array.from(new Set(filteredData.map((d: any) => d.receipt_id).filter(Boolean)));
+                setSelectedIds(allReceiptIds as string[]);
             } else {
                 setSelectedIds([]);
             }
@@ -320,33 +323,19 @@ export function useMaterialsLogic() {
             setSelectedIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
         },
 
-        // 🚀 الدوال المتاحة للواجهة لفتح التعديل
         handleEdit: populateEditModal, 
         
-        // 🚀 دالة زر "تعديل" من القائمة الجانبية (تسحب الـ ID من السجل المحدد)
         handleEditSelected: () => {
             if (selectedIds.length !== 1) {
                 showToast("الرجاء تحديد فاتورة واحدة لتعديلها.", "warning");
                 return;
             }
-            const selectedLineId = selectedIds[0];
-            const selectedLine = allMaterials.find((d: any) => d.id === selectedLineId);
-            
-            if (selectedLine && selectedLine.receipt_id) {
-                populateEditModal(selectedLine.receipt_id);
-            }
+            populateEditModal(selectedIds[0]); // 🚀 سحب مباشر برقم الفاتورة
         },
 
         handleBulkAction: async (action: 'post' | 'unpost' | 'delete') => {
             try {
-                const uniqueReceiptIds = Array.from(new Set(
-                    allMaterials
-                        .filter((d: any) => selectedIds.includes(d.id))
-                        .map((d: any) => d.receipt_id)
-                        .filter(Boolean)
-                ));
-
-                if (uniqueReceiptIds.length === 0) return;
+                if (selectedIds.length === 0) return;
 
                 const rpcMap: any = { 
                     post: 'rpc_post_material', 
@@ -354,7 +343,7 @@ export function useMaterialsLogic() {
                     delete: 'rpc_delete_material_receipt' 
                 };
 
-                for (const rId of uniqueReceiptIds) {
+                for (const rId of selectedIds) {
                     const { error } = await supabase.rpc(rpcMap[action], { p_id: rId });
                     if (error) throw error;
                 }

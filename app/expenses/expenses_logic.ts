@@ -2,15 +2,16 @@
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import * as XLSX from 'xlsx';
-import { toast } from 'react-hot-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSmartFilter } from '@/lib/useSmartFilter'; 
 import { useUniversalPosting } from '@/lib/accounting_engine'; 
+import { useToast } from '@/lib/toast-context'; // 🚀 الاعتماد على التوست الموحد للمشروع
 
 export function useExpensesLogic() {
     const queryClient = useQueryClient();
+    const { showToast } = useToast(); // 🚀 استدعاء التوست الموحد
 
-    // 🎯 دالة سحرية مساعدة: لتحديث سطر في الكاش بدقة شديدة
+    // 🎯 دالة مساعدة لتحديث سطر في الكاش بدقة شديدة
     const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
         queryClient.setQueryData(['expenses'], (oldData: any[]) => {
             if (!oldData) return [];
@@ -40,9 +41,10 @@ export function useExpensesLogic() {
 
     const [disburseProgress, setDisburseProgress] = useState({ current: 0, total: 0, isActive: false });
 
+    // 🚀 القيمة الافتراضية أصبحت "آجل" تماشياً مع التحديث المحاسبي
     const defaultExp = { 
         exp_date: new Date().toISOString().split('T')[0], main_category: '', sub_contractor: '', site_ref: '',       
-        creditor_account: '', description: '', payee_name: '', payment_method: 'كاش', payment_account: '', 
+        creditor_account: '', description: '', payee_name: '', payment_method: 'آجل', payment_account: '', 
         employee_name: '', quantity: 1, unit_price: 0, vat_amount: 0, discount_amount: 0, discount_account: '', 
         notes: '', invoice_image: null, is_auto_distributed: false 
     };
@@ -159,31 +161,51 @@ export function useExpensesLogic() {
 
     const { isProcessing } = useUniversalPosting('expenses', 'expenses', 'post_expenses_bulk');
 
-    // 💾 5. الحفظ
+    // 💾 5. الحفظ المطور والمعتمد كلياً على الـ RPC والتوست الموحد
     const saveMutation = useMutation({
         mutationFn: async (passedRecord: any) => {
             if (!passedRecord || !passedRecord.exp_date) throw new Error("حدث خطأ في استلام البيانات من النافذة، يرجى المحاولة مرة أخرى.");
+            
             let generatedDescription = passedRecord.description;
             if ((!generatedDescription || generatedDescription.trim() === '') && passedRecord.lines_data && Array.isArray(passedRecord.lines_data) && passedRecord.lines_data.length > 0) {
                 generatedDescription = passedRecord.lines_data.map((line: any) => line.description || line.item_name || line.work_item).filter(Boolean).join(' + ');
             }
             const finalDescription = generatedDescription && generatedDescription.trim() !== '' ? generatedDescription : 'مصروف عام';
+            
             const payload = {
-                exp_date: passedRecord.exp_date, main_category: passedRecord.main_category, sub_contractor: passedRecord.sub_contractor, site_ref: passedRecord.site_ref, creditor_account: passedRecord.creditor_account, description: finalDescription, payee_name: passedRecord.payee_name, payment_method: passedRecord.payment_method || passedRecord.method || 'كاش', payment_account: passedRecord.payment_account, employee_name: passedRecord.employee_name, quantity: 1, unit_price: Number(passedRecord.unit_price) || 0, vat_amount: Number(passedRecord.vat_amount) || 0, discount_amount: Number(passedRecord.discount_amount) || 0, discount_account: passedRecord.discount_account || null, notes: passedRecord.notes, invoice_image: passedRecord.invoice_image, lines_data: passedRecord.lines_data || [], is_auto_distributed: passedRecord.is_auto_distributed || false 
+                p_id: editingId || null,
+                p_exp_date: passedRecord.exp_date, 
+                p_main_category: passedRecord.main_category, 
+                p_sub_contractor: passedRecord.sub_contractor || null, 
+                p_site_ref: passedRecord.site_ref || null, 
+                p_creditor_account: passedRecord.creditor_account, 
+                p_description: finalDescription, 
+                p_payee_name: passedRecord.payee_name || null, 
+                p_payment_method: passedRecord.payment_method || 'آجل', 
+                p_payment_account: passedRecord.payment_account || null, 
+                p_employee_name: passedRecord.employee_name || null, 
+                p_quantity: Number(passedRecord.quantity) || 1, 
+                p_unit_price: Number(passedRecord.unit_price) || 0, 
+                p_vat_amount: Number(passedRecord.vat_amount) || 0, 
+                p_discount_amount: Number(passedRecord.discount_amount) || 0, 
+                p_discount_account: passedRecord.discount_account || null, 
+                p_notes: passedRecord.notes || null, 
+                p_invoice_image: passedRecord.invoice_image || null, 
+                p_lines_data: passedRecord.lines_data || [], 
+                p_is_auto_distributed: passedRecord.is_auto_distributed || false
             };
 
-            if (editingId) {
-                const { data, error } = await supabase.from('expenses').update(payload).eq('id', editingId).select().single();
-                if (error) throw error;
-                return { type: 'update', data };
-            } else {
-                const { data, error } = await supabase.from('expenses').insert([payload]).select().single();
-                if (error) throw error;
-                return { type: 'insert', data };
-            }
+            const { data, error } = await supabase.rpc('save_expense_with_settlement', payload);
+            if (error) throw error;
+            if (data && data.success === false) throw new Error(data.error);
+
+            const { data: updatedRecord, error: fetchErr } = await supabase.from('expenses').select('*').eq('id', data.id).single();
+            if (fetchErr) throw fetchErr;
+
+            return { type: editingId ? 'update' : 'insert', data: updatedRecord };
         },
         onSuccess: (res) => {
-            toast.success('تم حفظ المصروف بنجاح 💾');
+            showToast('تم حفظ القيد بنجاح 💾', 'success');
             setIsEditModalOpen(false);
             setEditingId(null);
             setCurrentExpense(defaultExp);
@@ -203,10 +225,13 @@ export function useExpensesLogic() {
                 });
             }
         },
-        onError: (err: any) => toast.error(err.message)
+        onError: (err: any) => {
+            console.error("Save Error Details:", err);
+            showToast(`فشل الحفظ: ${err.message}`, 'error'); // 🚀 توست صريح بالخطأ لمنع التعليق
+        }
     });
 
-    // 🗑️ الحذف المتسلسل (الاعتماد على الداتا بيز للسرعة)
+    // 🗑️ الحذف المتسلسل
     const deleteMutation = useMutation({
         mutationFn: async () => {
             const { error } = await supabase.rpc('delete_expenses_bulk', { record_ids: selectedIds });
@@ -214,7 +239,7 @@ export function useExpensesLogic() {
             return selectedIds; 
         },
         onSuccess: (deletedIds) => {
-            toast.success('تم المسح التسلسلي بنجاح 🗑️✅');
+            showToast('تم المسح التسلسلي بنجاح 🗑️✅', 'success');
             const stringDeletedIds = deletedIds.map(String);
             queryClient.setQueryData(['expenses'], (oldData: any[]) => {
                 if (!oldData) return [];
@@ -223,12 +248,11 @@ export function useExpensesLogic() {
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
         },
-        onError: (err: any) => toast.error(`حدث خطأ أثناء الحذف: ${err.message}`)
+        onError: (err: any) => showToast(`حدث خطأ أثناء الحذف: ${err.message}`, 'error')
     });
 
-    // 💸 السداد المباشر للسطر الواحد
+    // 💸 سداد السطر الواحد اليدوي
     const handleSavePayment = async (paymentData: any) => {
-        const toastId = toast.loading('جاري الفحص والصرف...');
         try {
             const targetId = paymentData.id || paymentData.related_expense_id || paymentData.expense_id;
             if (!targetId) throw new Error("لا يوجد ID للفاتورة مبعوث من المودال!");
@@ -266,7 +290,7 @@ export function useExpensesLogic() {
                 voucher_number: `PV-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`, 
                 date: paymentData.payment_date || new Date().toISOString().split('T')[0], 
                 amount: addedAmount, 
-                payment_method: paymentData.payment_method || 'كاش', 
+                payment_method: paymentData.payment_method || 'آجل', 
                 debit_account_id: resolvedDebitId, 
                 credit_account_id: resolvedCreditId, 
                 site_ref: paymentData.site_ref || targetExpense?.site_ref, 
@@ -279,12 +303,12 @@ export function useExpensesLogic() {
             const { error: voucherErr } = await supabase.from('payment_vouchers').insert([voucherPayload]);
             if (voucherErr) throw voucherErr;
 
-            const { error: expErr } = await supabase.from('expenses').update({ paid_amount: newPaidAmount }).eq('id', targetId);
+            const { error: expErr = null } = await supabase.from('expenses').update({ paid_amount: newPaidAmount }).eq('id', targetId);
             if (expErr) throw expErr;
 
-            toast.success('تم الصرف بنجاح ✅', { id: toastId });
+            showToast('تم الصرف بنجاح ✅', 'success');
         } catch (error: any) {
-            toast.error(`خطأ: ${error.message}`, { id: toastId });
+            showToast(`خطأ: ${error.message}`, 'error');
             queryClient.invalidateQueries({ queryKey: ['expenses'] });
         }
     };
@@ -295,8 +319,6 @@ export function useExpensesLogic() {
         const updatePayload: any = {};
         if (bulkFixAccounts.creditor_account) updatePayload.creditor_account = bulkFixAccounts.creditor_account;
         if (bulkFixAccounts.payment_account) updatePayload.payment_account = bulkFixAccounts.payment_account;
-
-        const toastId = toast.loading(`⏳ جاري التصحيح...`);
         
         await queryClient.cancelQueries({ queryKey: ['expenses'] });
         const previousData = queryClient.getQueryData(['expenses']);
@@ -313,55 +335,40 @@ export function useExpensesLogic() {
             setIsBulkFixModalOpen(false); 
             setBulkFixAccounts({ creditor_account: '', payment_account: '' });
             setSelectedIds([]); 
-            toast.success(`✅ تم التصحيح بنجاح!`, { id: toastId });
+            showToast(`✅ تم التصحيح المجمع بنجاح!`, 'success');
         } catch (error: any) {
             queryClient.setQueryData(['expenses'], previousData); 
-            toast.error("خطأ أثناء التحديث: " + error.message, { id: toastId });
+            showToast("خطأ أثناء التحديث: " + error.message, 'error');
         }
     };
     
-    // =========================================================================
-    // 🚀 الصرف الجماعي (عداد ذكي وتحديث سلس)
-    // =========================================================================
+    // الصرف الجماعي
     const bulkDisburseMutation = useMutation({
         mutationFn: async (ids: string[]) => {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.user?.id) throw new Error("يجب تسجيل الدخول أولاً");
 
-            const CHUNK_SIZE = 20; // 🚀 حجم الدفعة للعداد
+            const CHUNK_SIZE = 20; 
             let totalProcessedCount = 0;
             let totalDisbursedSum = 0;
 
-            // 1. بدء تشغيل شريط التحميل
             setDisburseProgress({ current: 0, total: ids.length, isActive: true });
 
-            // 2. تقسيم العمل لـ Chunks عشان العداد يشتغل قدام المستخدم
             for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
                 const chunk = ids.slice(i, i + CHUNK_SIZE);
-                
-                // 🚀 استدعاء المحرك المجمع في السيرفر (طلقة واحدة لكل 20 سجل)
-                const { data, error } = await supabase.rpc('bulk_disburse_v2', { 
-                    p_ids: chunk, 
-                    p_user_id: session.user.id 
-                });
+                const { data, error } = await supabase.rpc('bulk_disburse_v2', { p_ids: chunk, p_user_id: session.user.id });
 
                 if (error) {
-                    // 🚀 كود استخراج الخطأ الحقيقي بدلاً من {}
                     const errorDetails = error.message || error.details || error.hint || JSON.stringify(error);
-                    console.error("🔥 الخلل في قاعدة البيانات:", errorDetails, "كامل الخطأ:", error);
-                    
-                    // إيقاف العملية وإظهار الخطأ للمستخدم
                     if (i === 0) throw new Error(`فشل الاتصال: ${errorDetails}`);
                     continue;
                 }
 
-                // 3. تحديث الإحصائيات من رد السيرفر
                 if (data && data[0]) {
                     totalProcessedCount += data[0].processed_count;
                     totalDisbursedSum += Number(data[0].total_amount);
                 }
 
-                // 4. تحديث العداد اللحظي في الواجهة
                 const currentProgress = Math.min(i + CHUNK_SIZE, ids.length);
                 setDisburseProgress(prev => ({ ...prev, current: currentProgress }));
             }
@@ -369,28 +376,19 @@ export function useExpensesLogic() {
             return { processed_count: totalProcessedCount, total_amount: totalDisbursedSum };
         },
         onSuccess: (res) => {
-            // إخفاء أي توست قديم وإظهار نتيجة النجاح النهائية
-            toast.dismiss('bulk-disburse');
             if (res.processed_count > 0) {
-                toast.success(
-                    `تم إنشاء ${res.processed_count} سند صرف بإجمالي ${Number(res.total_amount).toLocaleString()} ريال 💰✅`, 
-                    { duration: 6000 }
-                );
+                showToast(`تم إنشاء ${res.processed_count} سند صرف بإجمالي ${Number(res.total_amount).toLocaleString()} ريال 💰✅`, 'success');
             } else {
-                toast.error("لم يتم إنشاء أي سندات، قد تكون السجلات مسددة بالفعل!");
+                showToast("لم يتم إنشاء أي سندات، قد تكون السجلات مسددة بالفعل!", 'warning');
             }
-            
             setSelectedIds([]); 
-            // تحديث الكاش لضمان ظهور البيانات الجديدة فوراً
             queryClient.invalidateQueries({ queryKey: ['expenses'] });
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
         },
         onError: (err: any) => {
-            toast.dismiss('bulk-disburse');
-            toast.error(`فشلت العملية: ${err.message}`);
+            showToast(`فشلت العملية: ${err.message}`, 'error');
         },
         onSettled: () => {
-            // إغلاق شريط التحميل بعد الانتهاء بثانيتين
             setTimeout(() => setDisburseProgress({ current: 0, total: 0, isActive: false }), 2000);
         }
     });
@@ -403,7 +401,9 @@ export function useExpensesLogic() {
     const canExport = userRole === 'admin' || userPermissions?.expenses?.print;
 
     return {
-        isLoading: expensesQuery.isLoading || supportDataQuery.isLoading || isProcessing || saveMutation.isPending || deleteMutation.isPending,
+        // 🚀 الـ إخراج المباشر وحل التعليقة النهائي
+        isSaving: saveMutation.isPending, 
+        isLoading: expensesQuery.isLoading || supportDataQuery.isLoading || isProcessing || deleteMutation.isPending,
         refreshData: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
         
         filteredExpenses: finalFilteredExpenses, totalAmount, totalPages, totalResults: finalFilteredExpenses.length,
@@ -418,7 +418,7 @@ export function useExpensesLogic() {
         filterStatus: customFilters['is_posted'] === undefined ? 'الكل' : (customFilters['is_posted'] ? 'مرحل' : 'معلق'),
         
         handleSaveExpense: (data: any) => {
-            if (!data) return toast.error("لم يتم استلام البيانات!");
+            if (!data) return showToast("لم يتم استلام البيانات!", "error");
             saveMutation.mutate(data);
         },
         handleSavePayment, 
@@ -433,80 +433,66 @@ export function useExpensesLogic() {
         
         handlePostSelected: async () => {
             if (selectedIds.length === 0) return;
-            const toastId = toast.loading('جاري الترحيل...');
             const idsToProcess = [...selectedIds];
-
             await queryClient.cancelQueries({ queryKey: ['expenses'] });
             const previousData = queryClient.getQueryData(['expenses']);
-
             updateRowsInCache(idsToProcess, { is_posted: true });
             setSelectedIds([]);
 
             try {
                 const { error } = await supabase.rpc('post_expenses_bulk', { p_ids: idsToProcess });
                 if (error) throw error;
-                toast.success('تم الترحيل بنجاح ✅', { id: toastId });
+                showToast('تم الترحيل بنجاح ✅', 'success');
             } catch (error: any) {
                 queryClient.setQueryData(['expenses'], previousData);
-                toast.error(`خطأ: ${error.message}`, { id: toastId });
+                showToast(`خطأ: ${error.message}`, 'error');
             }
         },
         
-        // 🚀 6. فك الترحيل المبسط جداً والاعتماد كلياً على الداتا بيز
         handleUnpostSelected: async () => {
             if (selectedIds.length === 0) return;
-            const toastId = toast.loading('جاري فك الترحيل ومسح السندات...');
             const idsToProcess = [...selectedIds];
-
             await queryClient.cancelQueries({ queryKey: ['expenses'] });
             const previousData = queryClient.getQueryData(['expenses']);
-
-            // تحديث الشاشة بسرعة
             updateRowsInCache(idsToProcess, { is_posted: false, paid_amount: 0 });
             setSelectedIds([]);
 
             try {
-                // إرسال الطلب للسيرفر لتنفيذ SQL Transaction
                 const { error } = await supabase.rpc('unpost_expenses_bulk', { record_ids: idsToProcess });
                 if (error) throw error;
-                
-                toast.success('تم فك الترحيل وحذف السندات المرتبطة بنجاح ↩️', { id: toastId });
+                showToast('تم فك الترحيل بنجاح ↩️', 'success');
                 queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
             } catch (error: any) {
                 queryClient.setQueryData(['expenses'], previousData);
-                toast.error(`خطأ: ${error.message}`, { id: toastId });
+                showToast(`خطأ: ${error.message}`, 'error');
             }
         },
         
         handlePostAllUnposted: async () => {
             const unposted = allFiltered.filter((e:any) => !e.is_posted).map((e:any) => e.id);
-            if (unposted.length === 0) return toast.success("لا يوجد مصروفات معلقة!");
-            const toastId = toast.loading('جاري الترحيل...');
+            if (unposted.length === 0) return showToast("لا يوجد سجلات معلقة!", 'info');
             const idsToProcess = [...unposted];
-            
             await queryClient.cancelQueries({ queryKey: ['expenses'] });
             const previousData = queryClient.getQueryData(['expenses']);
-            
             updateRowsInCache(idsToProcess, { is_posted: true });
             
             try {
                 const { error } = await supabase.rpc('post_expenses_bulk', { p_ids: idsToProcess });
                 if (error) throw error;
-                toast.success('تم الترحيل بالكامل ✅', { id: toastId });
+                showToast('تم الترحيل بالكامل ✅', 'success');
                 setSelectedIds([]);
             } catch (error: any) {
                 queryClient.setQueryData(['expenses'], previousData);
-                toast.error(`خطأ الترحيل: ${error.message}`, { id: toastId });
+                showToast(`خطأ الترحيل: ${error.message}`, 'error');
             }
         },
 
         handleBulkDisburse: () => {
             if (selectedIds.length === 0) return;
             if (confirm(`هل أنت متأكد من إنشاء سندات صرف لـ ${selectedIds.length} سجل؟`)) {
-                toast.loading(`⏳ جاري إنشاء السندات لـ ${selectedIds.length} مصروف...`, { id: 'bulk-disburse' });
                 bulkDisburseMutation.mutate(selectedIds);
             }
         },
         isDisbursing: bulkDisburseMutation.isPending
     };
-}   
+}

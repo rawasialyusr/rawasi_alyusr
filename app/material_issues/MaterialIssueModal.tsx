@@ -14,8 +14,8 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
 
     if (!isOpen || !mounted) return null;
 
-    const totalQuantity = logic.issueData.items.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
-    const grandTotal = logic.issueData.items.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0);
+    const totalQuantity = logic.issueData?.items?.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0) || 0;
+    const grandTotal = logic.issueData?.items?.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0) || 0;
 
     return createPortal(
         <div className="warm-portal-overlay-fullscreen" onClick={onClose}>
@@ -47,14 +47,6 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                 }
                 .item-row { transition: 0.2s; border-bottom: 1px solid rgba(0,0,0,0.05); }
                 .item-row:hover { background: rgba(255, 255, 255, 0.8); }
-
-                .inventory-dropdown-item {
-                    display: flex; justify-content: space-between; align-items: center; width: 100%;
-                }
-                .inventory-name { font-weight: 800; color: #1e293b; }
-                .inventory-badges { display: flex; gap: 8px; font-size: 11px; font-weight: 900; }
-                .badge-balance { background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; border: 1px solid #bae6fd; }
-                .badge-price { background: #fef3c7; color: #b45309; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a; }
             `}</style>
 
             <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ 
@@ -81,21 +73,21 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                             table="projects" 
                             displayCol="Property" 
                             searchCols="Property,project_code" 
-                            value={logic.issueData.project_id}
-                            onSelect={(v: any) => logic.setIssueData({ ...logic.issueData, project_id: v?.id, items: logic.issueData.items.map((i:any) => ({...i, boq_id: null})) })}
+                            value={logic.issueData?.project_id}
+                            onSelect={(v: any) => logic.setIssueData({ ...logic.issueData, project_id: v?.id, items: logic.issueData.items.map((i:any) => ({...i, boq_id: null, boq_item_id: null})) })}
                         />
                     </div>
                     
                     <div style={{ zIndex: 80, position: 'relative' }}>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark || '#2d1a11', display: 'block', marginBottom: '6px' }}>🔄 نوع الصرف *</label>
-                        <select className="glass-input-field" value={logic.issueData.issue_type} onChange={e => logic.setIssueData({...logic.issueData, issue_type: e.target.value})}>
+                        <select className="glass-input-field" value={logic.issueData?.issue_type || 'صرف لمقاول'} onChange={e => logic.setIssueData({...logic.issueData, issue_type: e.target.value})}>
                             <option value="صرف لمقاول">صرف لمقاول باطن 👷 (يُحمل عليه)</option>
                             <option value="استهلاك مباشر">استهلاك مباشر للشركة 🏗️ (يُحمل كـ تكلفة)</option>
                         </select>
                     </div>
 
                     <div style={{ zIndex: 70, position: 'relative' }}>
-                        {logic.issueData.issue_type === 'صرف لمقاول' ? (
+                        {logic.issueData?.issue_type === 'صرف لمقاول' ? (
                             <SmartCombo 
                                 label="👤 المقاول المستلم *" 
                                 icon="👷" 
@@ -103,7 +95,7 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                 displayCol="name" 
                                 searchCols="name" 
                                 customFilter="partner_type=eq.مقاول" 
-                                value={logic.issueData.subcontractor_id}
+                                value={logic.issueData?.subcontractor_id}
                                 onSelect={(v: any) => logic.setIssueData({ ...logic.issueData, subcontractor_id: v?.id })} 
                             />
                         ) : (
@@ -118,7 +110,13 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
 
                 <div style={{ marginBottom: '25px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark || '#2d1a11', display: 'block', marginBottom: '6px' }}>📅 تاريخ الصرف</label>
-                    <input type="date" className="glass-input-field" style={{maxWidth: '300px'}} value={logic.issueData.issue_date} onChange={e => logic.setIssueData({...logic.issueData, issue_date: e.target.value})} />
+                    <input 
+                        type="date" 
+                        className="glass-input-field" 
+                        style={{maxWidth: '300px'}} 
+                        value={logic.issueData?.issue_date || ''} 
+                        onChange={e => logic.setIssueData({...logic.issueData, issue_date: e.target.value})} 
+                    />
                 </div>
                 
                 <div style={{ background: 'rgba(202, 138, 4, 0.05)', padding: '20px', borderRadius: '20px', marginBottom: '25px', border: `1px dashed ${THEME.goldAccent || '#ca8a04'}` }}>
@@ -143,31 +141,22 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {logic.issueData.items.map((item: any, idx: number) => {
+                                {logic.issueData?.items?.map((item: any, idx: number) => {
                                     const totalStock = (Number(item.available_qty) || 0) + (Number(item.old_qty) || 0);
                                     const isOutOfStock = Number(item.quantity) > totalStock;
 
                                     return (
                                         <tr key={idx} className="item-row">
                                             <td style={{ padding: '10px', zIndex: 60 - idx, position: 'relative' }}>
-                                                {/* 🚀 الداتا بقت تتقرأ من الفيو المحدث مباشرة! */}
+                                                {/* 🚀 القراءة من الجدول الأساسي للمخازن مباشرة material_items */}
                                                 <SmartCombo 
-                                                    table="vw_inventory_balances_v2"
+                                                    table="material_items" 
                                                     displayCol="item_name" 
                                                     searchCols="item_name,item_code" 
                                                     value={item.item_id}
                                                     initialDisplay={item.item_name}
                                                     placeholder="ابحث عن الخامة..."
                                                     onSelect={(v: any) => logic.handleItemChange(idx, 'item_selection', v)} 
-                                                    renderListItem={(invItem: any) => (
-                                                        <div className="inventory-dropdown-item">
-                                                            <span className="inventory-name">{invItem.item_name}</span>
-                                                            <div className="inventory-badges">
-                                                                <span className="badge-balance">الرصيد: {invItem.available_quantity || 0}</span>
-                                                                <span className="badge-price">{invItem.last_price || 0} ج</span>
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 />
                                                 {item.item_id && (
                                                     <div style={{ fontSize: '10px', marginTop: '5px', fontWeight: 900, color: isOutOfStock ? '#ef4444' : '#166534', textAlign: 'right', paddingRight: '5px' }}>
@@ -177,12 +166,15 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                             </td>
                                             
                                             <td style={{ padding: '10px', zIndex: 50 - idx, position: 'relative' }}>
+                                                {/* 🚀 القراءة من جدول الميزانية الأساسي المباشر boq_budget_distinct */}
                                                 <SmartCombo 
-                                                    table="boq_budget" 
+                                                    table="boq_budget_distinct" 
                                                     displayCol="work_item" 
+                                                    searchCols="work_item"
+                                                    searchColumns={['work_item']} 
                                                     customFilter={logic.issueData.project_id ? `project_id=eq.${logic.issueData.project_id}` : 'id=is.null'}
                                                     value={item.boq_id}
-                                                    onSelect={(v: any) => logic.handleItemChange(idx, 'boq_id', v?.id)} 
+                                                    onSelect={(v: any) => logic.handleItemChange(idx, 'boq_selection', v)} 
                                                 />
                                             </td>
 
@@ -192,7 +184,7 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                                     placeholder="0" 
                                                     className="glass-input-field" 
                                                     style={{ padding: '8px', textAlign: 'center', background: 'white', borderColor: isOutOfStock ? '#ef4444' : '', borderWidth: isOutOfStock ? '2px' : '1px' }} 
-                                                    value={item.quantity} 
+                                                    value={item.quantity ?? ''} 
                                                     onChange={e => logic.handleItemChange(idx, 'quantity', e.target.value)} 
                                                 />
                                             </td>
@@ -203,7 +195,7 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                                     disabled
                                                     className="glass-input-field" 
                                                     style={{ padding: '8px', textAlign: 'center', background: '#f8fafc', opacity: 0.8 }} 
-                                                    value={item.unit} 
+                                                    value={item.unit || ''} 
                                                 />
                                             </td>
                                             <td style={{ padding: '10px' }}>
@@ -212,7 +204,7 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                                     placeholder="0.00" 
                                                     className="glass-input-field" 
                                                     style={{ padding: '8px', textAlign: 'center', background: 'white' }} 
-                                                    value={item.unit_price} 
+                                                    value={item.unit_price ?? ''} 
                                                     onChange={e => logic.handleItemChange(idx, 'unit_price', e.target.value)} 
                                                     title="مسحوب بآخر سعر شراء، قابل للتعديل"
                                                 />
@@ -236,7 +228,7 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                 <div className="responsive-summary-grid" style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>عدد الأصناف المنصرفة</div>
-                        <div style={{ fontSize: '24px', fontWeight: 900 }}>{logic.issueData.items.length}</div>
+                        <div style={{ fontSize: '24px', fontWeight: 900 }}>{logic.issueData?.items?.length || 0}</div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الكميات</div>

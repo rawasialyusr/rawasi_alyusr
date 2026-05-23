@@ -1,209 +1,200 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useMaterialsLogic } from './materials_logic';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
-import RawasiSmartTable from '@/components/rawasismarttable';
 import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import MaterialInvoiceModal from './MaterialInvoiceModal';
 import MaterialReceiptPrintModal from './MaterialReceiptPrintModal';
-import { useConfirm } from '@/components/ConfirmContext'; // 👈 استدعاء خدمة التأكيد الذكية
+import { useConfirm } from '@/components/ConfirmContext'; 
 
+// =========================================================================
+// 🧩 مكون القائمة المنسدلة متعددة الاختيارات مع بحث (Custom Dropdown)
+// =========================================================================
+const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, accentColor }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: any) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter((opt: string) => opt.toLowerCase().includes(search.toLowerCase()));
+
+    const handleToggle = (opt: string) => {
+        if (selected.includes(opt)) {
+            onChange(selected.filter((item: string) => item !== opt));
+        } else {
+            onChange([...selected, opt]);
+        }
+    };
+
+    return (
+        <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+            <div style={{ fontSize: '11px', fontWeight: 900, marginBottom: '6px', color: '#475569', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{title}</span>
+                {selected.length > 0 && (
+                    <span 
+                        style={{ color: '#ef4444', cursor: 'pointer', fontSize: '10px', background: '#fef2f2', padding: '2px 6px', borderRadius: '4px' }} 
+                        onClick={() => onChange([])}
+                    >
+                        إلغاء ({selected.length})
+                    </span>
+                )}
+            </div>
+            
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className="glass-input-field"
+                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '45px', padding: '0 12px' }}
+            >
+                <span style={{ fontWeight: 800, color: selected.length ? '#1e293b' : '#94a3b8', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selected.length > 0 ? selected.join('، ') : placeholder}
+                </span>
+                <span style={{ color: '#94a3b8', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s', fontSize: '10px' }}>▼</span>
+            </div>
+            
+            {isOpen && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: `1px solid #e2e8f0`, borderRadius: '12px', marginTop: '8px', zIndex: 9999, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    <div style={{ padding: '8px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <input 
+                            type="text" 
+                            placeholder="🔍 بحث سريع..." 
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none', fontSize: '12px', fontWeight: 700, color: '#1e293b' }}
+                        />
+                    </div>
+                    <div className="custom-scrollbar" style={{ maxHeight: '200px', overflowY: 'auto', padding: '5px' }}>
+                        {filteredOptions.length > 0 ? filteredOptions.map((opt: string) => (
+                            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', cursor: 'pointer', borderRadius: '6px', background: selected.includes(opt) ? `${accentColor}15` : 'transparent', transition: '0.2s' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={selected.includes(opt)} 
+                                    onChange={() => handleToggle(opt)} 
+                                    style={{ accentColor: accentColor, transform: 'scale(1.2)', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontSize: '12px', fontWeight: 800, color: selected.includes(opt) ? accentColor : '#334155' }}>{opt}</span>
+                            </label>
+                        )) : (
+                            <div style={{ padding: '15px', textAlign: 'center', fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>لا توجد نتائج</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// =========================================================================
+// 🚀 الصفحة الرئيسية
+// =========================================================================
 export default function MaterialsPage() {
     const logic = useMaterialsLogic();
-    const { showConfirm } = useConfirm(); // 👈 تفعيل الخدمة
+    const { showConfirm } = useConfirm(); 
+
+    // حالة التحكم في فتح وإغلاق الشجرة التجميعية للفواتير
+    const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+
+    const toggleGroup = (groupId: string) => {
+        if (expandedGroups.includes(groupId)) {
+            setExpandedGroups(expandedGroups.filter(id => id !== groupId));
+        } else {
+            setExpandedGroups([...expandedGroups, groupId]);
+        }
+    };
+
+    // 🚀 الفلاتر المتقدمة (Multi-Select State)
+    const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+    const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
+    const [selectedItems, setSelectedItems] = useState<string[]>([]);
+
+    // استخراج القوائم الفريدة للفلاتر من البيانات
+    const uniqueProjects = useMemo(() => Array.from(new Set((logic.data || []).map((r: any) => r.project?.Property).filter(Boolean))) as string[], [logic.data]);
+    const uniqueSuppliers = useMemo(() => Array.from(new Set((logic.data || []).map((r: any) => r.supplier?.name).filter(Boolean))) as string[], [logic.data]);
+    const uniqueItems = useMemo(() => Array.from(new Set((logic.data || []).map((r: any) => r.work_item || r.item_name).filter(Boolean))) as string[], [logic.data]);
 
     // =========================================================================
-    // 🔢 نظام تقسيم الصفحات (Pagination) حسب ميثاق V11
+    // 🔍 فلترة البيانات محلياً بناءً على التشيك بوكس
+    // =========================================================================
+    const locallyFilteredData = useMemo(() => {
+        let data = logic.data || [];
+
+        if (selectedProjects.length > 0) {
+            data = data.filter((r: any) => selectedProjects.includes(r.project?.Property));
+        }
+        if (selectedSuppliers.length > 0) {
+            data = data.filter((r: any) => selectedSuppliers.includes(r.supplier?.name));
+        }
+        if (selectedItems.length > 0) {
+            data = data.filter((r: any) => selectedItems.includes(r.work_item || r.item_name));
+        }
+
+        return data;
+    }, [logic.data, selectedProjects, selectedSuppliers, selectedItems]);
+
+    // حساب الإجمالي اللحظي للفلاتر الحالية
+    const filteredTotalCost = useMemo(() => {
+        return locallyFilteredData.reduce((sum: number, row: any) => sum + (Number(row.total_price) || 0), 0);
+    }, [locallyFilteredData]);
+
+    // =========================================================================
+    // 🌳 تجميع الحركات أوتوماتيكياً وتحويلها لشجرة ماليّة بناءً على (رقم الفاتورة)
+    // =========================================================================
+    const groupedData = useMemo(() => {
+        const groups: { [key: string]: any } = {};
+
+        locallyFilteredData.forEach((row: any) => {
+            const id = row.receipt_id || row.id; 
+            if (!groups[id]) {
+                groups[id] = {
+                    id: id,
+                    receipt_id: id,
+                    receipt_no: row.receipt_no,
+                    exp_date: row.exp_date,
+                    receipt_type: row.receipt_type,
+                    project: row.project,
+                    supplier: row.supplier,
+                    account: row.account,
+                    is_posted: row.is_posted,
+                    total_receipt_price: 0,
+                    items: [],
+                    _selected: logic.selectedIds?.includes(id)
+                };
+            }
+            groups[id].total_receipt_price += Number(row.total_price) || 0;
+            groups[id].items.push(row);
+        });
+
+        return Object.values(groups);
+    }, [locallyFilteredData, logic.selectedIds]);
+
+    // =========================================================================
+    // 🔢 نظام تقسيم الصفحات (Pagination)
     // =========================================================================
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
 
-    // إعادة التوجيه للصفحة الأولى عند تغير الفلاتر
+    // تصفير الصفحة عند تغير الفلاتر أو البيانات
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [logic.data?.length]);
+    }, [groupedData.length, selectedProjects, selectedSuppliers, selectedItems]);
 
-    const totalPages = Math.ceil((logic.data?.length || 0) / rowsPerPage);
+    const totalPages = Math.ceil((groupedData.length || 0) / rowsPerPage) || 1;
 
-    // 🚀 الخدعة السحرية: دمج (التشيك بوكس) مع (البيانات المقسمة) لإجبار الجدول على التحديث اللحظي
-    const paginatedData = useMemo(() => {
+    const paginatedGroups = useMemo(() => {
         const startIndex = (currentPage - 1) * rowsPerPage;
-        const sliced = (logic.data || []).slice(startIndex, startIndex + rowsPerPage);
-        
-        return sliced.map((row: any) => ({
-            ...row,
-            // 🛡️ التعديل الجوهري: الربط بـ row.id بدلاً من receipt_id
-            _selected: logic.selectedIds?.includes(row.id) 
-        }));
-    }, [logic.data, currentPage, rowsPerPage, logic.selectedIds]);
-    
-   const columns = [
-        // 1️⃣ عمود التشيك بوكس (مستقل لكل سطر)
-        {
-            header: (
-                <input 
-                    type="checkbox" 
-                    checked={paginatedData.length > 0 && paginatedData.every(r => r._selected)}
-                    onChange={logic.handleSelectAll}
-                    style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent }}
-                />
-            ),
-            render: (row: any) => row ? (
-                <input 
-                    type="checkbox" 
-                    checked={row._selected}
-                    onChange={() => logic.handleSelectRow(row.id)} // الربط بمعرف السطر الفريد
-                    style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent }}
-                />
-            ) : null
-        },
-
-        // 2️⃣ عمود رقم الفاتورة (المرجع الأساسي)
-        { 
-            header: 'رقم الفاتورة', 
-            render: (row: any) => row ? (
-                <div style={{ 
-                    fontWeight: 900, 
-                    color: THEME.coffeeDark, 
-                    background: THEME.sandDark, 
-                    padding: '4px 10px', 
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    textAlign: 'center',
-                    border: `1px solid ${THEME.coffeeMain}40`,
-                    minWidth: '85px'
-                }}>
-                    #{row.receipt_no || '---'}
-                </div>
-            ) : null 
-        },
-
-        // 3️⃣ التاريخ ونوع التوريد
-        { 
-            header: 'التاريخ والنوع', 
-            render: (row: any) => row ? (
-                <div>
-                    <div style={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px', fontSize: '13px' }}>{row.exp_date}</div>
-                    <span style={{ 
-                        fontSize: '10px', 
-                        background: row.receipt_type === 'توريد عميل' ? '#dbeafe' : '#fef3c7', 
-                        color: row.receipt_type === 'توريد عميل' ? '#1d4ed8' : '#d97706', 
-                        padding: '2px 8px', 
-                        borderRadius: '6px', 
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap'
-                    }}>
-                        {row.receipt_type || 'توريد شركة'}
-                    </span>
-                </div>
-            ) : null 
-        },
-
-        // 4️⃣ الخامة والكمية
-        { 
-            header: 'الخامة والكمية', 
-            render: (row: any) => row ? (
-                <div style={{ minWidth: '140px' }}>
-                    <strong style={{ color: THEME.primary, fontSize: '14px', display: 'block' }}>{row.work_item || row.item_name}</strong>
-                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 900 }}>
-                        {row.quantity} {row.unit} | {formatCurrency(row.unit_price)}
-                    </span>
-                </div>
-            ) : null 
-        },
-
-        // 5️⃣ المشروع والمورد والبند 🚀 
-        { 
-            header: 'التوجيه (مشروع / بند / مورد)', 
-            render: (row: any) => row ? (
-                <div style={{ minWidth: '150px' }}>
-                    <div style={{ fontWeight: 800, color: THEME.coffeeDark, fontSize: '13px' }}>🏢 {row.project?.Property || '---'}</div>
-                    {row.boq_item && <div style={{ fontSize: '11px', color: THEME.goldAccent, marginTop: '2px', fontWeight: 700 }}>📋 {row.boq_item}</div>}
-                    <div style={{ fontSize: '11px', color: THEME.ruby, marginTop: '2px', fontWeight: 700 }}>👤 {row.supplier?.name || '---'}</div>
-                </div>
-            ) : null 
-        },
-
-        // 6️⃣ الحالة المحاسبية
-        { 
-            header: 'الحالة', 
-            render: (row: any) => row ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 800, background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', color: '#475569' }}>
-                        {row.account?.name || '---'}
-                    </span>
-                    <span style={{ 
-                        background: row.is_posted ? '#dcfce7' : '#fef2f2', 
-                        color: row.is_posted ? '#166534' : '#dc2626', 
-                        padding: '2px 8px', 
-                        borderRadius: '6px', 
-                        fontSize: '10px', 
-                        fontWeight: 900 
-                    }}>
-                        {row.is_posted ? 'مُرحل ✅' : 'مسودة ⏳'}
-                    </span>
-                </div>
-            ) : null 
-        },
-
-        // 7️⃣ إجمالي السطر
-        { 
-            header: 'الإجمالي', 
-            render: (row: any) => row ? (
-                <span style={{ fontWeight: 900, color: THEME.danger, fontSize: '14px' }}>
-                    {formatCurrency(row.total_price)}
-                </span>
-            ) : null 
-        },
-
-        // 8️⃣ إجراءات الإذن (التعديل والطباعة والترحيل)
-        { 
-            header: 'الإجراءات', 
-            render: (row: any) => row ? (
-                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '160px' }}>
-                    
-                    {/* زر الطباعة */}
-                    <button 
-                        onClick={() => { logic.setPrintReceiptId(row.receipt_id); logic.setIsPrintModalOpen(true); }} 
-                        style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, color: THEME.primary, fontSize: '11px' }}
-                    >
-                        🖨️ طباعة
-                    </button>
-
-                    {!row.is_posted ? (
-                        <>
-                            {/* 🚀 زر التعديل (يسحب تفاصيل الفاتورة من اللوجيك) */}
-                            <button 
-                                onClick={() => logic.handleEdit(row.receipt_id)} 
-                                style={{ padding: '6px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px' }}
-                            >
-                                ✏️ تعديل
-                            </button>
-                            {/* زر الترحيل */}
-                            <button 
-                                onClick={() => logic.handleAction('post', row.receipt_id)} 
-                                disabled={logic.isActionPending}
-                                style={{ padding: '6px 10px', background: THEME.success, color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px' }}
-                            >
-                                🚀 ترحيل
-                            </button>
-                        </>
-                    ) : (
-                        /* زر فك الترحيل */
-                        <button 
-                            onClick={() => logic.handleAction('unpost', row.receipt_id)} 
-                            disabled={logic.isActionPending}
-                            style={{ padding: '6px 15px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px' }}
-                        >
-                            🔓 فك الترحيل
-                        </button>
-                    )}
-                </div>
-            ) : null 
-        },
-    ];
+        return groupedData.slice(startIndex, startIndex + rowsPerPage);
+    }, [groupedData, currentPage, rowsPerPage]);
 
     return (
         <div className="clean-page">
@@ -212,15 +203,13 @@ export default function MaterialsPage() {
                 <RawasiSidebarManager 
                     actions={
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {/* 1️⃣ زر إضافة فاتورة جديدة */}
                             <button onClick={logic.openAddModal} className="btn-main-glass gold">
                                 🛒 إصدار فاتورة توريد جديدة
                             </button>
                             
-                            {/* 2️⃣ زر التعديل الذكي (يظهر عند تحديد سطر واحد فقط) */}
                             {logic.selectedIds?.length === 1 && (
                                 <button 
-                                    onClick={logic.handleEditSelected} // 👈 تم الربط باللوجيك مباشرة وبشكل نظيف
+                                    onClick={logic.handleEditSelected} 
                                     className="btn-main-glass" 
                                     style={{ background: '#3b82f6', color: 'white' }}
                                 >
@@ -228,7 +217,6 @@ export default function MaterialsPage() {
                                 </button>
                             )}
 
-                            {/* 3️⃣ أزرار التحكم الجماعي (تظهر عند تحديد سطر أو أكثر) */}
                             {logic.selectedIds?.length > 0 && (
                                 <>
                                     <button 
@@ -246,12 +234,11 @@ export default function MaterialsPage() {
                                         🔓 فك ترحيل المحدد ({logic.selectedIds.length})
                                     </button>
                                     
-                                    {/* 🚀 زر الحذف مربوط بخدمة التأكيد الزجاجية الفخمة */}
                                     <button 
                                         onClick={() => { 
                                             showConfirm({
                                                 title: 'مسح فواتير التوريد',
-                                                message: `تحذير: هل أنت متأكد من مسح الفواتير التابعة لـ ${logic.selectedIds.length} سطر محدد بشكل نهائي؟`,
+                                                message: `تحذير: هل أنت متأكد من مسح الفواتير التابعة لـ ${logic.selectedIds.length} فاتورة محددة بشكل نهائي؟`,
                                                 type: 'danger',
                                                 onConfirm: () => logic.handleBulkAction('delete')
                                             });
@@ -268,73 +255,342 @@ export default function MaterialsPage() {
                     summary={
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: 'white' }}>
                             <div className="kpi-box danger">
-                                <span>إجمالي قيمة الخامات الموردة</span>
-                                <strong>{formatCurrency(logic.kpis.totalCost)}</strong>
+                                <span>إجمالي قيمة الخامات (للفلتر الحالي)</span>
+                                <strong>{formatCurrency(filteredTotalCost)}</strong>
                             </div>
                             <div className="kpi-box secondary">
-                                <span>عدد بنود التوريد</span>
-                                <strong>{logic.kpis.totalTransactions} بند</strong>
+                                <span>عدد الفواتير المعروضة</span>
+                                <strong>{groupedData.length} فاتورة</strong>
                             </div>
                         </div>
                     }
-                    customFilters={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <input 
-                                type="text" 
-                                placeholder="🔍 ابحث باسم الخامة أو المورد..." 
-                                className="glass-input-field" 
-                                value={logic.globalSearch} 
-                                onChange={e => logic.setGlobalSearch(e.target.value)} 
-                            />
-                            
-                            <select className="glass-input-field" value={logic.filterProject} onChange={e => logic.setFilterProject(e.target.value)}>
-                                <option value="الكل">كل المشاريع 🏢</option>
-                                {logic.projects?.map((p: any) => (
-                                    <option key={p.id} value={p.id}>{p.Property}</option>
-                                ))}
-                            </select>
-
-                            <select className="glass-input-field" value={logic.sortBy} onChange={e => logic.setSortBy(e.target.value)}>
-                                <option value="newest">⏳ الأحدث إضافة</option>
-                                <option value="oldest">⌛ الأقدم</option>
-                                <option value="highest_price">💰 السعر: الأعلى أولاً</option>
-                                <option value="lowest_price">🪙 السعر: الأقل أولاً</option>
-                            </select>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
-                                <input type="date" className="glass-input-field" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
-                                <input type="date" className="glass-input-field" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
-                            </div>
-                        </div>
-                    }
-                    watchDeps={[logic.kpis, logic.globalSearch, logic.filterProject, logic.dateFrom, logic.dateTo, logic.selectedIds, logic.sortBy, currentPage, rowsPerPage]}
+                    watchDeps={[logic.globalSearch, logic.dateFrom, logic.dateTo, logic.selectedIds, logic.sortBy, currentPage, rowsPerPage, groupedData, selectedProjects, selectedSuppliers, selectedItems]}
                 />
 
                 <style>{`
-                    .glass-input-field { width: 100%; padding: 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); outline: none; font-weight: 700; color: white; transition: 0.3s; }
-                    .glass-input-field:focus { border-color: ${THEME.goldAccent}; }
-                    .glass-input-field option { color: black; }
+                    /* ستايل الفلتر الزجاجي الأبيض المضيء */
+                    .apple-glass-filter-bar {
+                        background: rgba(255, 255, 255, 0.75);
+                        backdrop-filter: blur(20px);
+                        -webkit-backdrop-filter: blur(20px);
+                        border: 1px solid rgba(255, 255, 255, 0.8);
+                        border-radius: 16px;
+                        padding: 20px;
+                        margin-bottom: 20px;
+                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 15px;
+                        align-items: flex-end;
+                    }
+
+                    .glass-input-field { 
+                        width: 100%; 
+                        padding: 10px 12px; 
+                        border-radius: 10px; 
+                        background: rgba(255, 255, 255, 0.9); 
+                        border: 1px solid #cbd5e1; 
+                        outline: none; 
+                        font-weight: 700; 
+                        color: #1e293b; 
+                        transition: 0.3s; 
+                    }
+                    .glass-input-field:focus { 
+                        border-color: ${THEME.goldAccent}; 
+                        box-shadow: 0 0 0 3px rgba(202, 138, 4, 0.15); 
+                        background: #fff;
+                    }
+                    
                     .btn-main-glass { width: 100%; padding: 12px; border-radius: 12px; border: none; font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; }
                     .btn-main-glass.gold { background: ${THEME.goldAccent}; color: white; }
                     .btn-main-glass:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+                    
                     .kpi-box { padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); }
                     .kpi-box span { font-size: 11px; opacity: 0.8; }
                     .kpi-box strong { display: block; font-size: 20px; color: white; margin-top: 5px; }
                     .kpi-box.danger { border-right: 4px solid #ef4444; }
                     .kpi-box.danger strong { color: #ef4444; }
+
+                    /* ستايل شجرة الجداول الاحترافي */
+                    .tree-table { width: 100%; border-collapse: collapse; text-align: center; background: white; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
+                    .tree-thead { background: #ffffff; color: white; }
+                    .tree-thead th { padding: 15px; font-size: 13px; font-weight: 900; }
+                    
+                    .master-group-row { cursor: pointer; border-bottom: 2px solid #f1f5f9; background: #ffffff; transition: 0.2s; }
+                    .master-group-row:hover { background: #f8fafc; }
+                    .master-group-row td { padding: 12px; font-size: 14px; font-weight: 800; }
+
+                    .child-tree-container { background: #f8fafc; padding: 15px 30px; border-bottom: 2px solid #e2e8f0; }
+                    .child-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.9); border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; }
+                    .child-table th { background: #475569; color: white; padding: 10px; font-size: 11px; font-weight: 900; }
+                    .child-table td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; font-weight: 700; color: #334155; }
+                    
+                    .arrow-icon { display: inline-block; transition: transform 0.2s; margin-left: 8px; color: ${THEME.goldAccent || '#ca8a04'}; font-size: 14px; }
+                    .arrow-expanded { transform: rotate(90deg); }
                 `}</style>
 
-                <RawasiSmartTable 
-                    data={paginatedData}
-                    columns={columns}
-                    isLoading={logic.isLoading}
-                    enableExport={true}
-                />
+                {/* 🚀 شريط الفلاتر الزجاجي الأبيض أعلى الجدول */}
+                <div className="apple-glass-filter-bar">
+                    <div>
+                        <label style={{ fontSize: '11px', color: '#475569', marginBottom: '6px', display: 'block', fontWeight: 900 }}>بحث عام بالنص</label>
+                        <input 
+                            type="text" 
+                            placeholder="🔍 ابحث بالرقم أو البيان..." 
+                            className="glass-input-field" 
+                            style={{ height: '45px' }}
+                            value={logic.globalSearch} 
+                            onChange={e => logic.setGlobalSearch(e.target.value)} 
+                        />
+                    </div>
+                    
+                    <MultiSelectDropdown 
+                        title="🏢 فلتر المشاريع (الفلل)"
+                        placeholder="كل المشاريع"
+                        options={uniqueProjects}
+                        selected={selectedProjects}
+                        onChange={setSelectedProjects}
+                        accentColor={THEME.primary || '#2563eb'}
+                    />
 
-                {!logic.isLoading && (logic.data?.length || 0) > 0 && (
+                    <MultiSelectDropdown 
+                        title="👤 فلتر الموردين"
+                        placeholder="كل الموردين"
+                        options={uniqueSuppliers}
+                        selected={selectedSuppliers}
+                        onChange={setSelectedSuppliers}
+                        accentColor="#8b5cf6"
+                    />
+
+                    <MultiSelectDropdown 
+                        title="📦 فلتر الخامات الموردة"
+                        placeholder="كل الخامات"
+                        options={uniqueItems}
+                        selected={selectedItems}
+                        onChange={setSelectedItems}
+                        accentColor={THEME.goldAccent || '#d97706'}
+                    />
+
+                    <div>
+                        <label style={{ fontSize: '11px', color: '#475569', marginBottom: '6px', display: 'block', fontWeight: 900 }}>ترتيب العرض</label>
+                        <select className="glass-input-field" style={{ height: '45px' }} value={logic.sortBy} onChange={e => logic.setSortBy(e.target.value)}>
+                            <option value="newest">⏳ الأحدث إضافة</option>
+                            <option value="oldest">⌛ الأقدم</option>
+                            <option value="highest_price">💰 السعر: الأعلى أولاً</option>
+                            <option value="lowest_price">🪙 السعر: الأقل أولاً</option>
+                        </select>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                            <label style={{ fontSize: '11px', color: '#475569', marginBottom: '6px', display: 'block', fontWeight: 900 }}>من تاريخ</label>
+                            <input type="date" className="glass-input-field" style={{ height: '45px', padding: '0 10px' }} value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '11px', color: '#475569', marginBottom: '6px', display: 'block', fontWeight: 900 }}>إلى تاريخ</label>
+                            <input type="date" className="glass-input-field" style={{ height: '45px', padding: '0 10px' }} value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* 🌳 جدول الشجرة التجميعي الذكي بناءً على الفاتورة */}
+                <div>
+                    {logic.isLoading ? (
+                        <div style={{ textAlign: 'center', padding: '20px', fontWeight: 900, color: '#64748b' }}>⏳ جاري تحميل فواتير التوريد...</div>
+                    ) : (
+                        <table className="tree-table">
+                            <thead className="tree-thead">
+                                <tr>
+                                    <th style={{ width: '5%' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={paginatedGroups.length > 0 && paginatedGroups.every(g => g._selected)}
+                                            onChange={logic.handleSelectAll}
+                                            style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent }}
+                                        />
+                                    </th>
+                                    <th style={{ width: '15%' }}>رقم الفاتورة</th>
+                                    <th style={{ width: '15%' }}>التاريخ والنوع</th>
+                                    <th style={{ width: '20%' }}>التوجيه والمورد</th>
+                                    <th style={{ width: '15%' }}>الحالة المحاسبية</th>
+                                    <th style={{ width: '15%' }}>إجمالي الفاتورة</th>
+                                    <th style={{ width: '15%' }}>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paginatedGroups.map((group) => {
+                                    const isExpanded = expandedGroups.includes(group.id);
+
+                                    return (
+                                        <React.Fragment key={group.id}>
+                                            <tr className="master-group-row" onClick={(e) => {
+                                                const target = e.target as HTMLElement;
+                                                if (target.tagName !== 'BUTTON' && target.tagName !== 'INPUT') {
+                                                    toggleGroup(group.id);
+                                                }
+                                            }}>
+                                                <td>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={group._selected}
+                                                        onChange={() => logic.handleSelectRow(group.id)} 
+                                                        style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent }}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <span className={`arrow-icon ${isExpanded ? 'arrow-expanded' : ''}`}>◀</span>
+                                                    <div style={{ display: 'inline-block', fontWeight: 900, color: THEME.coffeeDark, background: THEME.sandDark, padding: '4px 10px', borderRadius: '8px', fontSize: '12px' }}>
+                                                        #{group.receipt_no || '---'}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px', fontSize: '13px' }}>{group.exp_date}</div>
+                                                    <span style={{ fontSize: '10px', background: group.receipt_type === 'توريد عميل' ? '#dbeafe' : '#fef3c7', color: group.receipt_type === 'توريد عميل' ? '#1d4ed8' : '#d97706', padding: '2px 8px', borderRadius: '6px', fontWeight: 900 }}>
+                                                        {group.receipt_type || 'توريد شركة'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div style={{ fontWeight: 800, color: THEME.coffeeDark, fontSize: '13px' }}>🏢 {group.project?.Property || '---'}</div>
+                                                    <div style={{ fontSize: '11px', color: THEME.ruby, marginTop: '2px', fontWeight: 700 }}>👤 {group.supplier?.name || '---'}</div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: 800, background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', color: '#475569' }}>
+                                                            {group.account?.name || '---'}
+                                                        </span>
+                                                        <span style={{ background: group.is_posted ? '#dcfce7' : '#fef2f2', color: group.is_posted ? '#166534' : '#dc2626', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>
+                                                            {group.is_posted ? 'مُرحل ✅' : 'مسودة ⏳'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span style={{ fontWeight: 900, color: THEME.danger, fontSize: '15px' }}>
+                                                        {formatCurrency(group.total_receipt_price)}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                                        <button 
+                                                            onClick={(e) => { 
+                                                                e.stopPropagation(); // 🛡️ منع تداخل الأحداث مع السطر
+                                                                logic.setPrintReceiptId(group.id); 
+                                                                logic.setIsPrintModalOpen(true); 
+                                                            }} 
+                                                            style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, color: THEME.primary, fontSize: '11px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                                                        >
+                                                            🖨️ طباعة
+                                                        </button>
+                                                        
+                                                        {!group.is_posted ? (
+                                                            <>
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation(); // 🛡️ منع تداخل الأحداث
+                                                                        // 🚀 ربط ذكي بأي دالة تعديل متاحة في اللوجيك
+                                                                        if (typeof logic.handleEdit === 'function') {
+                                                                            logic.handleEdit(group.id);
+                                                                        } else if (typeof logic.handleEditSelected === 'function') {
+                                                                            logic.setSelectedIds([group.id]);
+                                                                            setTimeout(() => logic.handleEditSelected(), 50);
+                                                                        }
+                                                                    }} 
+                                                                    style={{ padding: '6px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px', boxShadow: '0 2px 4px rgba(59,130,246,0.2)' }}
+                                                                >
+                                                                    ✏️ تعديل
+                                                                </button>
+
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (typeof logic.handleAction === 'function') {
+                                                                            logic.handleAction('post', group.id);
+                                                                        } else if (typeof logic.handleBulkAction === 'function') {
+                                                                            logic.setSelectedIds([group.id]);
+                                                                            setTimeout(() => logic.handleBulkAction('post'), 50);
+                                                                        }
+                                                                    }} 
+                                                                    disabled={logic.isActionPending} 
+                                                                    style={{ padding: '6px 10px', background: THEME.success, color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px', boxShadow: '0 2px 4px rgba(16,185,129,0.2)' }}
+                                                                >
+                                                                    🚀 ترحيل
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (typeof logic.handleAction === 'function') {
+                                                                        logic.handleAction('unpost', group.id);
+                                                                    } else if (typeof logic.handleBulkAction === 'function') {
+                                                                        logic.setSelectedIds([group.id]);
+                                                                        setTimeout(() => logic.handleBulkAction('unpost'), 50);
+                                                                    }
+                                                                }} 
+                                                                disabled={logic.isActionPending} 
+                                                                style={{ padding: '6px 15px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, fontSize: '11px', boxShadow: '0 2px 4px rgba(245,158,11,0.2)' }}
+                                                            >
+                                                                🔓 فك
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+
+                                            {isExpanded && (
+                                                <tr>
+                                                    <td colSpan={7} style={{ padding: 0 }}>
+                                                        <div className="child-tree-container">
+                                                            <table className="child-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th style={{ width: '30%', textAlign: 'right' }}>الخامة الموردة</th>
+                                                                        <th style={{ width: '20%' }}>توجيه الميزانية (BOQ)</th>
+                                                                        <th style={{ width: '15%' }}>الكمية</th>
+                                                                        <th style={{ width: '15%' }}>سعر الوحدة</th>
+                                                                        <th style={{ width: '20%' }}>إجمالي السطر</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {group.items.map((item: any, idx: number) => (
+                                                                        <tr key={idx}>
+                                                                            <td style={{ textAlign: 'right', fontWeight: 800, color: THEME.primary }}>
+                                                                                📦 {item.work_item || item.item_name}
+                                                                            </td>
+                                                                            <td>
+                                                                                <span style={{ color: THEME.goldAccent, fontWeight: 700, fontSize: '11px' }}>
+                                                                                    {item.boq_item || 'بدون توجيه'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td style={{ fontWeight: 900 }}>
+                                                                                {item.quantity} <span style={{fontSize:'10px', color:'#94a3b8'}}>{item.unit}</span>
+                                                                            </td>
+                                                                            <td style={{ fontWeight: 800 }}>{formatCurrency(item.unit_price)}</td>
+                                                                            <td style={{ fontWeight: 900, color: THEME.danger }}>{formatCurrency(item.total_price)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                                {groupedData.length === 0 && (
+                                    <tr>
+                                        <td colSpan={7} style={{ padding: '30px', color: '#94a3b8', fontWeight: 900 }}>❌ لا توجد فواتير مطابقة للبحث</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* 🔢 نظام الترقيم والصفحات */}
+                {!logic.isLoading && groupedData.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid ${THEME.sandDark}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
                         <div style={{ fontSize: '13px', color: THEME.coffeeMain, fontWeight: 900 }}>
-                            إجمالي السجلات المطابقة: <b style={{ color: THEME.danger, fontSize: '16px' }}>{logic.data?.length || 0}</b>
+                            إجمالي الفواتير المطابقة: <b style={{ color: THEME.danger, fontSize: '16px' }}>{groupedData.length}</b> فاتورة
                         </div>
                         
                         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
@@ -343,9 +599,9 @@ export default function MaterialsPage() {
                                 onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }} 
                                 style={{ padding: '8px 12px', borderRadius: '8px', border: `2px solid ${THEME.sandDark}`, outline: 'none', fontWeight: 900, color: THEME.coffeeDark, cursor: 'pointer' }}
                             >
-                                <option value={50}>عرض 50 سجل</option>
-                                <option value={100}>عرض 100 سجل</option>
-                                <option value={500}>عرض 500 سجل</option>
+                                <option value={10}>عرض 10 فواتير</option>
+                                <option value={50}>عرض 50 فاتورة</option>
+                                <option value={100}>عرض 100 فاتورة</option>
                             </select>
                             
                             <div style={{ display: 'flex', gap: '8px' }}>
@@ -371,7 +627,6 @@ export default function MaterialsPage() {
                     </div>
                 )}
 
-                {/* 📝 مودال إضافة وتعديل الفاتورة */}
                 <MaterialInvoiceModal 
                     isOpen={logic.isModalOpen} 
                     onClose={() => logic.setIsModalOpen(false)} 

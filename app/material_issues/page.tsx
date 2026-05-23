@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
@@ -8,48 +8,155 @@ import { THEME } from '@/lib/theme';
 import { useMaterialIssuesLogic } from './material_issues_logic';
 import MaterialIssueModal from './MaterialIssueModal';
 import { useConfirm } from '@/components/ConfirmContext';
-import * as XLSX from 'xlsx'; // 👈 استدعاء مكتبة الإكسيل للطباعة والتصدير
+import * as XLSX from 'xlsx'; // تأكد من تشغيل: npm install xlsx
 
+// =========================================================================
+// 🧩 مكون ذكي للقائمة المنسدلة متعددة الاختيارات مع بحث (Custom Dropdown)
+// =========================================================================
+const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, accentColor }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // إغلاق القائمة عند الضغط خارجها
+    useEffect(() => {
+        const handleClickOutside = (event: any) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter((opt: string) => opt.toLowerCase().includes(search.toLowerCase()));
+
+    const handleToggle = (opt: string) => {
+        if (selected.includes(opt)) {
+            onChange(selected.filter((item: string) => item !== opt));
+        } else {
+            onChange([...selected, opt]);
+        }
+    };
+
+    return (
+        <div ref={dropdownRef} style={{ position: 'relative', flex: 1, minWidth: '250px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 900, marginBottom: '6px', color: '#475569', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{title}</span>
+                {selected.length > 0 && (
+                    <span 
+                        style={{ color: '#ef4444', cursor: 'pointer', fontSize: '11px', background: '#fef2f2', padding: '2px 8px', borderRadius: '4px' }} 
+                        onClick={() => onChange([])}
+                    >
+                        إلغاء التحديد ({selected.length})
+                    </span>
+                )}
+            </div>
+            
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                style={{ background: 'white', padding: '10px 15px', borderRadius: '8px', border: `2px solid ${THEME.sandDark || '#e2e8f0'}`, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: '0.2s' }}
+            >
+                <span style={{ fontWeight: 800, color: selected.length ? '#0f172a' : '#94a3b8', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selected.length > 0 ? selected.join('، ') : placeholder}
+                </span>
+                <span style={{ color: '#94a3b8', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }}>▼</span>
+            </div>
+            
+            {isOpen && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, borderRadius: '12px', marginTop: '8px', zIndex: 50, boxShadow: '0 10px 25px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    <div style={{ padding: '10px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <input 
+                            type="text" 
+                            placeholder="🔍 بحث سريع..." 
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', outline: 'none', fontSize: '12px', fontWeight: 700 }}
+                        />
+                    </div>
+                    <div className="custom-scrollbar" style={{ maxHeight: '220px', overflowY: 'auto', padding: '5px' }}>
+                        {filteredOptions.length > 0 ? filteredOptions.map((opt: string) => (
+                            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', cursor: 'pointer', borderRadius: '6px', background: selected.includes(opt) ? `${accentColor}15` : 'transparent', transition: '0.2s' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={selected.includes(opt)} 
+                                    onChange={() => handleToggle(opt)} 
+                                    style={{ accentColor: accentColor, transform: 'scale(1.2)', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontSize: '13px', fontWeight: 800, color: selected.includes(opt) ? accentColor : '#334155' }}>{opt}</span>
+                            </label>
+                        )) : (
+                            <div style={{ padding: '15px', textAlign: 'center', fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>لا توجد نتائج مطابقة</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// =========================================================================
+// 🚀 الصفحة الرئيسية
+// =========================================================================
 export default function MaterialIssuesPage() {
     const logic = useMaterialIssuesLogic();
     const { showConfirm } = useConfirm();
 
-    // =========================================================================
-    // 🔍 نظام الفلاتر الذكية
-    // =========================================================================
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('all'); // all | posted | draft
-    const [filterType, setFilterType] = useState('all'); // all | subcontractor | direct
+    const [filterStatus, setFilterStatus] = useState('all'); 
+    const [filterType, setFilterType] = useState('all'); 
+    
+    // الفلاتر المتقدمة (متعددة الاختيارات)
+    const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+    const [selectedBoqs, setSelectedBoqs] = useState<string[]>([]);
 
-    // تطبيق الفلاتر على البيانات
+    // استخراج الفلل والبنود الفريدة
+    const uniqueProjects = useMemo(() => {
+        const projects = (logic.issues || []).map((i: any) => i.project_name).filter(Boolean);
+        return Array.from(new Set(projects)) as string[];
+    }, [logic.issues]);
+
+    const uniqueBoqs = useMemo(() => {
+        const boqs = (logic.issues || []).map((i: any) => i.boq_item).filter(Boolean);
+        return Array.from(new Set(boqs)) as string[];
+    }, [logic.issues]);
+
+    // تطبيق كل الفلاتر
     const filteredIssues = useMemo(() => {
         return (logic.issues || []).filter((issue: any) => {
             const searchString = `${issue.item_name || ''} ${issue.issue_number || ''} ${issue.project_name || ''} ${issue.subcontractor_name || ''} ${issue.contractor_text_name || ''}`.toLowerCase();
             const matchesSearch = searchString.includes(searchTerm.toLowerCase());
 
+            const isPosted = issue.is_posted === true;
             const matchesStatus = filterStatus === 'all' 
                 ? true 
-                : filterStatus === 'posted' ? issue.is_posted 
-                : !issue.is_posted;
+                : filterStatus === 'posted' ? isPosted 
+                : !isPosted;
 
+            const issueType = issue.issue_type || 'صرف لمقاول';
             const matchesType = filterType === 'all'
                 ? true
-                : filterType === 'subcontractor' ? issue.issue_type === 'صرف لمقاول'
-                : issue.issue_type === 'استهلاك مباشر';
+                : filterType === 'subcontractor' ? issueType === 'صرف لمقاول'
+                : issueType === 'استهلاك مباشر';
 
-            return matchesSearch && matchesStatus && matchesType;
+            const matchesProject = selectedProjects.length === 0 || selectedProjects.includes(issue.project_name);
+            const matchesBoq = selectedBoqs.length === 0 || selectedBoqs.includes(issue.boq_item);
+
+            return matchesSearch && matchesStatus && matchesType && matchesProject && matchesBoq;
         });
-    }, [logic.issues, searchTerm, filterStatus, filterType]);
+    }, [logic.issues, searchTerm, filterStatus, filterType, selectedProjects, selectedBoqs]);
 
-    // =========================================================================
-    // 🖨️ دالة طباعة التقرير (تصدير لإكسيل)
-    // =========================================================================
     const handleExportExcel = () => {
-        // تجهيز البيانات بشكل مبسط للإكسيل
+        if (!filteredIssues || filteredIssues.length === 0) {
+            alert("لا توجد بيانات لتصديرها!");
+            return;
+        }
+
         const excelData = filteredIssues.map((issue: any) => ({
             'رقم الإذن': issue.issue_number || '---',
             'التاريخ': issue.issue_date || '---',
-            'نوع الصرف': issue.issue_type || '---',
+            'نوع الصرف': issue.issue_type || 'صرف لمقاول',
             'المشروع (الفيلا)': issue.project_name || '---',
             'المقاول المستلم': issue.subcontractor_name || issue.contractor_text_name || '---',
             'اسم الخامة': issue.item_name || '---',
@@ -61,12 +168,10 @@ export default function MaterialIssuesPage() {
             'الحالة المحاسبية': issue.is_posted ? 'مرحل ومقيد' : 'مسودة'
         }));
 
-        // إنشاء الشيت وتصديره
         const worksheet = XLSX.utils.json_to_sheet(excelData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير منصرف الخامات");
         
-        // ضبط عرض الأعمدة التقريبي ليكون شكله احترافي
         const wscols = [
             {wch: 15}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 30}, 
             {wch: 35}, {wch: 10}, {wch: 10}, {wch: 15}, {wch: 15}, 
@@ -77,36 +182,31 @@ export default function MaterialIssuesPage() {
         XLSX.writeFile(workbook, `تقرير_صرف_خامات_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    // =========================================================================
-    // 📊 نظام السامري (الملخص المالي الديناميكي)
-    // =========================================================================
     const summaryStats = useMemo(() => {
         let total = 0, posted = 0, draft = 0, subcontractor = 0, direct = 0;
 
         filteredIssues.forEach((issue: any) => {
             const amount = Number(issue.total_price || 0);
             total += amount;
-            if (issue.is_posted) posted += amount;
+            
+            if (issue.is_posted === true) posted += amount;
             else draft += amount;
 
-            if (issue.issue_type === 'صرف لمقاول') subcontractor += amount;
+            if ((issue.issue_type || 'صرف لمقاول') === 'صرف لمقاول') subcontractor += amount;
             else direct += amount;
         });
 
         return { total, posted, draft, subcontractor, direct };
     }, [filteredIssues]);
 
-    // =========================================================================
-    // 🔢 نظام تقسيم الصفحات (Pagination)
-    // =========================================================================
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [filteredIssues.length, searchTerm, filterStatus, filterType]);
+    }, [filteredIssues.length, searchTerm, filterStatus, filterType, selectedProjects, selectedBoqs]);
 
-    const totalPages = Math.ceil(filteredIssues.length / rowsPerPage);
+    const totalPages = Math.ceil((filteredIssues.length || 0) / rowsPerPage) || 1;
 
     const paginatedData = useMemo(() => {
         const startIndex = (currentPage - 1) * rowsPerPage;
@@ -114,13 +214,10 @@ export default function MaterialIssuesPage() {
         
         return sliced.map((row: any) => ({
             ...row,
-            _selected: logic.selectedIds?.includes(row.id) 
+            _selected: logic.selectedIds?.includes(row.id) || false
         }));
     }, [filteredIssues, currentPage, rowsPerPage, logic.selectedIds]);
 
-    // =========================================================================
-    // 🛠️ الأعمدة
-    // =========================================================================
     const columns = [
         {
             header: (
@@ -150,14 +247,17 @@ export default function MaterialIssuesPage() {
         },
         { 
             header: 'التاريخ ونوع الصرف', 
-            render: (row: any) => (
-                <div>
-                    <div style={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px', fontSize: '13px' }}>{row.issue_date}</div>
-                    <span style={{ fontSize: '10px', background: row.issue_type === 'صرف لمقاول' ? '#fee2e2' : '#f0fdf4', color: row.issue_type === 'صرف لمقاول' ? '#dc2626' : '#166534', padding: '2px 8px', borderRadius: '6px', fontWeight: 900, whiteSpace: 'nowrap' }}>
-                        {row.issue_type}
-                    </span>
-                </div>
-            )
+            render: (row: any) => {
+                const iType = row.issue_type || 'صرف لمقاول';
+                return (
+                    <div>
+                        <div style={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px', fontSize: '13px' }}>{row.issue_date}</div>
+                        <span style={{ fontSize: '10px', background: iType === 'صرف لمقاول' ? '#fee2e2' : '#f0fdf4', color: iType === 'صرف لمقاول' ? '#dc2626' : '#166534', padding: '2px 8px', borderRadius: '6px', fontWeight: 900, whiteSpace: 'nowrap' }}>
+                            {iType}
+                        </span>
+                    </div>
+                );
+            }
         },
         { 
             header: 'الخامة المنصرفة', 
@@ -165,7 +265,7 @@ export default function MaterialIssuesPage() {
                 <div style={{ minWidth: '140px' }}>
                     <strong style={{ color: '#2563eb', fontSize: '14px', display: 'block' }}>{row.item_name}</strong>
                     <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 900 }}>
-                        {row.quantity} {row.unit} | {formatCurrency(row.unit_price)}
+                        {row.quantity} {row.unit || 'وحدة'} | {formatCurrency(row.unit_price)}
                     </span>
                 </div>
             )
@@ -191,8 +291,8 @@ export default function MaterialIssuesPage() {
         { 
             header: 'الحالة المحاسبية', 
             render: (row: any) => (
-                 <span style={{ background: row.is_posted ? '#dcfce7' : '#fef2f2', color: row.is_posted ? '#166534' : '#dc2626', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>
-                    {row.is_posted ? 'مُرحل ومقيد ✅' : 'مسودة ⏳'}
+                 <span style={{ background: row.is_posted === true ? '#dcfce7' : '#fef2f2', color: row.is_posted === true ? '#166534' : '#dc2626', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>
+                    {row.is_posted === true ? 'مُرحل ومقيد ✅' : 'مسودة ⏳'}
                 </span>
             )
         }
@@ -205,12 +305,18 @@ export default function MaterialIssuesPage() {
                 <RawasiSidebarManager 
                     actions={
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-                            {logic.selectedIds.length === 0 ? (
+                            {(logic.selectedIds || []).length === 0 ? (
                                 <>
-                                    <button onClick={logic.openAddModal} className="btn-main-glass">
+                                    <button 
+                                        onClick={() => {
+                                            logic.setIssueData({ items: [{boq_item_id: null, item_id: null, item_name:'', quantity:1, available_qty:0, old_qty:0, unit_price:0, total_price:0}] });
+                                            logic.setEditingIssueId(null);
+                                            logic.setIsModalOpen(true);
+                                        }} 
+                                        className="btn-main-glass"
+                                    >
                                         📤 تسجيل إذن صرف جديد
                                     </button>
-                                    {/* 🚀 الزرار الجديد لطباعة التقرير (يظهر في حالة عدم التحديد) */}
                                     <button onClick={handleExportExcel} className="btn-action-glass print" style={{ marginTop: '10px' }}>
                                         🖨️ طباعة تقرير المنصرف (Excel)
                                     </button>
@@ -279,7 +385,7 @@ export default function MaterialIssuesPage() {
                             </div>
                         </div>
                     }
-                    watchDeps={[logic.selectedIds, logic.isActionPending, logic.issues, currentPage, rowsPerPage, summaryStats]}
+                    watchDeps={[logic.selectedIds, logic.isActionPending, logic.issues, currentPage, rowsPerPage, summaryStats, selectedProjects, selectedBoqs]}
                 />
 
                 <style>{`
@@ -294,10 +400,8 @@ export default function MaterialIssuesPage() {
                     .btn-action-glass.post { background: linear-gradient(135deg, #10b981, #059669); color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
                     .btn-action-glass.unpost { background: rgba(245, 158, 11, 0.2); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.5); }
                     .btn-action-glass.delete { background: rgba(239, 68, 68, 0.2); color: #b91c1c; border: 1px dashed rgba(239, 68, 68, 0.5); }
-                    /* 🎨 ستايل زر الطباعة الجديد */
                     .btn-action-glass.print { background: linear-gradient(135deg, #475569, #1e293b); color: white; box-shadow: 0 4px 15px rgba(71, 85, 105, 0.3); }
 
-                    /* Summary Cards Styles */
                     .summary-card { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; justify-content: center; border: 1px solid rgba(255,255,255,0.1); flex: 1; }
                     .summary-card .label { font-size: 10px; font-weight: 900; opacity: 0.8; margin-bottom: 4px; }
                     .summary-card .value { font-size: 18px; font-weight: 900; }
@@ -308,10 +412,16 @@ export default function MaterialIssuesPage() {
                     .summary-card.draft { background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(180,83,9,0.1)); color: #fbbf24; border-color: rgba(245,158,11,0.2); }
                     .summary-card.subcontractor { background: linear-gradient(135deg, rgba(225,29,72,0.1), rgba(159,18,57,0.1)); color: #fb7185; border-color: rgba(225,29,72,0.2); }
                     .summary-card.direct { background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(91,33,182,0.1)); color: #a78bfa; border-color: rgba(139,92,246,0.2); }
+
+                    /* Custom Scrollbar for Dropdowns */
+                    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+                    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
                 `}</style>
 
-                {/* 🔍 شريط الفلاتر */}
-                <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, flexWrap: 'wrap' }}>
+                {/* 🔍 شريط الفلاتر الأساسية والبحث */}
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, flexWrap: 'wrap' }}>
                     <div style={{ flex: '1', minWidth: '250px' }}>
                         <input 
                             type="text" 
@@ -343,6 +453,27 @@ export default function MaterialIssuesPage() {
                             <option value="direct">استهلاك مباشر 🏢</option>
                         </select>
                     </div>
+                </div>
+
+                {/* 🚀 الفلاتر المتقدمة الجديدة (Multi-Select Dropdowns) */}
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                    <MultiSelectDropdown 
+                        title="🏢 فلترة بأسماء الفلل والعقارات"
+                        placeholder="اختر الفلل..."
+                        options={uniqueProjects}
+                        selected={selectedProjects}
+                        onChange={setSelectedProjects}
+                        accentColor="#2563eb"
+                    />
+                    
+                    <MultiSelectDropdown 
+                        title="📋 فلترة ببنود الميزانية المربوطة"
+                        placeholder="اختر البنود..."
+                        options={uniqueBoqs}
+                        selected={selectedBoqs}
+                        onChange={setSelectedBoqs}
+                        accentColor="#d97706"
+                    />
                 </div>
 
                 <RawasiSmartTable 
@@ -377,7 +508,7 @@ export default function MaterialIssuesPage() {
                                     السابق
                                 </button>
                                 <span style={{ padding: '8px 16px', background: THEME.sandLight || '#f8fafc', borderRadius: '8px', fontWeight: 900, color: THEME.coffeeDark || '#1e293b', border: `1px solid ${THEME.sandDark || '#e2e8f0'}` }}>
-                                    {currentPage} / {totalPages || 1}
+                                    {currentPage} / {totalPages}
                                 </span>
                                 <button 
                                     disabled={currentPage >= totalPages} 

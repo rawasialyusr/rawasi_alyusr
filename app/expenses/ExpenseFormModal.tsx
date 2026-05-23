@@ -6,7 +6,7 @@ import SmartCombo from '@/components/SmartCombo';
 import { formatCurrency } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context'; 
 
-// 🚀 إضافة مصفوفة التصنيفات
+// 🚀 مصفوفة التصنيفات
 const EXPENSE_CATEGORIES = [
     "إعاشة وتغذية",
     "محروقات وانتقالات",
@@ -18,6 +18,12 @@ const EXPENSE_CATEGORIES = [
     "سكن وأثاث",
     "أدوات نظافة",
     "مواد إنشائية"
+];
+
+// 🚀 مصفوفة أنواع الاستحقاق (آجل للمصروفات العادية، وتسوية لخصومات المقاولين)
+const PAYMENT_METHODS = [
+    "آجل",
+    "تسوية داخلية"
 ];
 
 export default function ExpenseFormModal({ 
@@ -39,7 +45,7 @@ export default function ExpenseFormModal({
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-
+        
     useEffect(() => {
         setMounted(true);
     }, []);
@@ -105,6 +111,9 @@ export default function ExpenseFormModal({
     const finalDiscount = currentDiscount + linesDiscount;
     const finalTotal = finalSubtotal + finalVat - finalDiscount;
 
+    // حالة ديناميكية لمعرفة إذا كانت العملية تسوية لضبط المسميات
+    const isSettlement = record?.payment_method === 'تسوية داخلية';
+
     // =========================================================================
     // 🚀 دوال إضافة وحذف الأصناف من الجدول
     // =========================================================================
@@ -140,9 +149,18 @@ export default function ExpenseFormModal({
     // =========================================================================
     const handleValidateAndSave = () => {
         if (!record.exp_date) return showToast("تاريخ المصروف مطلوب ⚠️", "warning");
-        // 🚀 إضافة شرط التحقق من اختيار التصنيف
         if (!record.main_category) return showToast("يرجى اختيار التصنيف الرئيسي للمصروف ⚠️", "warning"); 
         if (!record.creditor_account) return showToast("حساب المصروف المدين مطلوب ⚠️", "warning");
+        
+        // 🚀 تحديث الذكاء المحاسبي في الـ Validation لضمان اختيار الحساب الموازي ديماً
+        if (!record.payment_account) {
+            return showToast(
+                isSettlement 
+                    ? "يرجى تحديد حساب الإيراد / التسوية (الدائن) ⚠️" 
+                    : "يرجى تحديد حساب الالتزام / المقاول (الدائن) ⚠️", 
+                "warning"
+            );
+        }
         
         let finalLinesToSave = safeAddedLines;
 
@@ -166,7 +184,8 @@ export default function ExpenseFormModal({
             quantity: 1, 
             unit_price: finalSubtotal,
             vat_amount: finalVat,
-            discount_amount: finalDiscount
+            discount_amount: finalDiscount,
+            payment_method: record.payment_method || 'آجل' 
         });
     };
 
@@ -217,7 +236,6 @@ export default function ExpenseFormModal({
                     </div>
                 </div>
 
-                {/* 🚀 الإضافة الجديدة: خانة التصنيف الرئيسي بقت SmartCombo عشان تدعم البحث والفلترة */}
                 <div style={{ marginBottom: '25px', zIndex: 65, position: 'relative' }}>
                     <SmartCombo 
                         label="📁 التصنيف الرئيسي *" 
@@ -229,12 +247,40 @@ export default function ExpenseFormModal({
                     />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', background: '#f8fafc', padding: '25px', borderRadius: '20px', marginBottom: '25px', border: '1px solid #e2e8f0' }}>
+                {/* 🚀 قسم الحسابات التفاعلي والذكي للـ UX المحاسبي النظيف */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px', background: isSettlement ? 'rgba(16, 185, 129, 0.05)' : '#f8fafc', padding: '25px', borderRadius: '20px', marginBottom: '25px', border: isSettlement ? '1px dashed #10b981' : '1px solid #e2e8f0', transition: 'all 0.3s' }}>
                     <div style={{ zIndex: 60, position: 'relative' }}>
-                        <SmartCombo label="🧾 حساب المصروف (المدين) *" icon="💳" table="accounts" displayCol="name" initialDisplay={record?.creditor_account} onSelect={(val:any) => setRecord({...record, creditor_account: val.name})} strict={true} />
+                        <SmartCombo 
+                            label="💳 طريقة القيد *" 
+                            icon="⚙️" 
+                            options={PAYMENT_METHODS} 
+                            initialDisplay={record?.payment_method || 'آجل'} 
+                            onSelect={(val:any) => setRecord({...record, payment_method: typeof val === 'object' ? val.name : val})} 
+                            strict={true} 
+                        />
                     </div>
                     <div style={{ zIndex: 50, position: 'relative' }}>
-                        <SmartCombo label="🏦 حساب السداد (الدائن) *" icon="🏦" table="accounts" displayCol="name" initialDisplay={record?.payment_account} onSelect={(val:any) => setRecord({...record, payment_account: val.name})} strict={true} />
+                        <SmartCombo 
+                            label="🧾 حساب المصروف (المدين) *" 
+                            icon="📂" 
+                            table="accounts" 
+                            displayCol="name" 
+                            initialDisplay={record?.creditor_account} 
+                            onSelect={(val:any) => setRecord({...record, creditor_account: val.name})} 
+                            strict={true} 
+                        />
+                    </div>
+                    {/* 🚀 التحديث الجوهري: المسميات والإيموجيات بتتغير ديناميكياً لمنع المحاسب من الخطأ واختيار الخزنة في الآجل */}
+                    <div style={{ zIndex: 45, position: 'relative' }}>
+                        <SmartCombo 
+                            label={isSettlement ? "📈 حساب الإيراد / التسوية (الدائن) *" : "🤝 حساب الالتزام / المقاول (الدائن) *"} 
+                            icon={isSettlement ? "📈" : "🤝"} 
+                            table="accounts" 
+                            displayCol="name" 
+                            initialDisplay={record?.payment_account} 
+                            onSelect={(val:any) => setRecord({...record, payment_account: val.name})} 
+                            strict={true} 
+                        />
                     </div>
                 </div>
                 
@@ -261,7 +307,8 @@ export default function ExpenseFormModal({
                             <label style={{ fontSize: '11px', fontWeight: 900, color: THEME.ruby }}>الخصم (-)</label>
                             <input type="number" value={record.discount_amount || ''} onChange={e => setRecord({...record, discount_amount: e.target.value})} className="glass-input-field" style={{ border: `1px solid ${THEME.ruby}50`, color: THEME.ruby, textAlign: 'center' }}/>
                         </div>
-<button onClick={handleAddStatement} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', height: '45px', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, fontSize: '18px', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)' }}>➕</button>                    </div>
+                        <button onClick={handleAddStatement} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', height: '45px', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, fontSize: '18px', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)' }}>➕</button>
+                    </div>
 
                     {safeAddedLines.length > 0 && (
                         <div className="lines-table-container">
@@ -307,7 +354,7 @@ export default function ExpenseFormModal({
                 {/* 🚀 الملخص المالي السفلي */}
                 <div className="responsive-summary-grid" style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الأصناف</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الأعمال</div>
                         <div style={{ fontSize: '20px', fontWeight: 900 }}>{formatCurrency(finalSubtotal)}</div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -319,7 +366,7 @@ export default function ExpenseFormModal({
                         <div style={{ fontSize: '20px', fontWeight: 900, color: THEME.ruby }}>{formatCurrency(finalDiscount)}</div>
                     </div>
                     <div style={{ background: `linear-gradient(135deg, ${THEME.accent}40, transparent)`, padding: '15px', borderRadius: '16px', border: `1px solid ${THEME.accent}80`, boxShadow: `0 0 20px ${THEME.accent}20` }}>
-                        <div style={{ fontSize: '12px', fontWeight: 900, color: THEME.accentLight }}>الصافي النهائي</div>
+                        <div style={{ fontSize: '12px', fontWeight: 900, color: THEME.accentLight }}>الصافي المستحق</div>
                         <div style={{ fontSize: '26px', fontWeight: 900, color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>{formatCurrency(finalTotal)}</div>
                     </div>
                 </div>

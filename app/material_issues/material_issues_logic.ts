@@ -12,19 +12,15 @@ export function useMaterialIssuesLogic() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]); 
     const [editingIssueId, setEditingIssueId] = useState<string | null>(null); 
 
-    // 📦 قائمة الخامات والأرصدة من الـ View
+    // 📦 قائمة الخامات والأرصدة من الـ View (للاستعلام فقط)
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
 
-    // دالة جلب الخامات المتاحة من الـ View وتجهيزها للكومبوننت
-    // دالة جلب الخامات المتاحة باستخدام الـ RPC الجديد
     const fetchInventoryItems = async () => {
         try {
-            // 🚀 مناداة الفانكشن بدلاً من الفيو المباشر لتخطي مشاكل الصلاحيات
             const { data, error } = await supabase.rpc('rpc_get_inventory_balances');
 
             if (error) throw error;
             
-            // تجهيز الداتا وإضافة حقل id عشان الـ SmartCombo يشتغل بكفاءة
             const formattedData = data?.map((d: any) => ({
                 ...d,
                 id: d.item_id 
@@ -35,31 +31,30 @@ export function useMaterialIssuesLogic() {
             console.error("خطأ في جلب أرصدة المخازن عبر RPC:", err.message);
         }
     };
-    // جلب أرصدة المخازن فور تحميل الهوك
+    
     useEffect(() => {
         fetchInventoryItems();
     }, []);
 
-    // هيكل بيانات الإذن الافتراضي
     const initialIssueState = {
         project_id: '',
         subcontractor_id: '',
         issue_type: 'صرف لمقاول',
         issue_date: new Date().toISOString().split('T')[0],
         notes: '',
-        items: [{ item_id: null, item_name: '', quantity: 1, available_qty: 0, old_qty: 0, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null }]
+        // 🚀 إضافة boq_item_id هنا
+        items: [{ item_id: null, item_name: '', quantity: 1, available_qty: 0, old_qty: 0, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null, boq_item_id: null }]
     };
 
     const [issueData, setIssueData] = useState<any>(initialIssueState);
 
-    // 📥 سحب بيانات أذونات الصرف
     const { data: issues = [], isLoading } = useQuery({
         queryKey: ['material_issues_list'],
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('material_issue_lines')
                 .select(`
-                    id, item_id, item_name, quantity, unit, unit_price, total_price, boq_id,
+                    id, boq_item_id, item_name, quantity, unit, unit_price, total_price, boq_id,
                     boq:boq_budget!material_issue_lines_boq_id_fkey(work_item),
                     issue:material_issues!material_issue_lines_issue_id_fkey (
                         id, issue_number, issue_date, issue_type, is_posted, notes, project_id, subcontractor_id, contractor_text_name, created_at,
@@ -82,6 +77,7 @@ export function useMaterialIssuesLogic() {
                 total_price: line.total_price,
                 boq_item: line.boq?.work_item,
                 boq_id: line.boq_id,
+                boq_item_id: line.boq_item_id, // 🚀
                 issue_date: line.issue?.issue_date,
                 issue_type: line.issue?.issue_type,
                 notes: line.issue?.notes,
@@ -120,7 +116,8 @@ export function useMaterialIssuesLogic() {
                         unit: l.unit,
                         unit_price: l.unit_price,
                         total_price: l.total_price,
-                        boq_id: l.boq_id
+                        boq_id: l.boq_id,
+                        boq_item_id: l.boq_item_id // 🚀
                     };
                 })
             });
@@ -133,13 +130,23 @@ export function useMaterialIssuesLogic() {
         const newItems = [...issueData.items];
         
         if (field === 'item_selection') {
-            newItems[index].item_id = value?.item_id || null;
+            // 🚀 التعديل هنا: بما إننا بنقرأ من جدول الأصناف المباشر، هناخد الـ id وندور على رصيده في اللوجيك
+            const selectedId = value?.id || value?.item_id || null;
+            const inventoryData = inventoryItems.find(inv => inv.item_id === selectedId);
+
+            newItems[index].item_id = selectedId;
             newItems[index].item_name = value?.item_name || '';
-            newItems[index].unit = value?.unit || 'وحدة';
-            newItems[index].unit_price = value?.last_price || 0; 
-            newItems[index].available_qty = value?.available_quantity || 0; 
-            newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (value?.last_price || 0);
-        } else {
+            newItems[index].unit = inventoryData?.unit || value?.default_unit || 'وحدة';
+            newItems[index].unit_price = inventoryData?.last_price || value?.default_unit_price || 0; 
+            newItems[index].available_qty = inventoryData?.available_quantity || 0; 
+            newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (Number(newItems[index].unit_price) || 0);
+        } 
+        // 🚀 الربط المزدوج للميزانية والمقايسة
+        else if (field === 'boq_selection') {
+            newItems[index].boq_id = value?.id || null;
+            newItems[index].boq_item_id = value?.boq_item_id || null;
+        } 
+        else {
             newItems[index][field] = value;
             if (field === 'quantity' || field === 'unit_price') {
                 newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (Number(newItems[index].unit_price) || 0);
@@ -208,7 +215,8 @@ export function useMaterialIssuesLogic() {
                 unit: i.unit || 'وحدة',
                 unit_price: Number(i.unit_price) || 0,
                 total_price: Number(i.total_price) || 0,
-                boq_id: i.boq_id || null
+                boq_id: i.boq_id || null,
+                boq_item_id: i.boq_item_id || null // 🚀
             }));
             const { error: lErr } = await supabase.from('material_issue_lines').insert(lines);
             if (lErr) throw lErr;
@@ -281,7 +289,7 @@ export function useMaterialIssuesLogic() {
         handleBatchAction: (action: 'post' | 'unpost' | 'delete') => actionMutation.mutate({ action }), 
         isActionPending: actionMutation.isPending,
         
-        addItem: () => setIssueData({...issueData, items: [...issueData.items, {item_id: null, item_name:'', quantity:1, available_qty:0, old_qty:0, unit:'وحدة', unit_price:0, total_price:0, boq_id: null}]}),
+        addItem: () => setIssueData({...issueData, items: [...issueData.items, {item_id: null, item_name:'', quantity:1, available_qty:0, old_qty:0, unit:'وحدة', unit_price:0, total_price:0, boq_id: null, boq_item_id: null}]}),
         openAddModal: () => { setIssueData(initialIssueState); setEditingIssueId(null); setIsModalOpen(true); }
     };
 }

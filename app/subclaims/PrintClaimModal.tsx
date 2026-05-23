@@ -1,9 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useReactToPrint } from 'react-to-print';
 import { formatCurrency } from '@/lib/helpers';
-import { THEME } from '@/lib/theme';
 
 export default function PrintClaimModal({ isOpen, onClose, claim, contractorName, assignments = [], deductions = [] }: any) {
     const [mounted, setMounted] = useState(false);
@@ -40,7 +38,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
         return Object.values(groups).map(g => ({ ...g, villasList: Array.from(g.villas).join(' + ') }));
     }, [assignments]);
 
-    // 🚀 تجميع الخصومات وتوحيد التاريخ (حسب طلبك)
+    // 🚀 تجميع الخصومات القديمة وتوحيد التاريخ
     const groupedDeductions = useMemo(() => {
         if (!deductions || deductions.length === 0) return [];
         let totalMat = 0;
@@ -60,7 +58,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
         return res;
     }, [deductions, claim]);
 
-    // 🚀 التعديل الأول: تغيير دالة الطباعة لتعمل مثل الكيبورد تماماً (window.print)
+    // 🖨️ دالة الطباعة (window.print)
     const handlePrint = () => {
         document.title = `مستخلص_${contractorName}_${claim?.claim_number}`;
         window.print();
@@ -69,19 +67,32 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
     if (!isOpen || !mounted || !claim) return null;
 
     const totalWorkAmount = claim.total_amount || 0;
+    
+    // استخراج القيم من الأعمدة الجديدة في الداتا بيز
+    const materialsDeductionDB = Number(claim.materials_deduction || 0);
+    const expensesDeductionDB = Number(claim.deductions_amount || 0); 
+    const otherDeductionsDB = Number(claim.other_deductions || 0);
+    const advancePaymentDB = Number(claim.advance_payment || 0);
 
     return createPortal(
-        <div className="print-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(10px)', direction: 'rtl', padding: '20px' }}>
+        <div className="print-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(10px)', direction: 'rtl', padding: '20px' }}>
             <div className="print-modal-backdrop" style={{ position: 'fixed', inset: 0 }} onClick={onClose} />
             
             <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap');
+
                 @media print {
                     body * { visibility: hidden; }
                     .print-modal-overlay { position: absolute !important; left: 0; top: 0; padding: 0 !important; background: white !important; align-items: flex-start !important; overflow: visible !important; }
                     .print-modal-backdrop { display: none !important; }
                     .printable-area, .printable-area * { visibility: visible; }
+                    .printable-area { color: #0f172a; } /* تلوين الطباعة الأساسي بدون فرض إجباري على كل العناصر */
                     
-                    /* 🚀 السحر هنا: تصغير الصفحة تلقائياً لتناسب ورقة الطباعة (Fit to Page) */
+                    /* 🚀 فرض اللون الأحمر الإجباري للخصومات في الطباعة */
+                    .summary-row.deduction, .summary-row.deduction * { color: #b91c1c !important; }
+                    /* فرض اللون الأبيض لسطر الصافي النهائي في الطباعة */
+                    .summary-row.net, .summary-row.net * { color: #ffffff !important; background-color: #14532d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    
                     .printable-area { 
                         position: absolute !important; 
                         left: 0; top: 0; 
@@ -91,201 +102,216 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                         overflow: visible !important; 
                         box-shadow: none !important; 
                         border: none !important; 
-                        padding: 15px !important; 
+                        padding: 10px 20px !important; 
                         margin: 0 !important; 
                         background: white !important; 
-                        zoom: 0.85; /* 👈 بيصغر المحتوى 15% عشان يلم الصفحة كلها بالعرض */
+                        zoom: 0.85; 
+                        -webkit-print-color-adjust: exact; 
+                        print-color-adjust: exact;
                     }
                     .no-print { display: none !important; }
                     
-                    @page { size: A4 landscape; margin: 10mm; } 
+                    @page { size: A4 landscape; margin: 8mm; } 
                     
-                    /* 🚀 تصغير المسافات بين العناصر أثناء الطباعة فقط عشان توفر مساحة */
-                    .info-grid { gap: 10px !important; margin-bottom: 15px !important; }
-                    .info-card { padding: 10px !important; }
-                    .modern-table { page-break-inside: auto; font-size: 11px !important; margin-bottom: 15px !important; }
-                    .modern-table th, .modern-table td { padding: 6px !important; }
-                    .modern-table tr { page-break-inside: avoid; page-break-after: auto; }
-                    .signatures-container { page-break-inside: avoid; margin-top: 30px !important; }
+                    /* تحسين الطباعة: تباين عالي بدون حواف */
+                    .info-grid { gap: 15px !important; margin-bottom: 25px !important; }
+                    .vip-table th { background-color: #f1f5f9 !important; color: #0f172a !important; border-bottom: 2px solid #cbd5e1 !important; }
+                    .vip-table td { border-bottom: 1px solid #e2e8f0 !important; }
+                    .deduction-table th { background-color: #fef2f2 !important; color: #b91c1c !important; border-bottom: 2px solid #fecaca !important; }
                     .summary-section { width: 60% !important; float: left; }
+                    .signatures-container { margin-top: 50px !important; page-break-inside: avoid; }
                 }
                 
-                /* تصميم عصري للمودال (المعاينة على الشاشة) */
+                /* ---------------------------------------------------
+                   تصميم الـ VIP Theme - بدون حواف (Borderless & Clean)
+                   --------------------------------------------------- */
+                
                 .printable-area { 
                     background: white; 
-                    border-radius: 24px; 
+                    border-radius: 20px; 
                     width: 100%; 
-                    max-width: 1100px; 
+                    max-width: 1150px; 
                     max-height: 95vh; 
                     overflow-y: auto; 
-                    padding: 40px; 
+                    padding: 50px; 
                     position: relative; 
                     z-index: 10; 
-                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); 
-                    font-family: 'Tajawal', 'Arial', sans-serif; 
+                    box-shadow: 0 40px 60px -15px rgba(0,0,0,0.3); 
+                    font-family: 'Tajawal', sans-serif; 
+                    color: #0f172a; 
                 }
                 
-                /* تصميم ترويسة الشركة (Corporate Header) */
-                .company-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1e3a8a; padding-bottom: 15px; margin-bottom: 25px; }
-                .company-brand { display: flex; align-items: center; gap: 15px; }
-                .company-logo-img { height: 60px; object-fit: contain; }
-                .company-logo-text { font-size: 28px; font-weight: 900; color: #1e3a8a; margin: 0; letter-spacing: -0.5px; }
-                .company-subtext { font-size: 13px; color: #64748b; margin: 4px 0 0 0; font-weight: 700; }
+                /* الترويسة الفاخرة المحدثة */
+                .company-header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 20px; margin-bottom: 35px; border-bottom: 1px solid #e2e8f0; }
+                .company-brand { display: flex; align-items: center; gap: 15px; text-align: left; }
+                .company-logo-img { height: 65px; object-fit: contain; }
+                .company-logo-text { font-size: 32px; font-weight: 900; color: #0f172a; margin: 0; letter-spacing: -1px; }
+                .company-subtext { font-size: 14px; color: #64748b; margin: 2px 0 0 0; font-weight: 700; }
                 
-                /* بيانات المستخلص (Info Cards) */
-                .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
-                .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; }
-                .info-label { font-size: 11px; color: #64748b; font-weight: 800; text-transform: uppercase; margin-bottom: 5px; display: block;}
-                .info-value { font-size: 14px; color: #0f172a; font-weight: 900; }
-                .info-value.highlight { color: #2563eb; }
+                .document-title { text-align: right; }
+                .document-title h2 { margin: 0; font-size: 24px; font-weight: 900; color: #1e3a8a; text-transform: uppercase; letter-spacing: 1px; }
+                .document-title p { margin: 5px 0 0 0; font-size: 13px; color: #64748b; font-weight: 700; text-transform: uppercase; }
 
-                /* جدول هندسي عصري */
-                .modern-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 25px; font-size: 12px; border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; }
-                .modern-table th, .modern-table td { border-bottom: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; padding: 10px; text-align: center; }
-                .modern-table th:last-child, .modern-table td:last-child { border-left: none; }
-                .modern-table tbody tr:last-child td { border-bottom: none; }
+                /* كروت المعلومات بتصميم جانبي ملون (Accent Border) */
+                .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 35px; }
+                .info-card { background: #f8fafc; border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
+                .info-card::before { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: #1e3a8a; border-radius: 0 4px 4px 0; }
+                .info-card:nth-child(2)::before { background: #f59e0b; }
+                .info-card:nth-child(3)::before { background: #10b981; }
                 
-                .modern-table th { background-color: #1e293b; color: white; font-weight: 800; font-size: 12px; }
-                .modern-table .sub-header th { background-color: #334155; font-size: 11px; color: #cbd5e1; }
+                .info-label { font-size: 12px; color: #64748b; font-weight: 800; margin-bottom: 6px; display: block; }
+                .info-value { font-size: 16px; color: #0f172a; font-weight: 900; }
+                .info-value.highlight { color: #0f172a; font-size: 14px; line-height: 1.5; }
+
+                /* جداول بدون حواف (Modern Borderless Tables) */
+                .vip-table { width: 100%; border-collapse: collapse; margin-bottom: 35px; font-size: 13px; text-align: center; }
+                .vip-table th { padding: 14px 10px; font-weight: 900; color: #475569; border-bottom: 2px solid #e2e8f0; font-size: 12px; }
+                .vip-table td { padding: 14px 10px; font-weight: 800; border-bottom: 1px dashed #f1f5f9; color: #0f172a; }
+                .vip-table tbody tr:hover td { background-color: #f8fafc; }
                 
-                /* تنسيق جدول الخصومات (أحمر) */
-                .deduction-table th { background-color: #7f1d1d; color: white; }
-                .deduction-table .sub-header th { background-color: #991b1b; }
+                .text-right { text-align: right !important; }
+                .item-title { font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 4px; }
+                .villa-badge { display: inline-block; background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; margin-bottom: 4px; }
                 
-                .text-right { text-align: right !important; padding-right: 15px !important; }
-                .villa-badge { display: inline-block; background: #e0f2fe; color: #1d4ed8; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 900; margin-bottom: 6px; }
+                .highlight-blue { color: #2563eb !important; font-weight: 900 !important; }
+                .highlight-green { color: #166534 !important; font-weight: 900 !important; }
+                .highlight-red { color: #b91c1c !important; font-weight: 900 !important; }
+
+                /* جدول الخصومات (أحمر ناعم) */
+                .deduction-table th { color: #b91c1c; border-bottom: 2px solid #fecaca; }
+                .deduction-table td { border-bottom: 1px dashed #fee2e2; }
+                .deduction-table tbody tr:hover td { background-color: #fef2f2; }
+
+                /* الخلاصة المالية (Summary Box) - تصميم فواتير الشركات */
+                .summary-container { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; }
+                .disclaimer-box { width: 42%; font-size: 12px; color: #64748b; font-weight: 700; line-height: 1.8; padding: 20px; background: #f8fafc; border-radius: 16px; }
+                .disclaimer-box strong { color: #0f172a; font-size: 14px; display: block; margin-bottom: 10px; }
                 
-                /* خلاصة الحسابات */
-                .summary-section { width: 55%; float: left; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; }
-                .summary-row { display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 800; }
-                .summary-row.deduction { color: #dc2626; background: #fef2f2; }
-                .summary-row.net { background: #166534; color: white; font-size: 16px; font-weight: 900; border-bottom: none; }
+                .summary-section { width: 52%; }
+                .summary-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 800; color: #0f172a; }
+                
+                /* 🚀 إجبار كل الخصومات على اللون الأحمر */
+                .summary-row.deduction, .summary-row.deduction span { color: #b91c1c !important; } 
+                
+                /* سطر الصافي الأخضر الفخم */
+                .summary-row.net { padding: 18px 20px; background: #f0fdf4; border-radius: 12px; margin-top: 15px; border: none; align-items: center; background-color: #14532d; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
+                .summary-row.net span { color: #ffffff !important; }
+                .summary-row.net span:first-child { font-size: 16px; font-weight: 900; }
+                .summary-row.net span:last-child { font-size: 22px; font-weight: 900; }
                 
                 /* التوقيعات */
-                .signatures-container { clear: both; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 50px; padding-top: 30px; border-top: 2px dashed #cbd5e1; }
+                .signatures-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 70px; padding-top: 40px; }
                 .signature-box { text-align: center; }
-                .sig-title { font-weight: 800; color: #475569; font-size: 13px; margin-bottom: 40px; }
-                .sig-line { border-bottom: 1.5px solid #94a3b8; width: 80%; margin: 0 auto; }
+                .sig-title { font-weight: 900; color: #0f172a; font-size: 15px; margin-bottom: 60px; }
+                .sig-sub { display: block; font-size: 11px; color: #94a3b8; font-weight: 700; margin-top: 4px; }
+                .sig-line { border-bottom: 2px solid #cbd5e1; width: 85%; margin: 0 auto; }
             `}</style>
 
             <div className="printable-area cinematic-scroll">
                 
-                {/* 🚀 أزرار التحكم */}
-                <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', background: '#f8fafc', padding: '15px', borderRadius: '16px' }}>
-                    <h2 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '20px' }}>📄 معاينة الطباعة (A4 بالعرض)</h2>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={handlePrint} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 10px rgba(37, 99, 235, 0.2)' }}>🖨️ طباعة المستخلص</button>
-                        <button onClick={onClose} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}>❌ إغلاق</button>
+                {/* 🚀 أزرار التحكم (لا تظهر في الطباعة) */}
+                <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '35px', background: '#f8fafc', padding: '15px 25px', borderRadius: '16px', alignItems: 'center' }}>
+                    <h2 style={{ margin: 0, color: '#0f172a', fontWeight: 900, fontSize: '18px' }}>📄 معاينة مستخلص (شكل فني عصري)</h2>
+                    <div style={{ display: 'flex', gap: '15px' }}>
+                        <button onClick={handlePrint} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '12px 28px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}>🖨️ طباعة المستخلص</button>
+                        <button onClick={onClose} style={{ background: '#f1f5f9', color: '#ef4444', border: 'none', padding: '12px 28px', borderRadius: '12px', fontWeight: 900, cursor: 'pointer' }}>إغلاق</button>
                     </div>
                 </div>
 
-                <div ref={printRef} style={{ background: '#fff', color: '#0f172a', direction: 'rtl' }}>
+                <div ref={printRef}>
                     
-                    {/* 🏢 ترويسة الشركة العصرية مع الشعار */}
+                    {/* 🏢 ترويسة الشركة (تم التبديل لتكون عربية 100%) */}
                     <div className="company-header">
-                        <div className="company-brand">
-                            <img src="/logo.png" alt="Rawasi Logo" className="company-logo-img" onError={(e: any) => e.target.style.display = 'none'} />
-                            <div>
-                                <h1 className="company-logo-text">RAWASI <span style={{ color: '#f59e0b' }}>AL-YUSR</span></h1>
-                                <p className="company-subtext">إدارة المشاريع الهندسية والمقاولات </p>
-                            </div>
+                        <div className="document-title">
+                            <h2>مستخلص أعمال</h2>
+                            <p>SUBCONTRACTOR PAYMENT CERTIFICATE</p>
                         </div>
-                        <div style={{ textAlign: 'left' }}>
-                            <div style={{ background: '#1e3a8a', color: 'white', padding: '8px 20px', borderRadius: '8px', fontWeight: 900, fontSize: '18px', display: 'inline-block' }}>
-                                مستخلص أعمال مقاول باطن
+                        <div className="company-brand">
+                            <div style={{ textAlign: 'left' }}>
+                                <h1 className="company-logo-text">RAWASI <span style={{ color: '#1e3a8a' }}>AL-YUSR</span></h1>
+                                <p className="company-subtext">إدارة المشاريع الهندسية والمقاولات</p>
                             </div>
+                            <img src="/logo.png" alt="Logo" className="company-logo-img" onError={(e: any) => e.target.style.display = 'none'} />
                         </div>
                     </div>
 
                     {/* 📋 كروت البيانات */}
                     <div className="info-grid">
                         <div className="info-card">
-                            <span className="info-label">👤 المقاول المنفذ</span>
+                            <span className="info-label">المقاول المنفذ / Subcontractor</span>
                             <div className="info-value">{contractorName}</div>
                         </div>
                         <div className="info-card">
-                            <span className="info-label">🏢 نطاق الأعمال (الفلل / العقارات)</span>
-                            <div className="info-value highlight" style={{ fontSize: '12px', lineHeight: '1.4' }}>{allVillas}</div>
+                            <span className="info-label">نطاق الأعمال / Project Scope</span>
+                            <div className="info-value highlight">{allVillas}</div>
                         </div>
                         <div className="info-card">
-                            <span className="info-label">🧾 بيانات المستخلص</span>
-                            <div className="info-value">رقم: <span style={{ color: '#dc2626' }}>{claim.claim_number}</span></div>
-                            <div className="info-value" style={{ marginTop: '4px', fontSize: '12px' }}>تاريخ المستخلص: {claim.date}</div>
+                            <span className="info-label">بيانات الدفع / Claim Info</span>
+                            <div className="info-value">رقم المستخلص: <span style={{ color: '#1e3a8a' }}>{claim.claim_number}</span></div>
+                            <div className="info-value" style={{ marginTop: '6px', fontSize: '13px', color: '#64748b' }}>التاريخ: {claim.date}</div>
                         </div>
                     </div>
 
                     {/* 📊 الجدول الأول: الأعمال المنجزة */}
-                    <div style={{ marginBottom: '10px', fontWeight: 900, color: '#1e293b' }}>أولاً: بيان الأعمال المنجزة (مستحقات المقاول)</div>
-                    <table className="modern-table">
+                    <div style={{ marginBottom: '15px', fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>أولاً: بيان الأعمال المنجزة (Work Performed)</div>
+                    <table className="vip-table">
                         <thead>
                             <tr>
-                                <th rowSpan={2} style={{ width: '4%' }}>م</th>
-                                <th rowSpan={2} style={{ width: '28%' }}>البيان / تفاصيل البند (BOQ)</th>
-                                <th rowSpan={2} style={{ width: '6%' }}>الوحدة</th>
-                                <th colSpan={3}>الكميات المنفذة المجمعة</th>
-                                <th rowSpan={2} style={{ width: '9%' }}>الفئة<br/>(SAR)</th>
-                                <th colSpan={3}>إجمالي القيمة (SAR)</th>
-                            </tr>
-                            <tr className="sub-header">
-                                <th>سابق</th>
-                                <th>حالي</th>
-                                <th>إجمالي</th>
-                                <th>سابق</th>
-                                <th>حالي</th>
-                                <th>إجمالي</th>
+                                <th style={{ width: '4%' }}>م</th>
+                                <th className="text-right" style={{ width: '30%' }}>تفاصيل البند / Description</th>
+                                <th style={{ width: '6%' }}>الوحدة</th>
+                                <th style={{ width: '15%' }}>الكمية المنجزة</th>
+                                <th style={{ width: '15%' }}>سعر الوحدة</th>
+                                <th style={{ width: '30%' }}>إجمالي القيمة (SAR)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {groupedAssignments && groupedAssignments.length > 0 ? (
                                 groupedAssignments.map((item: any, i: number) => (
                                     <tr key={i}>
-                                        <td style={{ fontWeight: 800, color: '#64748b' }}>{i + 1}</td>
+                                        <td style={{ color: '#64748b' }}>{i + 1}</td>
                                         <td className="text-right">
-                                            <span className="villa-badge">📍 {item.villasList}</span>
-                                            <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>{item.itemName}</div>
+                                            <span className="villa-badge">{item.villasList}</span>
+                                            <div className="item-title">{item.itemName}</div>
                                         </td>
-                                        <td style={{ fontWeight: 800 }}>{item.unitName}</td>
-                                        <td style={{ color: '#94a3b8' }}>0.00</td>
-                                        <td style={{ fontWeight: 800, color: '#2563eb' }}>{item.totalQty.toFixed(2)}</td>
-                                        <td style={{ fontWeight: 900 }}>{item.totalQty.toFixed(2)}</td>
-                                        <td style={{ fontWeight: 800 }}>{item.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                                        <td style={{ color: '#94a3b8' }}>0.00</td>
-                                        <td style={{ fontWeight: 800 }}>{item.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                                        <td style={{ fontWeight: 900, color: '#166534' }}>{item.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                        <td>{item.unitName}</td>
+                                        <td className="highlight-blue">{item.totalQty.toFixed(2)}</td>
+                                        <td>{item.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                        <td className="highlight-green">{item.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={10} style={{ padding: '30px', color: '#94a3b8', fontWeight: 800 }}>
-                                        هذا المستخلص تم تسجيله بقيمة إجمالية مقطوعة ولا يحتوي على تفاصيل بنود حصر.
+                                    <td colSpan={6} style={{ padding: '40px', color: '#94a3b8', fontSize: '14px' }}>
+                                        هذا المستخلص تم تسجيله بقيمة مقطوعة ولا يحتوي على تفاصيل بنود حصر فرعية.
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
 
-                    {/* 🚀 الجدول الثاني: الخصومات والمسحوبات المجمعة (بتاريخ موحد) */}
+                    {/* 🚀 الجدول الثاني: الخصومات والمسحوبات */}
                     {groupedDeductions && groupedDeductions.length > 0 && (
                         <>
-                            <div style={{ marginBottom: '10px', marginTop: '20px', fontWeight: 900, color: '#7f1d1d' }}>ثانياً: بيان المسحوبات والخصومات المرحلة (تُخصم من المقاول)</div>
-                            <table className="modern-table deduction-table">
+                            <div style={{ marginBottom: '15px', marginTop: '40px', fontWeight: 900, color: '#b91c1c', fontSize: '16px' }}>ثانياً: بيان الخصومات المرحلة (Deductions)</div>
+                            <table className="vip-table deduction-table">
                                 <thead>
                                     <tr>
                                         <th style={{ width: '5%' }}>م</th>
-                                        <th style={{ width: '15%' }}>تاريخ الخصم</th>
-                                        <th style={{ width: '45%' }}>البيان / نوع الخصم المجمع</th>
-                                        <th style={{ width: '15%' }}>تصنيف الحركة</th>
+                                        <th style={{ width: '15%' }}>التاريخ</th>
+                                        <th className="text-right" style={{ width: '45%' }}>نوع الخصم / Deduction Type</th>
+                                        <th style={{ width: '15%' }}>التصنيف</th>
                                         <th style={{ width: '20%' }}>القيمة المخصومة (SAR)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {groupedDeductions.map((d: any, idx: number) => (
-                                        <tr key={idx} style={{ background: '#fef2f2' }}>
-                                            <td style={{ fontWeight: 800, color: '#991b1b' }}>{idx + 1}</td>
-                                            <td style={{ fontWeight: 800 }}>{d.date}</td>
-                                            <td className="text-right" style={{ fontWeight: 800, color: '#7f1d1d' }}>{d.statement}</td>
-                                            <td style={{ fontWeight: 900, color: '#b91c1c' }}>{d.type === 'material' ? '📦 منصرف خامات' : '💸 استقطاعات أخرى'}</td>
-                                            <td style={{ fontWeight: 900, color: '#dc2626', fontSize: '14px' }}>{Number(d.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                        <tr key={idx}>
+                                            <td style={{ color: '#b91c1c' }}>{idx + 1}</td>
+                                            <td>{d.date}</td>
+                                            <td className="text-right highlight-red">{d.statement}</td>
+                                            <td style={{ color: '#7f1d1d' }}>{d.type === 'material' ? '📦 منصرف خامات' : '💸 خصم مالي'}</td>
+                                            <td className="highlight-red" style={{ fontSize: '15px' }}>{Number(d.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -293,43 +319,65 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                         </>
                     )}
 
-                    {/* 💰 الملخص المالي والتفقيط */}
-                    <div style={{ overflow: 'hidden', marginTop: '20px' }}>
+                    {/* 💰 الملخص المالي والتفقيط (تصميم فاتورة) */}
+                    <div className="summary-container">
                         
-                        <div style={{ width: '38%', float: 'right', fontSize: '11px', color: '#64748b', fontWeight: 700, lineHeight: '1.8', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
-                            <strong style={{ color: '#0f172a', display: 'block', marginBottom: '8px', fontSize: '13px' }}>إقرار المقاول:</strong>
-                            أقر أنا الموقع أدناه بصفتي ممثلاً عن الجهة المنفذة للأعمال، بأنني قمت بمراجعة كافة الكميات والأسعار المذكورة أعلاه، وبأنها تمثل حصر دقيق ونهائي للأعمال المنجزة حتى تاريخه. وأقر باستلامي للصافي الموضح بعد خصم كافة المستقطعات، ولا يحق لي الرجوع على الشركة بأي مطالبات تخص هذه البنود مستقبلاً.
+                        <div className="disclaimer-box">
+                            <strong>إقرار استلام ومخالصة:</strong>
+                            أقر أنا الموقع أدناه بصفتي ممثلاً عن الجهة المنفذة للأعمال، بأنني قمت بمراجعة كافة الكميات والأسعار أعلاه، وبأنها تمثل حصر دقيق ونهائي للأعمال المنجزة. وأقر باستلامي للصافي الموضح، ولا يحق لي الرجوع على الشركة بأي مطالبات مستقبلاً تخص هذه البنود.
                         </div>
 
                         <div className="summary-section">
                             <div className="summary-row">
-                                <span>إجمالي قيمة الأعمال (Total Work):</span>
+                                <span>إجمالي قيمة الأعمال (Total Work)</span>
                                 <span>{Number(totalWorkAmount).toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
                             </div>
                             
                             {Number(claim.retention_amount || 0) > 0 && (
                                 <div className="summary-row deduction">
-                                    <span>(-) خصم ضمان أعمال {claim.retention_percent || 0}% (Retention):</span>
+                                    <span>(-) ضمان أعمال {claim.retention_percent || 0}% (Retention)</span>
                                     <span>{Number(claim.retention_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                                 </div>
                             )}
 
-                            {Number(claim.advance_payment || 0) > 0 && (
+                            {materialsDeductionDB > 0 && (
                                 <div className="summary-row deduction">
-                                    <span>(-) خصم دفعات سابقة (Advances):</span>
-                                    <span>{Number(claim.advance_payment || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                    <span>(-) خامات ومواد منصرفة (Materials)</span>
+                                    <span>{materialsDeductionDB.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                </div>
+                            )}
+
+                             {expensesDeductionDB > 0 && (
+                                <div className="summary-row deduction">
+                                    <span>(-) مصروفات سابقة (Expenses)</span>
+                                    <span>{expensesDeductionDB.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                </div>
+                            )}
+
+                            {advancePaymentDB > 0 && (
+                                <div className="summary-row deduction">
+                                    <span>(-) دفعات نقدية سلفة (Advances)</span>
+                                    <span>{advancePaymentDB.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                </div>
+                            )}
+
+                            {otherDeductionsDB > 0 && (
+                                <div className="summary-row deduction">
+                                    <span>(-) خصومات أخرى وتسويات (Others)</span>
+                                    <span>{otherDeductionsDB.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                                 </div>
                             )}
 
                             {groupedDeductions.map((d: any, idx: number) => (
-                                <div className="summary-row deduction" key={`ded-${idx}`} style={{ borderBottom: idx === groupedDeductions.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
-                                    <span>(-) {d.statement}:</span>
+                                <div className="summary-row deduction" key={`ded-${idx}`}>
+                                    <span>(-) {d.statement}</span>
                                     <span>{Number(d.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                                 </div>
                             ))}
 
+                            {/* سطر الصافي - تصميم بارز باللون الأخضر */}
                             <div className="summary-row net">
-                                <span>الصافي للصرف (Net Amount):</span>
+                                <span>الصافي المُستحق (Net Payable)</span>
                                 <span>{Number(claim.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
                             </div>
                         </div>
@@ -339,19 +387,19 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                     {/* ✒️ التوقيعات */}
                     <div className="signatures-container">
                         <div className="signature-box">
-                            <div className="sig-title">المقاول المستلم<br/><span style={{ fontSize: '10px', color: '#94a3b8' }}>Subcontractor</span></div>
+                            <div className="sig-title">المقاول المستلم<span className="sig-sub">Subcontractor</span></div>
                             <div className="sig-line"></div>
                         </div>
                         <div className="signature-box">
-                            <div className="sig-title">مهندس الموقع<br/><span style={{ fontSize: '10px', color: '#94a3b8' }}>Site Engineer</span></div>
+                            <div className="sig-title">مهندس الموقع<span className="sig-sub">Site Engineer</span></div>
                             <div className="sig-line"></div>
                         </div>
                         <div className="signature-box">
-                            <div className="sig-title">مدير المشاريع<br/><span style={{ fontSize: '10px', color: '#94a3b8' }}>Project Manager</span></div>
+                            <div className="sig-title">مدير المشاريع<span className="sig-sub">Project Manager</span></div>
                             <div className="sig-line"></div>
                         </div>
                         <div className="signature-box">
-                            <div className="sig-title">الاعتماد المالي<br/><span style={{ fontSize: '10px', color: '#94a3b8' }}>Finance Dept.</span></div>
+                            <div className="sig-title">الاعتماد المالي<span className="sig-sub">Finance Dept.</span></div>
                             <div className="sig-line"></div>
                         </div>
                     </div>
