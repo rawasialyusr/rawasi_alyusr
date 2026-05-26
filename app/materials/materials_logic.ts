@@ -25,6 +25,10 @@ export function useMaterialsLogic() {
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [printReceiptId, setPrintReceiptId] = useState<string | null>(null);
 
+    // 📦 متغيرات مودال الصرف المباشر للموقع/المقاول
+    const [isDispenseModalOpen, setIsDispenseModalOpen] = useState(false);
+    const [selectedInvoiceItem, setSelectedInvoiceItem] = useState<any>(null);
+
     // 🚀 هيكل الفاتورة
     const initialInvoiceState = {
         id: null, 
@@ -85,6 +89,8 @@ export function useMaterialsLogic() {
                 work_item: line.item_name,
                 item_name: line.item_name,
                 quantity: line.quantity,
+                // 💡 نعتبر الكمية المتاحة حالياً هي الكمية الكلية (يمكنك تعديلها لاحقاً لربطها بجدول الأرصدة)
+                available_qty: line.quantity, 
                 unit: line.unit,
                 unit_price: line.unit_price,
                 total_price: line.total_price,
@@ -267,6 +273,61 @@ export function useMaterialsLogic() {
         onError: (err: any) => showToast(`فشلت العملية: ${err.message}`, "error")
     });
 
+    // 🚀 دالة الصرف من الفاتورة مباشرة
+    const dispenseMaterialMutation = useMutation({
+        mutationFn: async (data: any) => {
+            // 1. إنشاء رأس إذن الصرف 
+            const issuePayload = {
+                issue_number: `ISS-${Date.now().toString().slice(-6)}`,
+                project_id: data.project_id,
+                subcontractor_id: data.issue_type === 'صرف لمقاول' ? data.subcontractor_id : null,
+                issue_date: data.issue_date,
+                issue_type: data.issue_type,
+                total_amount: data.quantity * data.item.unit_price,
+                notes: data.issue_type === 'صرف لمقاول' ? `منصرف ومحمل على المقاول مباشر من المشتريات` : `استهلاك مباشر من المشتريات`,
+                is_posted: true // 🚀 يتم ترحيله مباشرة ليظهر في المستخلصات
+            };
+    
+            const { data: issueRecord, error: issueError } = await supabase
+                .from('material_issues')
+                .insert([issuePayload])
+                .select().single();
+    
+            if (issueError) throw new Error(issueError.message);
+    
+            // 2. إنشاء تفاصيل الإذن (ربط الخامة)
+            const linePayload = {
+                issue_id: issueRecord.id,
+                item_id: data.item.item_id || null, 
+                item_name: data.item.item_name,
+                quantity: data.quantity,
+                unit: data.item.unit,
+                unit_price: data.item.unit_price,
+                total_price: data.quantity * data.item.unit_price,
+                boq_id: data.boq_id || null,
+                boq_item_id: data.boq_item_id || null
+            };
+    
+            const { error: lineError } = await supabase.from('material_issue_lines').insert([linePayload]);
+            if (lineError) throw new Error(lineError.message);
+    
+            // 3. الترحيل المحاسبي للإذن من الداتابيز
+            const { error: rpcError } = await supabase.rpc('rpc_post_material_issue', { p_id: issueRecord.id });
+            if (rpcError) throw new Error(rpcError.message);
+        },
+        onSuccess: () => {
+            showToast("تم صرف الخامة للموقع بنجاح 🚀", "success");
+            setIsDispenseModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['materials_logs'] }); // تحديث الشاشة
+        },
+        onError: (err: any) => showToast(`خطأ في الصرف: ${err.message}`, "error")
+    });
+
+    const handleOpenDispense = (item: any) => {
+        setSelectedInvoiceItem(item);
+        setIsDispenseModalOpen(true);
+    };
+
     // 🚀 دالة سحب بيانات الفاتورة المحددة وعرضها
     const populateEditModal = (receipt_id: string) => {
         const lines = allMaterials.filter((d: any) => d.receipt_id === receipt_id);
@@ -358,6 +419,12 @@ export function useMaterialsLogic() {
 
         handleAction: (action: string, id: string) => actionMutation.mutate({ action, id }),
         isActionPending: actionMutation.isPending,
-        canAdd: can('materials', 'add')
+        canAdd: can('materials', 'add'),
+
+        // 📤 إضافات الصرف للموقع / المقاول
+        isDispenseModalOpen, setIsDispenseModalOpen,
+        selectedInvoiceItem, setSelectedInvoiceItem,
+        handleOpenDispense,
+        dispenseMaterialMutation
     };
 }

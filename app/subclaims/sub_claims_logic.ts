@@ -19,6 +19,7 @@ export function useSubClaimsLogic() {
         date: new Date().toISOString().split('T')[0],
         retention_percent: 5,
         tax_percent: 15,
+        payment_period_days: 14,
         deductions: []
     });
 
@@ -107,13 +108,12 @@ export function useSubClaimsLogic() {
         const selectedObjects = (assignments || []).filter((a: any) => selectedAssignments.includes(a.id));
         const projectIds = Array.from(new Set(selectedObjects.map((a: any) => a.project_id)));
         
-        // 🚀 تم إزالة شرط (if projectIds.length > 1) للسماح بجمع بنود من عقارات وفلل مختلفة في مستخلص واحد
-
         setCurrentClaim({
             date: new Date().toISOString().split('T')[0],
             retention_percent: 5,
             tax_percent: 15,
-            project_ids: projectIds, // 👈 حفظ مصفوفة العقارات بالكامل هنا
+            payment_period_days: 14,
+            project_ids: projectIds, 
             deductions: [],
             materials_deduction: 0,
             other_deductions: 0,
@@ -123,9 +123,7 @@ export function useSubClaimsLogic() {
         setIsClaimModalOpen(true);
     };
 
-    // 🚀 التعديل هنا: استقبال مصفوفة (projectIds: string[]) بدلاً من (projectId: string)
     const fetchPendingDeductions = async (contractorId: string, projectIds: string[]) => {
-        // 1️⃣ جلب المصروفات (سحب كافة المصروفات المعلقة للمقاول بدون تقييد بمشروع معين)
         const { data: expenses, error: expError } = await supabase.from('expenses')
             .select('*')
             .eq('sub_contractor', selectedContractor?.name) 
@@ -134,7 +132,6 @@ export function useSubClaimsLogic() {
 
         if (expError) console.error("Expenses Fetch Error:", expError.message);
 
-        // 🚀 تم إزالة فلتر الـ project_id هنا عشان يجيب كل مديونيات المقاول
         const validExpenses = (expenses || []).map(e => ({
             id: e.id,
             type: 'expense',
@@ -143,18 +140,15 @@ export function useSubClaimsLogic() {
             amount: e.amount || e.total_price || 0
         }));
 
-        // 2️⃣ جلب الخامات
-        // 🛡️ درع الحماية: تنظيف مصفوفة المشاريع من أي داتا وهمية (مثل "4") والاحتفاظ بالـ UUIDs الصحيحة فقط
         const safeProjectIds = projectIds.filter(id => id && typeof id === 'string' && id.length > 20);
 
         let validMaterials: any[] = [];
         
-        // لا نرسل الاستعلام إلا لو فيه UUIDs صحيحة لمنع انهيار قاعدة البيانات (Postgres)
         if (safeProjectIds.length > 0) {
             const { data: materials, error: matError } = await supabase.from('material_issues')
                 .select('*, lines:material_issue_lines(*)')
                 .eq('subcontractor_id', contractorId)
-                .in('project_id', safeProjectIds) // 🚀 استخدام المصفوفة المنظفة (safeProjectIds) هنا
+                .in('project_id', safeProjectIds) 
                 .eq('is_posted', true)
                 .is('claim_id', null);
 
@@ -188,6 +182,7 @@ export function useSubClaimsLogic() {
                 contractor_id: selectedContractor.id,
                 project_id: claimData.project_ids[0], 
                 date: claimData.date,
+                payment_period_days: claimData.payment_period_days || 14,
                 total_amount: claimData.total_amount, 
                 retention_amount: claimData.retention_amount,
                 advance_payment: claimData.advance_payment || 0,
@@ -223,7 +218,6 @@ export function useSubClaimsLogic() {
                 }
             }
 
-            // تم تصحيح اسم الـ RPC هنا لتطابق قاعدة البيانات (post_sub_claim)
             const { error: rpcError } = await supabase.rpc('post_sub_claim', { p_id: claim.id });
             if (rpcError) throw new Error(rpcError.message);
 
@@ -292,20 +286,38 @@ export function useSubClaimsLogic() {
         setIsAssignModalOpen(true);
     };
 
+    // 🚀 تحديث דالة فك الترحيل لمسح السندات وتصفير المبلغ المسدد
     const actionMutation = useMutation({
-        mutationFn: async ({ action, id }: { action: string, id: string }) => {
+        mutationFn: async ({ action, id, claimNumber }: { action: string, id: string, claimNumber?: string }) => {
             let rpcName = '';
-            // تم تصحيح اسم الـ RPC هنا لتطابق قاعدة البيانات (post_sub_claim)
             if (action === 'post') rpcName = 'post_sub_claim';
             if (action === 'unpost') rpcName = 'rpc_unpost_claim';
             if (action === 'delete') rpcName = 'rpc_delete_claim';
+
+            // 🚀 إضافة منطق مسح الدفعات وتصفيرها عند فك الترحيل
+            if (action === 'unpost') {
+                // 1. تصفير المبلغ المدفوع وإرجاع الحالة
+                const { error: updateError } = await supabase.from('sub_claims')
+                    .update({ paid_amount: 0, status: 'مسودة', is_posted: false })
+                    .eq('id', id);
+                if (updateError) throw new Error(updateError.message);
+
+                // 2. مسح أي سند صرف (Payment Voucher) مرتبط برقم هذا المستخلص
+                if (claimNumber) {
+                    const { error: delError } = await supabase.from('payment_vouchers')
+                        .delete()
+                        .ilike('description', `%${claimNumber}%`);
+                    
+                    if (delError) console.error("Error deleting related vouchers:", delError);
+                }
+            }
 
             const { error } = await supabase.rpc(rpcName, { p_id: id });
             if (error) throw new Error(error.message);
         },
         onSuccess: (_, variables) => {
             let msg = "تم الترحيل بنجاح 🚀";
-            if (variables.action === 'unpost') msg = "تم فك الترحيل بنجاح 🔓";
+            if (variables.action === 'unpost') msg = "تم فك الترحيل ومسح سندات الصرف بنجاح 🔓";
             if (variables.action === 'delete') msg = "تم حذف المستخلص نهائياً 🗑️";
             showToast(msg, "success");
             queryClient.invalidateQueries({ queryKey: ['contractor_claims_history'] });
@@ -369,10 +381,19 @@ export function useSubClaimsLogic() {
         setPaymentRecord({
             date: new Date().toISOString().split('T')[0],
             amount: remainingAmount > 0 ? remainingAmount : 0,
+            
+            // 🎯 تمرير الآي دي الخاص بالمقاول عشان ينزل في السطر المدين
             payee_id: selectedContractor?.id,
             payee_name: selectedContractor?.name,
-            debit_account_name: 'مقاول باطن',
+            
+            // 🚀 الديفولت المدين (حساب التزام مقاولي الباطن)
+            debit_account_id: '27f37adf-c0ec-4b40-80d0-2b36b853fd4b', 
+            debit_account_name: 'التزام مقاولي الباطن',
+            
+            // 🚀 الديفولت الدائن (حساب الخزينة الرئيسية اللي إنت بعته)
+            credit_account_id: '21b8a1db-bc9f-4cf8-b741-1efeded0963c', 
             credit_account_name: 'الخزينة الرئيسية',
+            
             site_ref: claimRow.projects?.Property || 'مجمع مشاريع',
             description: `سداد قيمة مستخلص مقاول باطن رقم ${claimRow.claim_number} - ${selectedContractor?.name}`,
             payment_method: 'نقدي',
@@ -383,29 +404,31 @@ export function useSubClaimsLogic() {
         setIsPaymentModalOpen(true);
     };
 
-    // 🚀 التعديل الأهم: مطابقة هيكل جدول payment_vouchers في قاعدة البيانات بدقة
     const paymentMutation = useMutation({
         mutationFn: async (record: any) => {
             
-            // تجهيز البيانات بما يتطابق مع الداتا بيز (بدون أسماء أعمدة غير موجودة)
             const voucherPayload = {
-                voucher_number: `PV-${Date.now().toString().slice(-6)}`, // حقل إجباري في الداتا بيز
+                voucher_number: `PV-${Date.now().toString().slice(-6)}`, 
                 date: record.date,
                 amount: record.amount,
-                partner_id: record.payee_id, // ربط المقاول بشكل صحيح
+                partner_id: record.payee_id, 
                 payment_method: record.payment_method,
                 site_ref: record.site_ref,
                 description: record.description,
                 status: 'مسودة',
-                // وضعنا أسماء الحسابات هنا مؤقتاً لأن المودال يرسل نص وقاعدة البيانات تطلب UUID
+                
+                // 🚀 إرسال الحسابات الافتراضية للداتابيز 
+                debit_account_id: record.debit_account_id,
+                credit_account_id: record.credit_account_id,
+                
                 notes: `حساب المدين: ${record.debit_account_name} | حساب الدائن: ${record.credit_account_name}`
             };
 
+            // إنشاء السند
             const { error: voucherError } = await supabase.from('payment_vouchers').insert([voucherPayload]);
-
             if (voucherError) throw new Error(voucherError.message);
 
-            // تحديث المبلغ المدفوع في جدول المستخلصات
+            // تحديث المستخلص
             if (record.linked_claim_id) {
                 const { data: currentClaim, error: fetchError } = await supabase
                     .from('sub_claims')

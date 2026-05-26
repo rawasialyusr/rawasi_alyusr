@@ -9,7 +9,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
 
     useEffect(() => { setMounted(true); }, []);
 
-    // 🚀 استخراج أسماء כל الفلل المشاركة بدون تكرار للترويسة
+    // 🚀 استخراج أسماء كل الفلل المشاركة بدون تكرار للترويسة
     const allVillas = useMemo(() => {
         if (!assignments || assignments.length === 0) return claim?.projects?.Property || 'مجمع عقارات';
         const names = assignments.map((a: any) => a.projects?.Property).filter(Boolean);
@@ -38,26 +38,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
         return Object.values(groups).map(g => ({ ...g, villasList: Array.from(g.villas).join(' + ') }));
     }, [assignments]);
 
-    // 🚀 تجميع الخصومات القديمة وتوحيد التاريخ
-    const groupedDeductions = useMemo(() => {
-        if (!deductions || deductions.length === 0) return [];
-        let totalMat = 0;
-        let totalExp = 0;
-        deductions.forEach((d: any) => {
-            if (d.type === 'material') totalMat += Number(d.amount || 0);
-            if (d.type === 'expense') totalExp += Number(d.amount || 0);
-        });
-
-        const res = [];
-        if (totalMat > 0) {
-            res.push({ type: 'material', amount: totalMat, statement: 'إجمالي منصرف خامات للموقع', date: claim?.date });
-        }
-        if (totalExp > 0) {
-            res.push({ type: 'expense', amount: totalExp, statement: 'استقطاعات أخرى (مصروفات وسلف مجمعة)', date: claim?.date });
-        }
-        return res;
-    }, [deductions, claim]);
-
     // 🖨️ دالة الطباعة (window.print)
     const handlePrint = () => {
         document.title = `مستخلص_${contractorName}_${claim?.claim_number}`;
@@ -74,6 +54,25 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
     const otherDeductionsDB = Number(claim.other_deductions || 0);
     const advancePaymentDB = Number(claim.advance_payment || 0);
 
+    // 🧮 حسابات السداد والمتبقي
+    const netAmount = Number(claim.net_amount || 0);
+    const paidAmount = Number(claim.paid_amount || 0);
+    const remainingAmount = netAmount - paidAmount;
+
+    let paymentStatus = 'غير مسدد';
+    let statusColor = '#ef4444'; // أحمر
+    let statusBg = '#fef2f2';
+
+    if (paidAmount >= netAmount && netAmount > 0) {
+        paymentStatus = 'مسدد بالكامل';
+        statusColor = '#16a34a'; // أخضر
+        statusBg = '#dcfce7';
+    } else if (paidAmount > 0 && paidAmount < netAmount) {
+        paymentStatus = 'مسدد جزئي';
+        statusColor = '#d97706'; // برتقالي
+        statusBg = '#fef3c7';
+    }
+
     return createPortal(
         <div className="print-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(10px)', direction: 'rtl', padding: '20px' }}>
             <div className="print-modal-backdrop" style={{ position: 'fixed', inset: 0 }} onClick={onClose} />
@@ -81,51 +80,62 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap');
 
+                /* 🖨️ إعدادات الطباعة للزوم التلقائي والاحتواء الكامل */
                 @media print {
-                    body * { visibility: hidden; }
-                    .print-modal-overlay { position: absolute !important; left: 0; top: 0; padding: 0 !important; background: white !important; align-items: flex-start !important; overflow: visible !important; }
-                    .print-modal-backdrop { display: none !important; }
-                    .printable-area, .printable-area * { visibility: visible; }
-                    .printable-area { color: #0f172a; } /* تلوين الطباعة الأساسي بدون فرض إجباري على كل العناصر */
+                    @page { size: A4 landscape; margin: 10mm; } 
                     
-                    /* 🚀 فرض اللون الأحمر الإجباري للخصومات في الطباعة */
-                    .summary-row.deduction, .summary-row.deduction * { color: #b91c1c !important; }
-                    /* فرض اللون الأبيض لسطر الصافي النهائي في الطباعة */
-                    .summary-row.net, .summary-row.net * { color: #ffffff !important; background-color: #14532d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    body * { visibility: hidden; }
+                    
+                    .print-modal-overlay { 
+                        position: absolute !important; 
+                        left: 0 !important; 
+                        top: 0 !important; 
+                        width: 100% !important; 
+                        height: auto !important; 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        visibility: visible !important;
+                    }
+                    
+                    .print-modal-overlay * { visibility: visible; }
                     
                     .printable-area { 
-                        position: absolute !important; 
-                        left: 0; top: 0; 
+                        position: relative !important; 
                         width: 100% !important; 
                         max-width: 100% !important; 
                         height: auto !important; 
+                        max-height: none !important; 
                         overflow: visible !important; 
                         box-shadow: none !important; 
                         border: none !important; 
-                        padding: 10px 20px !important; 
+                        padding: 0 !important; 
                         margin: 0 !important; 
-                        background: white !important; 
-                        zoom: 0.85; 
+                        /* 🚀 زوم أوت كافي لاحتواء الخلاصة المالية والتوقيعات */
+                        zoom: 0.70 !important; 
                         -webkit-print-color-adjust: exact; 
                         print-color-adjust: exact;
                     }
-                    .no-print { display: none !important; }
+
+                    .print-modal-backdrop, .no-print { display: none !important; }
                     
-                    @page { size: A4 landscape; margin: 8mm; } 
-                    
-                    /* تحسين الطباعة: تباين عالي بدون حواف */
-                    .info-grid { gap: 15px !important; margin-bottom: 25px !important; }
+                    /* حماية الخلاصة والتوقيعات من القص */
+                    .summary-container { page-break-inside: avoid !important; margin-top: 30px !important; }
+                    .signatures-container { page-break-inside: avoid !important; margin-top: 50px !important; }
+                    tr { page-break-inside: avoid; }
+
+                    /* الألوان الإجبارية للطباعة */
+                    .summary-row.deduction, .summary-row.deduction * { color: #b91c1c !important; }
+                    .summary-row.net, .summary-row.net * { color: #ffffff !important; background-color: #14532d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .summary-row.paid { color: #16a34a !important; }
+                    .summary-row.remaining { background-color: #fef3c7 !important; color: #b45309 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .vip-table th { background-color: #f1f5f9 !important; color: #0f172a !important; border-bottom: 2px solid #cbd5e1 !important; }
-                    .vip-table td { border-bottom: 1px solid #e2e8f0 !important; }
-                    .deduction-table th { background-color: #fef2f2 !important; color: #b91c1c !important; border-bottom: 2px solid #fecaca !important; }
-                    .summary-section { width: 60% !important; float: left; }
-                    .signatures-container { margin-top: 50px !important; page-break-inside: avoid; }
+                    .summary-section { width: 55% !important; float: left; }
+                    .status-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 }
                 
                 /* ---------------------------------------------------
-                   تصميم الـ VIP Theme - بدون حواف (Borderless & Clean)
+                    تصميم الشاشة العادية - VIP Theme
                    --------------------------------------------------- */
-                
                 .printable-area { 
                     background: white; 
                     border-radius: 20px; 
@@ -141,7 +151,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                     color: #0f172a; 
                 }
                 
-                /* الترويسة الفاخرة المحدثة */
                 .company-header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 20px; margin-bottom: 35px; border-bottom: 1px solid #e2e8f0; }
                 .company-brand { display: flex; align-items: center; gap: 15px; text-align: left; }
                 .company-logo-img { height: 65px; object-fit: contain; }
@@ -152,7 +161,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                 .document-title h2 { margin: 0; font-size: 24px; font-weight: 900; color: #1e3a8a; text-transform: uppercase; letter-spacing: 1px; }
                 .document-title p { margin: 5px 0 0 0; font-size: 13px; color: #64748b; font-weight: 700; text-transform: uppercase; }
 
-                /* كروت المعلومات بتصميم جانبي ملون (Accent Border) */
                 .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 35px; }
                 .info-card { background: #f8fafc; border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
                 .info-card::before { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: #1e3a8a; border-radius: 0 4px 4px 0; }
@@ -163,7 +171,6 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                 .info-value { font-size: 16px; color: #0f172a; font-weight: 900; }
                 .info-value.highlight { color: #0f172a; font-size: 14px; line-height: 1.5; }
 
-                /* جداول بدون حواف (Modern Borderless Tables) */
                 .vip-table { width: 100%; border-collapse: collapse; margin-bottom: 35px; font-size: 13px; text-align: center; }
                 .vip-table th { padding: 14px 10px; font-weight: 900; color: #475569; border-bottom: 2px solid #e2e8f0; font-size: 12px; }
                 .vip-table td { padding: 14px 10px; font-weight: 800; border-bottom: 1px dashed #f1f5f9; color: #0f172a; }
@@ -175,14 +182,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                 
                 .highlight-blue { color: #2563eb !important; font-weight: 900 !important; }
                 .highlight-green { color: #166534 !important; font-weight: 900 !important; }
-                .highlight-red { color: #b91c1c !important; font-weight: 900 !important; }
 
-                /* جدول الخصومات (أحمر ناعم) */
-                .deduction-table th { color: #b91c1c; border-bottom: 2px solid #fecaca; }
-                .deduction-table td { border-bottom: 1px dashed #fee2e2; }
-                .deduction-table tbody tr:hover td { background-color: #fef2f2; }
-
-                /* الخلاصة المالية (Summary Box) - تصميم فواتير الشركات */
                 .summary-container { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; }
                 .disclaimer-box { width: 42%; font-size: 12px; color: #64748b; font-weight: 700; line-height: 1.8; padding: 20px; background: #f8fafc; border-radius: 16px; }
                 .disclaimer-box strong { color: #0f172a; font-size: 14px; display: block; margin-bottom: 10px; }
@@ -190,16 +190,17 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                 .summary-section { width: 52%; }
                 .summary-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 800; color: #0f172a; }
                 
-                /* 🚀 إجبار كل الخصومات على اللون الأحمر */
                 .summary-row.deduction, .summary-row.deduction span { color: #b91c1c !important; } 
                 
-                /* سطر الصافي الأخضر الفخم */
                 .summary-row.net { padding: 18px 20px; background: #f0fdf4; border-radius: 12px; margin-top: 15px; border: none; align-items: center; background-color: #14532d; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
                 .summary-row.net span { color: #ffffff !important; }
                 .summary-row.net span:first-child { font-size: 16px; font-weight: 900; }
                 .summary-row.net span:last-child { font-size: 22px; font-weight: 900; }
+
+                /* تنسيق سطر المسدد والمتبقي */
+                .summary-row.paid { color: #16a34a; border-bottom: none; padding-top: 15px; }
+                .summary-row.remaining { background-color: #fef3c7; border-radius: 12px; padding: 15px 20px; margin-top: 5px; border: none; color: #b45309; }
                 
-                /* التوقيعات */
                 .signatures-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 70px; padding-top: 40px; }
                 .signature-box { text-align: center; }
                 .sig-title { font-weight: 900; color: #0f172a; font-size: 15px; margin-bottom: 60px; }
@@ -220,7 +221,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
 
                 <div ref={printRef}>
                     
-                    {/* 🏢 ترويسة الشركة (تم التبديل لتكون عربية 100%) */}
+                    {/* 🏢 ترويسة الشركة */}
                     <div className="company-header">
                         <div className="document-title">
                             <h2>مستخلص أعمال</h2>
@@ -249,6 +250,10 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                             <span className="info-label">بيانات الدفع / Claim Info</span>
                             <div className="info-value">رقم المستخلص: <span style={{ color: '#1e3a8a' }}>{claim.claim_number}</span></div>
                             <div className="info-value" style={{ marginTop: '6px', fontSize: '13px', color: '#64748b' }}>التاريخ: {claim.date}</div>
+                            {/* 🚀 بادج حالة السداد */}
+                            <div className="status-badge" style={{ marginTop: '10px', display: 'inline-block', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900, background: statusBg, color: statusColor, border: `1px solid ${statusColor}40` }}>
+                                حالة السداد: {paymentStatus}
+                            </div>
                         </div>
                     </div>
 
@@ -290,36 +295,7 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                         </tbody>
                     </table>
 
-                    {/* 🚀 الجدول الثاني: الخصومات والمسحوبات */}
-                    {groupedDeductions && groupedDeductions.length > 0 && (
-                        <>
-                            <div style={{ marginBottom: '15px', marginTop: '40px', fontWeight: 900, color: '#b91c1c', fontSize: '16px' }}>ثانياً: بيان الخصومات المرحلة (Deductions)</div>
-                            <table className="vip-table deduction-table">
-                                <thead>
-                                    <tr>
-                                        <th style={{ width: '5%' }}>م</th>
-                                        <th style={{ width: '15%' }}>التاريخ</th>
-                                        <th className="text-right" style={{ width: '45%' }}>نوع الخصم / Deduction Type</th>
-                                        <th style={{ width: '15%' }}>التصنيف</th>
-                                        <th style={{ width: '20%' }}>القيمة المخصومة (SAR)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {groupedDeductions.map((d: any, idx: number) => (
-                                        <tr key={idx}>
-                                            <td style={{ color: '#b91c1c' }}>{idx + 1}</td>
-                                            <td>{d.date}</td>
-                                            <td className="text-right highlight-red">{d.statement}</td>
-                                            <td style={{ color: '#7f1d1d' }}>{d.type === 'material' ? '📦 منصرف خامات' : '💸 خصم مالي'}</td>
-                                            <td className="highlight-red" style={{ fontSize: '15px' }}>{Number(d.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </>
-                    )}
-
-                    {/* 💰 الملخص المالي والتفقيط (تصميم فاتورة) */}
+                    {/* 💰 الملخص المالي والتفقيط */}
                     <div className="summary-container">
                         
                         <div className="disclaimer-box">
@@ -368,18 +344,25 @@ export default function PrintClaimModal({ isOpen, onClose, claim, contractorName
                                 </div>
                             )}
 
-                            {groupedDeductions.map((d: any, idx: number) => (
-                                <div className="summary-row deduction" key={`ded-${idx}`}>
-                                    <span>(-) {d.statement}</span>
-                                    <span>{Number(d.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-                                </div>
-                            ))}
-
-                            {/* سطر الصافي - تصميم بارز باللون الأخضر */}
+                            {/* سطر الصافي */}
                             <div className="summary-row net">
                                 <span>الصافي المُستحق (Net Payable)</span>
-                                <span>{Number(claim.net_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
+                                <span>{netAmount.toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
                             </div>
+
+                            {/* 🚀 سطور السداد والمتبقي تظهر فقط إذا كان هناك سداد جزئي أو كلي */}
+                            {paidAmount > 0 && (
+                                <>
+                                    <div className="summary-row paid">
+                                        <span>(-) ما تم سداده (Paid Amount)</span>
+                                        <span>{paidAmount.toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
+                                    </div>
+                                    <div className="summary-row remaining">
+                                        <span>المتبقي للصرف (Remaining Balance)</span>
+                                        <span>{remainingAmount.toLocaleString(undefined, {minimumFractionDigits: 2})} SAR</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                     </div>

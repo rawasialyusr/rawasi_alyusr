@@ -7,6 +7,8 @@ import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import MaterialInvoiceModal from './MaterialInvoiceModal';
 import MaterialReceiptPrintModal from './MaterialReceiptPrintModal';
+// 🚀 تم تصحيح المسار ليقرأ المودال من فولدر material_issues
+import DispenseMaterialModal from '../material_issues/DispenseMaterialModal'; 
 import { useConfirm } from '@/components/ConfirmContext'; 
 
 // =========================================================================
@@ -163,6 +165,7 @@ export default function MaterialsPage() {
                     exp_date: row.exp_date,
                     receipt_type: row.receipt_type,
                     project: row.project,
+                    project_id: row.project_id, // 🚀 نحتاج هذا للـ Dispense
                     supplier: row.supplier,
                     account: row.account,
                     is_posted: row.is_posted,
@@ -172,7 +175,11 @@ export default function MaterialsPage() {
                 };
             }
             groups[id].total_receipt_price += Number(row.total_price) || 0;
-            groups[id].items.push(row);
+            // 🚀 دمج معلومات الفاتورة الأب مع السطر عشان نستخدمها في مودال الصرف
+            groups[id].items.push({
+                ...row,
+                project_id: row.project_id || groups[id].project_id
+            });
         });
 
         return Object.values(groups);
@@ -471,7 +478,7 @@ export default function MaterialsPage() {
                                                     <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                                         <button 
                                                             onClick={(e) => { 
-                                                                e.stopPropagation(); // 🛡️ منع تداخل الأحداث مع السطر
+                                                                e.stopPropagation(); 
                                                                 logic.setPrintReceiptId(group.id); 
                                                                 logic.setIsPrintModalOpen(true); 
                                                             }} 
@@ -484,8 +491,7 @@ export default function MaterialsPage() {
                                                             <>
                                                                 <button 
                                                                     onClick={(e) => {
-                                                                        e.stopPropagation(); // 🛡️ منع تداخل الأحداث
-                                                                        // 🚀 ربط ذكي بأي دالة تعديل متاحة في اللوجيك
+                                                                        e.stopPropagation(); 
                                                                         if (typeof logic.handleEdit === 'function') {
                                                                             logic.handleEdit(group.id);
                                                                         } else if (typeof logic.handleEditSelected === 'function') {
@@ -542,11 +548,12 @@ export default function MaterialsPage() {
                                                             <table className="child-table">
                                                                 <thead>
                                                                     <tr>
-                                                                        <th style={{ width: '30%', textAlign: 'right' }}>الخامة الموردة</th>
+                                                                        <th style={{ width: '25%', textAlign: 'right' }}>الخامة الموردة</th>
                                                                         <th style={{ width: '20%' }}>توجيه الميزانية (BOQ)</th>
-                                                                        <th style={{ width: '15%' }}>الكمية</th>
+                                                                        <th style={{ width: '15%' }}>الكمية المتاحة للصرف</th>
                                                                         <th style={{ width: '15%' }}>سعر الوحدة</th>
-                                                                        <th style={{ width: '20%' }}>إجمالي السطر</th>
+                                                                        <th style={{ width: '15%' }}>إجمالي السطر</th>
+                                                                        <th style={{ width: '10%', textAlign: 'center' }}>إجراءات السطر</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -561,10 +568,31 @@ export default function MaterialsPage() {
                                                                                 </span>
                                                                             </td>
                                                                             <td style={{ fontWeight: 900 }}>
-                                                                                {item.quantity} <span style={{fontSize:'10px', color:'#94a3b8'}}>{item.unit}</span>
+                                                                                {item.available_qty || item.quantity} <span style={{fontSize:'10px', color:'#94a3b8'}}>{item.unit}</span>
                                                                             </td>
                                                                             <td style={{ fontWeight: 800 }}>{formatCurrency(item.unit_price)}</td>
                                                                             <td style={{ fontWeight: 900, color: THEME.danger }}>{formatCurrency(item.total_price)}</td>
+                                                                            
+                                                                            {/* 🚀 زرار الصرف المباشر للفيلا أو المقاول */}
+                                                                            <td style={{ textAlign: 'center' }}>
+                                                                                <button 
+                                                                                    onClick={(e) => { 
+                                                                                        e.stopPropagation(); 
+                                                                                        logic.handleOpenDispense(item); 
+                                                                                    }}
+                                                                                    disabled={!group.is_posted || (item.available_qty <= 0)}
+                                                                                    title={!group.is_posted ? "يجب ترحيل الفاتورة أولاً لصرف الخامات" : ""}
+                                                                                    style={{ 
+                                                                                        background: (group.is_posted && item.available_qty > 0) ? '#3b82f6' : '#cbd5e1', 
+                                                                                        color: 'white', border: 'none', padding: '6px 12px', 
+                                                                                        borderRadius: '6px', fontWeight: 800, 
+                                                                                        cursor: (group.is_posted && item.available_qty > 0) ? 'pointer' : 'not-allowed', 
+                                                                                        fontSize: '10px', transition: '0.2s', whiteSpace: 'nowrap'
+                                                                                    }}
+                                                                                >
+                                                                                    {item.available_qty > 0 ? 'صرف 📤' : 'رصيد نفذ 🚫'}
+                                                                                </button>
+                                                                            </td>
                                                                         </tr>
                                                                     ))}
                                                                 </tbody>
@@ -638,6 +666,15 @@ export default function MaterialsPage() {
                     onClose={() => logic.setIsPrintModalOpen(false)} 
                     logic={logic}
                     receiptId={logic.printReceiptId}
+                />
+
+                {/* 🚀 إدراج المودال الجديد في الصفحة */}
+                <DispenseMaterialModal 
+                    isOpen={logic.isDispenseModalOpen} 
+                    onClose={() => logic.setIsDispenseModalOpen(false)} 
+                    invoiceItem={logic.selectedInvoiceItem} 
+                    onSave={(data: any) => logic.dispenseMaterialMutation.mutate(data)} 
+                    isSaving={logic.dispenseMaterialMutation.isPending} 
                 />
 
             </MasterPage>

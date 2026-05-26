@@ -143,7 +143,7 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                 .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
             `}</style>
 
-            <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ width: '1000px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.95)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', overflowY: 'auto', direction: 'rtl' }}>
+            <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ width: '1100px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.95)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', overflowY: 'auto', direction: 'rtl' }}>
                 
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:`2px solid ${THEME.goldAccent || '#d4af37'}50`, paddingBottom:'15px'}}>
                     <div>
@@ -156,15 +156,16 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '25px', background: 'rgba(212, 175, 55, 0.05)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(212, 175, 55, 0.2)` }}>
+                {/* 🚀 تعديل الـ Grid ليصبح 4 أعمدة بدلاً من 3 لاستيعاب فترة السداد */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '20px', marginBottom: '25px', background: 'rgba(212, 175, 55, 0.05)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(212, 175, 55, 0.2)` }}>
                     
                     {/* 🚀 عرض العقارات المجمعة بوضوح */}
                     <div style={{ zIndex: 90 }}>
-                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🏢 العقارات/المشاريع المجمعة</label>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🏢 العقارات/المشاريع</label>
                         <div className="glass-input-field" style={{ background: '#f8fafc', color: THEME.coffeeDark, minHeight: '43px', display: 'flex', alignItems: 'center', padding: '5px 15px', border: `1px solid ${THEME.goldAccent}50` }}>
                             {logic.currentClaim.project_ids?.length > 1 ? (
                                 <span style={{ color: THEME.coffeeDark, fontWeight: 900 }}>
-                                    🚀 مستخلص مجمع لـ ({logic.currentClaim.project_ids.length}) فلل/مواقع
+                                    🚀 مستخلص مجمع لـ ({logic.currentClaim.project_ids.length}) مواقع
                                 </span>
                             ) : (
                                 <span style={{ fontWeight: 800 }}>{logic.assignments?.find((a:any) => a.project_id === logic.currentClaim.project_ids?.[0])?.projects?.Property || 'عقار واحد'}</span>
@@ -176,8 +177,21 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>📅 تاريخ المستخلص</label>
                         <input type="date" className="glass-input-field" value={logic.currentClaim.date} onChange={e => logic.setCurrentClaim({...logic.currentClaim, date: e.target.value})} />
                     </div>
+
+                    {/* 🚀 الحقل الجديد: فترة السداد */}
                     <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🛡️ نسبة الدفعة المحتجزة (ضمان أعمال) %</label>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>⏳ فترة السداد (يوم)</label>
+                        <input 
+                            type="number" 
+                            min="0"
+                            className="glass-input-field" 
+                            value={logic.currentClaim.payment_period_days || ''} 
+                            onChange={e => logic.setCurrentClaim({...logic.currentClaim, payment_period_days: Number(e.target.value)})} 
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🛡️ نسبة الحجز %</label>
                         <input type="number" className="glass-input-field" value={logic.currentClaim.retention_percent} onChange={e => logic.setCurrentClaim({...logic.currentClaim, retention_percent: e.target.value})} />
                     </div>
                 </div>

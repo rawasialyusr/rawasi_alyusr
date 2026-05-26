@@ -22,10 +22,14 @@ export default function MaterialReceiptPrintModal({ isOpen, onClose, logic, rece
     const totalAmount = receiptItems.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0);
 
     return createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', flexDirection: 'column', alignItems: 'center', overflowY: 'auto', padding: '40px 20px', direction: 'rtl' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', overflowY: 'auto', padding: '40px 15px', direction: 'rtl' }}>
             
-            {/* 🖨️ ستايلات الطباعة */}
+            {/* 🖨️ ستايلات الطباعة والتصميم العصري */}
             <style dangerouslySetInnerHTML={{__html: `
+                .print-page {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
                 @media print {
                     body * { visibility: hidden; }
                     .no-print { display: none !important; }
@@ -35,112 +39,128 @@ export default function MaterialReceiptPrintModal({ isOpen, onClose, logic, rece
                         left: 0; 
                         top: 0; 
                         width: 100%; 
+                        max-width: 100%;
+                        height: auto;
                         box-shadow: none !important; 
-                        padding: 0 !important; 
+                        padding: 10mm !important; 
                         margin: 0 !important; 
                         background: white !important;
+                        border-radius: 0 !important;
                     }
-                    @page { size: A4 portrait; margin: 10mm; }
-                    .modern-table { page-break-inside: auto; }
-                    .modern-table tr { page-break-inside: avoid; page-break-after: auto; }
+                    @page { size: A4 portrait; margin: 0; }
+                    .modern-table th { background: #f1f5f9 !important; color: #0f172a !important; border-bottom: 2px solid #cbd5e1 !important; }
                 }
-                .modern-table th, .modern-table td { padding: 12px; text-align: center; border: 1px solid #cbd5e1; }
-                .modern-table th { background: #1e293b; color: white; font-weight: 900; }
-                .modern-table td { color: #334155; font-size: 14px; font-weight: 700; }
+                
+                /* ستايل الجدول العصري */
+                .modern-table th { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; font-weight: 900; padding: 14px 10px; border: none; }
+                .modern-table th:first-child { border-top-right-radius: 12px; }
+                .modern-table th:last-child { border-top-left-radius: 12px; }
+                .modern-table td { padding: 14px 10px; color: #334155; font-size: 14px; font-weight: 800; border-bottom: 1px solid #f1f5f9; }
+                .modern-table tbody tr:nth-child(even) { background-color: #f8fafc; }
+                .modern-table tbody tr:hover { background-color: #f1f5f9; }
             `}} />
 
             {/* 🖨️ أزرار التحكم */}
-            <div className="no-print" style={{ display: 'flex', gap: '15px', marginBottom: '20px', width: '100%', maxWidth: '210mm' }}>
-                <button onClick={() => window.print()} style={{ flex: 1, padding: '15px', background: THEME.primary, color: 'white', border: 'none', borderRadius: '12px', fontWeight: 900, cursor: 'pointer', fontSize: '16px', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
+            <div className="no-print" style={{ display: 'flex', gap: '15px', marginBottom: '20px', width: '100%', maxWidth: '800px' }}>
+                <button onClick={() => window.print()} style={{ flex: 1, padding: '15px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 900, cursor: 'pointer', fontSize: '16px', boxShadow: '0 10px 25px rgba(37, 99, 235, 0.3)', transition: '0.2s' }}>
                     🖨️ طباعة إذن التوريد
                 </button>
-                <button onClick={onClose} style={{ padding: '15px 30px', background: 'white', color: '#ef4444', border: '2px solid #ef4444', borderRadius: '12px', fontWeight: 900, cursor: 'pointer' }}>
+                <button onClick={onClose} style={{ padding: '15px 30px', background: 'white', color: '#ef4444', border: 'none', borderRadius: '16px', fontWeight: 900, cursor: 'pointer', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', transition: '0.2s' }}>
                     إلغاء وإغلاق
                 </button>
             </div>
 
-            {/* 📄 ورقة الطباعة (A4 Size) */}
-            <div className="print-page" style={{ width: '100%', maxWidth: '210mm', minHeight: '297mm', background: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', color: 'black' }}>
+            {/* 📄 ورقة الطباعة (Auto-fit on screen, A4 on print) */}
+            <div className="print-page" style={{ position: 'relative', width: '95%', maxWidth: '800px', minHeight: 'fit-content', background: 'white', padding: '45px', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', color: 'black', overflow: 'hidden' }}>
                 
-                {/* هيدر الشركة */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #1e3a8a', paddingBottom: '20px', marginBottom: '30px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <img src="/logo.png" alt="Rawasi Logo" style={{ height: '60px', objectFit: 'contain' }} onError={(e: any) => e.target.style.display = 'none'} />
-                        <div>
-                            <h1 style={{ margin: 0, color: '#1e3a8a', fontSize: '28px', fontWeight: 900 }}>RAWASI <span style={{ color: '#f59e0b' }}>AL-YUSR</span></h1>
-                            <p style={{ margin: '5px 0 0 0', color: '#64748b', fontSize: '14px', fontWeight: 800 }}>إدارة المشتريات والمخازن</p>
+                {/* 🌟 علامة مائية (Watermark) */}
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/logo.png)', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundSize: '50%', opacity: 0.03, pointerEvents: 'none', zIndex: 0 }}></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                    {/* هيدر الشركة */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #f1f5f9', paddingBottom: '20px', marginBottom: '30px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <img src="/logo.png" alt="Rawasi Logo" style={{ height: '70px', objectFit: 'contain' }} onError={(e: any) => e.target.style.display = 'none'} />
+                            <div>
+                                <h1 style={{ margin: 0, color: '#0f172a', fontSize: '28px', fontWeight: 900, letterSpacing: '-0.5px' }}>RAWASI <span style={{ color: THEME.goldAccent || '#d97706' }}>AL-YUSR</span></h1>
+                                <p style={{ margin: '5px 0 0 0', color: '#64748b', fontSize: '14px', fontWeight: 800 }}>إدارة المشتريات والمخازن</p>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: 'left' }}>
+                            <h2 style={{ margin: 0, color: THEME.primary || '#2563eb', fontSize: '24px', fontWeight: 900, background: '#eff6ff', padding: '10px 20px', borderRadius: '12px', display: 'inline-block' }}>إذن استلام خامات (وارد)</h2>
+                            <div style={{ marginTop: '15px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                <span style={{ fontWeight: 900, fontSize: '13px', color: '#475569' }}>التاريخ: <b style={{ color: '#0f172a' }}>{masterData.exp_date}</b></span>
+                                <span style={{ fontWeight: 900, fontSize: '13px', color: '#475569' }}>رقم الإذن: <b style={{ color: '#ef4444', background: '#fef2f2', padding: '2px 8px', borderRadius: '6px' }}>#{receiptId.slice(-6).toUpperCase()}</b></span>
+                            </div>
                         </div>
                     </div>
-                    <div style={{ textAlign: 'left' }}>
-                        <h2 style={{ margin: 0, color: '#1e3a8a', fontSize: '22px', fontWeight: 900, background: '#f1f5f9', padding: '8px 15px', borderRadius: '8px' }}>إذن استلام خامات (وارد)</h2>
-                        <p style={{ margin: '10px 0 0 0', fontWeight: 900, fontSize: '14px' }}>التاريخ: {masterData.exp_date}</p>
-                        <p style={{ margin: '5px 0 0 0', fontWeight: 900, fontSize: '14px', color: '#dc2626' }}>رقم الإذن: {receiptId.slice(-6).toUpperCase()}</p>
-                    </div>
-                </div>
 
-                {/* بيانات الفاتورة */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f8fafc', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #e2e8f0' }}>
-                    <div>
-                        <p style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 800, color: '#64748b' }}>المشروع الموجه له:</p>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1e293b' }}>🏢 {masterData.project?.Property || '---'}</h3>
+                    {/* بيانات الفاتورة المتقدمة */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '35px' }}>
+                        <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: 900, color: '#64748b', textTransform: 'uppercase' }}>🏢 المشروع الموجه له الخامات</p>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1e293b' }}>{masterData.project?.Property || '---'}</h3>
+                        </div>
+                        <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: 900, color: '#64748b', textTransform: 'uppercase' }}>👤 المورد / جهة التوريد</p>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1e293b' }}>{masterData.supplier?.name || '---'}</h3>
+                        </div>
                     </div>
-                    <div style={{ textAlign: 'left' }}>
-                        <p style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 800, color: '#64748b' }}>المورد / التاجر:</p>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1e293b' }}>👤 {masterData.supplier?.name || '---'}</h3>
-                    </div>
-                </div>
 
-                {/* جدول الأصناف */}
-                <table className="modern-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
-                    <thead>
-                        <tr>
-                            <th style={{ width: '5%' }}>م</th>
-                            <th style={{ width: '40%', textAlign: 'right' }}>اسم الخامة / البيان</th>
-                            <th style={{ width: '10%' }}>الكمية</th>
-                            <th style={{ width: '10%' }}>الوحدة</th>
-                            <th style={{ width: '15%' }}>سعر الوحدة</th>
-                            <th style={{ width: '20%' }}>الإجمالي (SAR)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {receiptItems.map((item: any, idx: number) => (
-                            <tr key={idx}>
-                                <td>{idx + 1}</td>
-                                <td style={{ textAlign: 'right', fontWeight: 900 }}>{item.work_item}</td>
-                                <td style={{ fontWeight: 900, color: '#2563eb' }}>{item.quantity}</td>
-                                <td>{item.unit}</td>
-                                <td>{formatCurrency(item.unit_price)}</td>
-                                <td style={{ fontWeight: 900, color: '#166534' }}>{formatCurrency(item.total_price)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                    {/* جدول الأصناف العصري */}
+                    <div style={{ borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', marginBottom: '35px' }}>
+                        <table className="modern-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ width: '5%' }}>م</th>
+                                    <th style={{ width: '40%', textAlign: 'right' }}>اسم الخامة / البيان</th>
+                                    <th style={{ width: '10%' }}>الكمية</th>
+                                    <th style={{ width: '10%' }}>الوحدة</th>
+                                    <th style={{ width: '15%' }}>سعر الوحدة</th>
+                                    <th style={{ width: '20%' }}>الإجمالي (SAR)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {receiptItems.map((item: any, idx: number) => (
+                                    <tr key={idx}>
+                                        <td style={{ color: '#94a3b8' }}>{idx + 1}</td>
+                                        <td style={{ textAlign: 'right', fontWeight: 900, color: '#0f172a' }}>{item.work_item}</td>
+                                        <td style={{ fontWeight: 900, color: THEME.primary || '#2563eb' }}>{item.quantity}</td>
+                                        <td>{item.unit}</td>
+                                        <td>{formatCurrency(item.unit_price)}</td>
+                                        <td style={{ fontWeight: 900, color: '#166534' }}>{formatCurrency(item.total_price)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
 
-                {/* الإجمالي والإقرار */}
-                <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '50px' }}>
-                    <div style={{ flex: 1.5, background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px dashed #cbd5e1', fontSize: '12px', color: '#475569', lineHeight: '1.6' }}>
-                        <strong style={{ color: '#0f172a', display: 'block', marginBottom: '5px' }}>إقرار استلام مخزني:</strong>
-                        أقر أنا أمين المخزن / مهندس الموقع الموقع أدناه، باستلام كافة المواد والخامات المذكورة أعلاه بحالة جيدة ومطابقة للمواصفات، وقد تم إيداعها بعهدة المشروع المذكور.
+                    {/* الإجمالي والإقرار */}
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'stretch', marginBottom: '50px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: '1 1 300px', background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px dashed #cbd5e1', fontSize: '13px', color: '#475569', lineHeight: '1.8' }}>
+                            <strong style={{ color: '#0f172a', display: 'block', marginBottom: '8px', fontSize: '15px' }}>📝 إقرار استلام مخزني:</strong>
+                            أقر أنا أمين المخزن / مهندس الموقع الموقع أدناه، باستلام كافة المواد والخامات المذكورة أعلاه بحالة جيدة ومطابقة للمواصفات، وقد تم إيداعها بعهدة المشروع المذكور وتوريدها للموقع الفعلي.
+                        </div>
+                        <div style={{ flex: '1 1 250px', background: `linear-gradient(135deg, ${THEME.goldAccent || '#ca8a04'}15, transparent)`, padding: '20px', borderRadius: '16px', border: `2px solid ${THEME.goldAccent || '#ca8a04'}`, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 900, color: '#b45309' }}>إجمالي قيمة الإذن</span>
+                            <div style={{ fontSize: '32px', fontWeight: 900, color: '#0f172a', margin: '5px 0' }}>{formatCurrency(totalAmount)}</div>
+                        </div>
                     </div>
-                    <div style={{ flex: 1, background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '2px solid #1e293b', textAlign: 'center' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#64748b' }}>إجمالي قيمة الإذن</span>
-                        <div style={{ fontSize: '24px', fontWeight: 900, color: '#1e293b', margin: '5px 0' }}>{formatCurrency(totalAmount)}</div>
-                    </div>
-                </div>
 
-                {/* التوقيعات */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', textAlign: 'center', marginTop: 'auto', paddingTop: '30px', borderTop: '2px dashed #e2e8f0' }}>
-                    <div>
-                        <p style={{ fontWeight: 900, color: '#475569', marginBottom: '40px', fontSize: '14px' }}>أمين المخزن (المستلم)</p>
-                        <div style={{ borderBottom: '1.5px solid #94a3b8', width: '80%', margin: '0 auto' }}></div>
-                    </div>
-                    <div>
-                        <p style={{ fontWeight: 900, color: '#475569', marginBottom: '40px', fontSize: '14px' }}>مهندس الموقع (الاعتماد)</p>
-                        <div style={{ borderBottom: '1.5px solid #94a3b8', width: '80%', margin: '0 auto' }}></div>
-                    </div>
-                    <div>
-                        <p style={{ fontWeight: 900, color: '#475569', marginBottom: '40px', fontSize: '14px' }}>المدير المالي (التوجيه)</p>
-                        <div style={{ borderBottom: '1.5px solid #94a3b8', width: '80%', margin: '0 auto' }}></div>
+                    {/* التوقيعات (بتصميم هادي) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '30px', textAlign: 'center', marginTop: 'auto', paddingTop: '40px', borderTop: '2px dashed #e2e8f0' }}>
+                        <div>
+                            <p style={{ fontWeight: 900, color: '#64748b', marginBottom: '50px', fontSize: '14px' }}>أمين المخزن (المستلم)</p>
+                            <div style={{ borderBottom: '2px solid #cbd5e1', width: '70%', margin: '0 auto' }}></div>
+                        </div>
+                        <div>
+                            <p style={{ fontWeight: 900, color: '#64748b', marginBottom: '50px', fontSize: '14px' }}>مهندس الموقع (الاعتماد)</p>
+                            <div style={{ borderBottom: '2px solid #cbd5e1', width: '70%', margin: '0 auto' }}></div>
+                        </div>
+                        <div>
+                            <p style={{ fontWeight: 900, color: '#64748b', marginBottom: '50px', fontSize: '14px' }}>المدير المالي (التوجيه)</p>
+                            <div style={{ borderBottom: '2px solid #cbd5e1', width: '70%', margin: '0 auto' }}></div>
+                        </div>
                     </div>
                 </div>
 
