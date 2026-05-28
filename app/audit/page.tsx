@@ -6,6 +6,9 @@ import { THEME } from '@/lib/theme';
 
 export default function AccountingAuditPage() {
     const logic = useAdvancedAuditLogic();
+    
+    // 📑 حالة لتخزين الـ IDs المختارة للمسح الجماعي
+    const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
     // 🚀 تصنيف الأخطاء لعرضها في أقسام منفصلة
     const errorCategories = [
@@ -16,14 +19,63 @@ export default function AccountingAuditPage() {
         { key: 'مفقود', title: 'مراجع مفقودة (المستند الأصلي محذوف)', icon: '🔗', color: '#d97706', bg: '#fef3c7' },
     ];
 
+    // 🔄 معالج اختيار/إلغاء اختيار عنصر واحد
+    const handleToggleSelect = (id: string) => {
+        setSelectedIds(prev => 
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    // 🔄 معالج اختيار/إلغاء اختيار كل العناصر داخل قسم (تصنيف) معين
+    const handleToggleSelectCategory = (catErrors: any[]) => {
+        const catIds = catErrors.map(e => e.error_id);
+        const isAllChecked = catIds.every(id => selectedIds.includes(id));
+
+        if (isAllChecked) {
+            // إلغاء تحديد عناصر هذا القسم فقط
+            setSelectedIds(prev => prev.filter(id => !catIds.includes(id)));
+        } else {
+            // تحديد عناصر هذا القسم بالكامل فوق التحديد الحالي دون تكرار
+            setSelectedIds(prev => [...new Set([...prev, ...catIds])]);
+        }
+    };
+
+    // 🗑️ معالج الحذف الجماعي للعناصر المحددة
+    const handleBulkDelete = async () => {
+        if (confirm(`⚠️ هل أنت متأكد من الحذف النهائي لـ (${selectedIds.length}) من القيود/التشوهات المحددة؟`)) {
+            try {
+                // تنفيذ الحذف سطر وراء سطر بناءً على الـ logic المتاح لديك
+                for (const id of selectedIds) {
+                    const errorItem = logic.errors.find((e: any) => e.error_id === id);
+                    if (errorItem) {
+                        await logic.deleteError(errorItem.error_id, errorItem.table_name);
+                    }
+                }
+                alert('تم حذف العناصر المحددة بنجاح والتنظيف من الدفاتر.');
+                setSelectedIds([]); // تصفير قائمة التحديد بعد الحذف
+            } catch (err) {
+                console.error("Bulk delete error:", err);
+            }
+        }
+    };
+
     return (
         <MasterPage title="الرادار المحاسبي" subtitle="لوحة التدقيق التفصيلية واكتشاف التشوهات">
             <style>{`
                 .audit-stat-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; align-items: center; justify-content: space-between; }
-                .err-row { display: grid; grid-template-columns: 40px 1fr 1.5fr 2fr 1fr; gap: 15px; align-items: center; padding: 15px; border-bottom: 1px dashed #e2e8f0; transition: 0.2s; }
+                /* 🚀 تم تحديث الجريد ليتسع لعمود التشيك بوكس الجديد */
+                .err-row { display: grid; grid-template-columns: 40px 40px 1fr 1.5fr 2fr 1fr; gap: 15px; align-items: center; padding: 15px; border-bottom: 1px dashed #e2e8f0; transition: 0.2s; }
                 .err-row:hover { background: #f8fafc; }
                 .section-container { background: white; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.03); margin-bottom: 30px; }
                 .section-header { padding: 15px 20px; color: white; display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 16px; }
+                
+                /* ستايل مخصص للتشيك بوكس ليكون واضحاً وكبيراً */
+                .audit-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: ${THEME.primary}; }
+                
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-5px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
             `}</style>
 
             {/* 📊 الإحصائيات العلوية */}
@@ -51,9 +103,18 @@ export default function AccountingAuditPage() {
                     onChange={(e) => logic.setSearchQuery(e.target.value)}
                     style={{ padding: '10px 20px', borderRadius: '10px', border: '2px solid #f1f5f9', outline: 'none', width: '350px', fontWeight: 700 }}
                 />
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    {/* 🚀 زر مسح للمكل يظهر فقط عندما يكون طول المحدد أكبر من صفر */}
+                    {selectedIds.length > 0 && (
+                        <button 
+                            onClick={handleBulkDelete} 
+                            style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', animation: 'fadeIn 0.2s', display: 'flex', alignItems: 'center', gap: '5px' }}
+                        >
+                            🗑️ حذف المحدد ({selectedIds.length})
+                        </button>
+                    )}
                     <button onClick={logic.exportToExcel} style={{ background: '#10b981', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}>📥 تصدير التقرير Excel</button>
-                    <button onClick={() => logic.refetch()} style={{ background: THEME.primary, color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}>🔄 تحديث الرادار</button>
+                    <button onClick={() => { logic.refetch(); setSelectedIds([]); }} style={{ background: THEME.primary, color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}>🔄 تحديث الرادار</button>
                 </div>
             </div>
 
@@ -73,12 +134,23 @@ export default function AccountingAuditPage() {
                         
                         if (catErrors.length === 0) return null; // إخفاء القسم لو مفيهوش أخطاء
 
+                        // 🔍 التحقق إذا كانت كل عناصر هذا القسم مختارة أم لا
+                        const catIds = catErrors.map(e => e.error_id);
+                        const isAllCatChecked = catIds.length > 0 && catIds.every(id => selectedIds.includes(id));
+
                         return (
                             <div key={cat.key} className="section-container">
                                 <div className="section-header" style={{ background: cat.color }}>
                                     <span>{cat.icon}</span> {cat.title} ({catErrors.length})
                                 </div>
-                                <div style={{ background: '#f8fafc', padding: '10px 15px', display: 'grid', gridTemplateColumns: '40px 1fr 1.5fr 2fr 1fr', gap: '15px', fontWeight: 900, color: '#475569', fontSize: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                                <div style={{ background: '#f8fafc', padding: '10px 15px', display: 'grid', gridTemplateColumns: '40px 40px 1fr 1.5fr 2fr 1fr', gap: '15px', fontWeight: 900, color: '#475569', fontSize: '12px', borderBottom: '1px solid #e2e8f0', alignItems: 'center' }}>
+                                    {/* 🔳 تشيك بوكس "تحديد الكل" الخاص بالقسم الحالي */}
+                                    <input 
+                                        type="checkbox" 
+                                        className="audit-checkbox"
+                                        checked={isAllCatChecked}
+                                        onChange={() => handleToggleSelectCategory(catErrors)}
+                                    />
                                     <span>م</span>
                                     <span>التاريخ</span>
                                     <span>مصدر القيد والـ ID الأصلي</span>
@@ -88,13 +160,21 @@ export default function AccountingAuditPage() {
                                 
                                 {catErrors.map((err: any, idx: number) => (
                                     <div key={err.error_id} className="err-row">
+                                        {/* 🔳 التشيك بوكس الفردي لكل خطأ */}
+                                        <input 
+                                            type="checkbox" 
+                                            className="audit-checkbox"
+                                            checked={selectedIds.includes(err.error_id)}
+                                            onChange={() => handleToggleSelect(err.error_id)}
+                                        />
+                                        
                                         <div style={{ color: '#94a3b8', fontWeight: 900 }}>{idx + 1}</div>
                                         
                                         <div style={{ fontSize: '13px', fontWeight: 800, color: '#334155' }}>
                                             {err.error_date}
                                         </div>
 
-                                        {/* 🚀 هنا بنعرض المصدر والآي دي بوضوح تام */}
+                                        {/* المصدر والآي دي */}
                                         <div>
                                             <div style={{ display: 'inline-block', background: cat.bg, color: cat.color, padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 900, marginBottom: '5px' }}>
                                                 المصدر: {err.source_type || 'غير محدد'}

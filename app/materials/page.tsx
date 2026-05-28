@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import * as XLSX from 'xlsx'; // 🚀 استدعاء مكتبة الإكسل
 import { useMaterialsLogic } from './materials_logic';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
@@ -178,6 +179,8 @@ export default function MaterialsPage() {
             // 🚀 دمج معلومات الفاتورة الأب مع السطر عشان نستخدمها في مودال الصرف
             groups[id].items.push({
                 ...row,
+                quantity: row.quantity || 0, // ✅ تأكيد قراءة كمية التوريد من الـ Line الأصلي
+                available_qty: row.available_qty !== undefined ? row.available_qty : (row.quantity || 0), // ✅ تحديد صريح للكمية المتاحة لو موجودة، وإلا تاخد الـ quantity العادية
                 project_id: row.project_id || groups[id].project_id
             });
         });
@@ -203,13 +206,57 @@ export default function MaterialsPage() {
         return groupedData.slice(startIndex, startIndex + rowsPerPage);
     }, [groupedData, currentPage, rowsPerPage]);
 
+    // =========================================================================
+    // 📥 دوال التصدير (Excel & PDF)
+    // ==========================================
+    const exportToExcel = () => {
+        const excelData: any[] = [];
+        groupedData.forEach((group: any) => {
+            group.items.forEach((item: any) => {
+                excelData.push({
+                    "رقم الفاتورة": group.receipt_no || '---',
+                    "تاريخ الفاتورة": group.exp_date,
+                    "المشروع": group.project?.Property || '---',
+                    "المورد": group.supplier?.name || '---',
+                    "نوع الفاتورة": group.receipt_type || '---',
+                    "الخامة الموردة": item.work_item || item.item_name,
+                    "الكمية": item.quantity,
+                    "الوحدة": item.unit,
+                    "سعر الوحدة": Number(item.unit_price || 0),
+                    "إجمالي السطر": Number(item.total_price || 0),
+                    "الحالة المحاسبية": group.is_posted ? 'مرحل' : 'مسودة'
+                });
+            });
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير التوريدات");
+
+        if (!worksheet["!cols"]) worksheet["!cols"] = [];
+        worksheet["!cols"] = [
+            { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 35 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+        ];
+        worksheet['!dir'] = 'rtl';
+
+        XLSX.writeFile(workbook, `Material_Receipts_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    const handlePrintPDF = () => {
+        const allGroupIds = groupedData.map((g: any) => g.id);
+        setExpandedGroups(allGroupIds);
+        setTimeout(() => {
+            window.print();
+        }, 500);
+    };
+
     return (
-        <div className="clean-page">
+        <div className="clean-page print-container">
             <MasterPage title="مركز توريد خامات المشاريع" subtitle="إصدار فواتير الخامات، توجيهها للمشاريع، وربطها بحسابات الموردين والعملاء للخصم التلقائي">
                 
                 <RawasiSidebarManager 
                     actions={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <button onClick={logic.openAddModal} className="btn-main-glass gold">
                                 🛒 إصدار فاتورة توريد جديدة
                             </button>
@@ -257,10 +304,19 @@ export default function MaterialsPage() {
                                     </button>
                                 </>
                             )}
+
+                            <hr style={{ borderColor: 'rgba(255,255,255,0.2)', margin: '10px 0' }} />
+                            
+                            <button onClick={exportToExcel} className="btn-main-glass" style={{ background: '#10b981', color: 'white' }}>
+                                📊 تصدير الخامات (Excel)
+                            </button>
+                            <button onClick={handlePrintPDF} className="btn-main-glass" style={{ background: '#6366f1', color: 'white' }}>
+                                🖨️ طباعة التقرير (PDF)
+                            </button>
                         </div>
                     }
                     summary={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: 'white' }}>
+                        <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: 'white' }}>
                             <div className="kpi-box danger">
                                 <span>إجمالي قيمة الخامات (للفلتر الحالي)</span>
                                 <strong>{formatCurrency(filteredTotalCost)}</strong>
@@ -334,10 +390,24 @@ export default function MaterialsPage() {
                     
                     .arrow-icon { display: inline-block; transition: transform 0.2s; margin-left: 8px; color: ${THEME.goldAccent || '#ca8a04'}; font-size: 14px; }
                     .arrow-expanded { transform: rotate(90deg); }
+
+                    /* 🖨️ تنسيقات الطباعة */
+                    @media print {
+                        @page { size: A4 landscape; margin: 10mm; }
+                        body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .no-print { display: none !important; }
+                        .print-container { padding: 0 !important; }
+                        .apple-glass-filter-bar { display: none !important; }
+                        .tree-table { border: 1px solid #000; }
+                        .tree-thead th { background: #eee !important; color: #000 !important; border: 1px solid #000; }
+                        .master-group-row td { border: 1px solid #000; }
+                        .child-table th { background: #ccc !important; color: #000 !important; border: 1px solid #000; }
+                        .child-table td { border: 1px solid #000; }
+                    }
                 `}</style>
 
                 {/* 🚀 شريط الفلاتر الزجاجي الأبيض أعلى الجدول */}
-                <div className="apple-glass-filter-bar">
+                <div className="apple-glass-filter-bar no-print">
                     <div>
                         <label style={{ fontSize: '11px', color: '#475569', marginBottom: '6px', display: 'block', fontWeight: 900 }}>بحث عام بالنص</label>
                         <input 
@@ -407,7 +477,7 @@ export default function MaterialsPage() {
                         <table className="tree-table">
                             <thead className="tree-thead">
                                 <tr>
-                                    <th style={{ width: '5%' }}>
+                                    <th className="no-print" style={{ width: '5%' }}>
                                         <input 
                                             type="checkbox" 
                                             checked={paginatedGroups.length > 0 && paginatedGroups.every(g => g._selected)}
@@ -420,7 +490,7 @@ export default function MaterialsPage() {
                                     <th style={{ width: '20%' }}>التوجيه والمورد</th>
                                     <th style={{ width: '15%' }}>الحالة المحاسبية</th>
                                     <th style={{ width: '15%' }}>إجمالي الفاتورة</th>
-                                    <th style={{ width: '15%' }}>الإجراءات</th>
+                                    <th className="no-print" style={{ width: '15%' }}>الإجراءات</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -435,7 +505,7 @@ export default function MaterialsPage() {
                                                     toggleGroup(group.id);
                                                 }
                                             }}>
-                                                <td>
+                                                <td className="no-print">
                                                     <input 
                                                         type="checkbox" 
                                                         checked={group._selected}
@@ -444,7 +514,7 @@ export default function MaterialsPage() {
                                                     />
                                                 </td>
                                                 <td>
-                                                    <span className={`arrow-icon ${isExpanded ? 'arrow-expanded' : ''}`}>◀</span>
+                                                    <span className={`arrow-icon no-print ${isExpanded ? 'arrow-expanded' : ''}`}>◀</span>
                                                     <div style={{ display: 'inline-block', fontWeight: 900, color: THEME.coffeeDark, background: THEME.sandDark, padding: '4px 10px', borderRadius: '8px', fontSize: '12px' }}>
                                                         #{group.receipt_no || '---'}
                                                     </div>
@@ -474,7 +544,7 @@ export default function MaterialsPage() {
                                                         {formatCurrency(group.total_receipt_price)}
                                                     </span>
                                                 </td>
-                                                <td>
+                                                <td className="no-print">
                                                     <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
                                                         <button 
                                                             onClick={(e) => { 
@@ -484,7 +554,7 @@ export default function MaterialsPage() {
                                                             }} 
                                                             style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 900, color: THEME.primary, fontSize: '11px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
                                                         >
-                                                            🖨️ طباعة
+                                                            🖨️ طباعة الفاتورة
                                                         </button>
                                                         
                                                         {!group.is_posted ? (
@@ -550,10 +620,10 @@ export default function MaterialsPage() {
                                                                     <tr>
                                                                         <th style={{ width: '25%', textAlign: 'right' }}>الخامة الموردة</th>
                                                                         <th style={{ width: '20%' }}>توجيه الميزانية (BOQ)</th>
-                                                                        <th style={{ width: '15%' }}>الكمية المتاحة للصرف</th>
+                                                                        <th style={{ width: '15%' }}>الكمية الموردة (الفاتورة)</th>
                                                                         <th style={{ width: '15%' }}>سعر الوحدة</th>
                                                                         <th style={{ width: '15%' }}>إجمالي السطر</th>
-                                                                        <th style={{ width: '10%', textAlign: 'center' }}>إجراءات السطر</th>
+                                                                        <th className="no-print" style={{ width: '10%', textAlign: 'center' }}>إجراءات السطر</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -568,13 +638,12 @@ export default function MaterialsPage() {
                                                                                 </span>
                                                                             </td>
                                                                             <td style={{ fontWeight: 900 }}>
-                                                                                {item.available_qty || item.quantity} <span style={{fontSize:'10px', color:'#94a3b8'}}>{item.unit}</span>
+                                                                                {item.quantity} <span style={{fontSize:'10px', color:'#94a3b8'}}>{item.unit}</span>
                                                                             </td>
                                                                             <td style={{ fontWeight: 800 }}>{formatCurrency(item.unit_price)}</td>
                                                                             <td style={{ fontWeight: 900, color: THEME.danger }}>{formatCurrency(item.total_price)}</td>
                                                                             
-                                                                            {/* 🚀 زرار الصرف المباشر للفيلا أو المقاول */}
-                                                                            <td style={{ textAlign: 'center' }}>
+                                                                            <td className="no-print" style={{ textAlign: 'center' }}>
                                                                                 <button 
                                                                                     onClick={(e) => { 
                                                                                         e.stopPropagation(); 
@@ -616,7 +685,7 @@ export default function MaterialsPage() {
 
                 {/* 🔢 نظام الترقيم والصفحات */}
                 {!logic.isLoading && groupedData.length > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid ${THEME.sandDark}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+                    <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid ${THEME.sandDark}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
                         <div style={{ fontSize: '13px', color: THEME.coffeeMain, fontWeight: 900 }}>
                             إجمالي الفواتير المطابقة: <b style={{ color: THEME.danger, fontSize: '16px' }}>{groupedData.length}</b> فاتورة
                         </div>
@@ -630,6 +699,7 @@ export default function MaterialsPage() {
                                 <option value={10}>عرض 10 فواتير</option>
                                 <option value={50}>عرض 50 فاتورة</option>
                                 <option value={100}>عرض 100 فاتورة</option>
+                                <option value={100000}>عرض الكل (للطباعة)</option>
                             </select>
                             
                             <div style={{ display: 'flex', gap: '8px' }}>

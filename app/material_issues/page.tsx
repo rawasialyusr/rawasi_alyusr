@@ -8,7 +8,7 @@ import { THEME } from '@/lib/theme';
 import { useMaterialIssuesLogic } from './material_issues_logic';
 import MaterialIssueModal from './MaterialIssueModal';
 import { useConfirm } from '@/components/ConfirmContext';
-import * as XLSX from 'xlsx'; // تأكد من تشغيل: npm install xlsx
+import * as XLSX from 'xlsx'; // 🚀 استدعاء مكتبة الإكسل
 
 // =========================================================================
 // 🧩 مكون ذكي للقائمة المنسدلة متعددة الاختيارات مع بحث (Custom Dropdown)
@@ -40,7 +40,7 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, 
     };
 
     return (
-        <div ref={dropdownRef} style={{ position: 'relative', flex: 1, minWidth: '250px' }}>
+        <div ref={dropdownRef} className="no-print" style={{ position: 'relative', flex: 1, minWidth: '250px' }}>
             <div style={{ fontSize: '13px', fontWeight: 900, marginBottom: '6px', color: '#475569', display: 'flex', justifyContent: 'space-between' }}>
                 <span>{title}</span>
                 {selected.length > 0 && (
@@ -147,6 +147,9 @@ export default function MaterialIssuesPage() {
         });
     }, [logic.issues, searchTerm, filterStatus, filterType, selectedProjects, selectedBoqs]);
 
+    // ==========================================
+    // 📥 دوال التصدير (Excel & PDF)
+    // ==========================================
     const handleExportExcel = () => {
         if (!filteredIssues || filteredIssues.length === 0) {
             alert("لا توجد بيانات لتصديرها!");
@@ -162,8 +165,8 @@ export default function MaterialIssuesPage() {
             'اسم الخامة': issue.item_name || '---',
             'الكمية': issue.quantity || 0,
             'الوحدة': issue.unit || '---',
-            'سعر الوحدة': issue.unit_price || 0,
-            'الإجمالي': issue.total_price || 0,
+            'سعر الوحدة': Number(issue.unit_price || 0),
+            'الإجمالي': Number(issue.total_price || 0),
             'مربوط ببند (BOQ)': issue.boq_item || '---',
             'الحالة المحاسبية': issue.is_posted ? 'مرحل ومقيد' : 'مسودة'
         }));
@@ -178,8 +181,15 @@ export default function MaterialIssuesPage() {
             {wch: 30}, {wch: 15}
         ];
         worksheet['!cols'] = wscols;
+        worksheet['!dir'] = 'rtl'; // لدعم اللغة العربية من اليمين لليسار
 
         XLSX.writeFile(workbook, `تقرير_صرف_خامات_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    const handlePrintPDF = () => {
+        setTimeout(() => {
+            window.print();
+        }, 500);
     };
 
     const summaryStats = useMemo(() => {
@@ -221,20 +231,24 @@ export default function MaterialIssuesPage() {
     const columns = [
         {
             header: (
-                <input 
-                    type="checkbox" 
-                    checked={paginatedData.length > 0 && paginatedData.every(r => r._selected)}
-                    onChange={logic.handleSelectAll}
-                    style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent || '#ca8a04' }}
-                />
+                <div className="no-print">
+                    <input 
+                        type="checkbox" 
+                        checked={paginatedData.length > 0 && paginatedData.every(r => r._selected)}
+                        onChange={logic.handleSelectAll}
+                        style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent || '#ca8a04' }}
+                    />
+                </div>
             ),
             render: (row: any) => row ? (
-                <input 
-                    type="checkbox" 
-                    checked={row._selected}
-                    onChange={() => logic.handleSelectRow(row.id)}
-                    style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent || '#ca8a04' }}
-                />
+                <div className="no-print">
+                    <input 
+                        type="checkbox" 
+                        checked={row._selected}
+                        onChange={() => logic.handleSelectRow(row.id)}
+                        style={{ transform: 'scale(1.4)', cursor: 'pointer', accentColor: THEME.goldAccent || '#ca8a04' }}
+                    />
+                </div>
             ) : null
         },
         { 
@@ -299,12 +313,12 @@ export default function MaterialIssuesPage() {
     ];
 
     return (
-        <div className="clean-page">
+        <div className="clean-page print-container">
             <MasterPage title="صرف الخامات للمواقع" subtitle="إدارة مسحوبات المقاولين واستهلاك المواد وتوجيه التكاليف للبنود">
                 
                 <RawasiSidebarManager 
                     actions={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                        <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
                             {(logic.selectedIds || []).length === 0 ? (
                                 <>
                                     <button 
@@ -316,9 +330,6 @@ export default function MaterialIssuesPage() {
                                         className="btn-main-glass"
                                     >
                                         📤 تسجيل إذن صرف جديد
-                                    </button>
-                                    <button onClick={handleExportExcel} className="btn-action-glass print" style={{ marginTop: '10px' }}>
-                                        🖨️ طباعة تقرير المنصرف (Excel)
                                     </button>
                                 </>
                             ) : (
@@ -355,10 +366,19 @@ export default function MaterialIssuesPage() {
                                     </button>
                                 </>
                             )}
+                            
+                            <hr style={{ borderColor: 'rgba(255,255,255,0.2)', margin: '10px 0' }} />
+                            
+                            <button onClick={handleExportExcel} className="btn-action-glass print" style={{ background: '#10b981', color: 'white' }}>
+                                📊 تصدير البيانات (Excel)
+                            </button>
+                            <button onClick={handlePrintPDF} className="btn-action-glass print" style={{ background: '#3b82f6', color: 'white' }}>
+                                🖨️ طباعة التقرير (PDF)
+                            </button>
                         </div>
                     }
                     summary={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             <div className="summary-card total">
                                 <span className="label">إجمالي تكلفة الخامات المفلترة</span>
                                 <span className="value">{formatCurrency(summaryStats.total)}</span>
@@ -400,7 +420,6 @@ export default function MaterialIssuesPage() {
                     .btn-action-glass.post { background: linear-gradient(135deg, #10b981, #059669); color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
                     .btn-action-glass.unpost { background: rgba(245, 158, 11, 0.2); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.5); }
                     .btn-action-glass.delete { background: rgba(239, 68, 68, 0.2); color: #b91c1c; border: 1px dashed rgba(239, 68, 68, 0.5); }
-                    .btn-action-glass.print { background: linear-gradient(135deg, #475569, #1e293b); color: white; box-shadow: 0 4px 15px rgba(71, 85, 105, 0.3); }
 
                     .summary-card { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; justify-content: center; border: 1px solid rgba(255,255,255,0.1); flex: 1; }
                     .summary-card .label { font-size: 10px; font-weight: 900; opacity: 0.8; margin-bottom: 4px; }
@@ -418,10 +437,21 @@ export default function MaterialIssuesPage() {
                     .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
                     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
                     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+                    /* 🖨️ تنسيقات الطباعة */
+                    @media print {
+                        @page { size: A4 landscape; margin: 10mm; }
+                        body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .no-print { display: none !important; }
+                        .print-container { padding: 0 !important; }
+                        .table-container { box-shadow: none !important; border: 1px solid #000; }
+                        table th { background-color: #f1f5f9 !important; color: #000 !important; border: 1px solid #000; }
+                        table td { border: 1px solid #000; }
+                    }
                 `}</style>
 
                 {/* 🔍 شريط الفلاتر الأساسية والبحث */}
-                <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, flexWrap: 'wrap' }}>
+                <div className="no-print" style={{ display: 'flex', gap: '15px', marginBottom: '15px', background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, flexWrap: 'wrap' }}>
                     <div style={{ flex: '1', minWidth: '250px' }}>
                         <input 
                             type="text" 
@@ -456,7 +486,7 @@ export default function MaterialIssuesPage() {
                 </div>
 
                 {/* 🚀 الفلاتر المتقدمة الجديدة (Multi-Select Dropdowns) */}
-                <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <div className="no-print" style={{ display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
                     <MultiSelectDropdown 
                         title="🏢 فلترة بأسماء الفلل والعقارات"
                         placeholder="اختر الفلل..."
@@ -483,7 +513,7 @@ export default function MaterialIssuesPage() {
                 />
 
                 {!logic.isLoading && filteredIssues.length > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+                    <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid ${THEME.sandDark || '#e2e8f0'}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
                         <div style={{ fontSize: '13px', color: THEME.coffeeMain || '#334155', fontWeight: 900 }}>
                             إجمالي السجلات المفلترة: <b style={{ color: THEME.danger || '#ef4444', fontSize: '16px' }}>{filteredIssues.length}</b>
                         </div>
@@ -497,6 +527,7 @@ export default function MaterialIssuesPage() {
                                 <option value={50}>عرض 50 سجل</option>
                                 <option value={100}>عرض 100 سجل</option>
                                 <option value={500}>عرض 500 سجل</option>
+                                <option value={100000}>عرض الكل (للطباعة)</option>
                             </select>
                             
                             <div style={{ display: 'flex', gap: '8px' }}>
