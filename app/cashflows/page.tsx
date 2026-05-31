@@ -7,7 +7,7 @@ import { useCashFlowsLogic } from './cash_flows_logic';
 import * as XLSX from 'xlsx';
 
 // =========================================================================
-// 🧩 مكون ذكي للقائمة المنسدلة متعددة الاختيارات مع بحث (Custom Dropdown)
+// 🧩 مكون ذكي للقائمة المنسدلة متعددة الاختيارات
 // =========================================================================
 const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, accentColor }: any) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -87,7 +87,6 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, 
                     </div>
                 </div>
             )}
-            
             <style>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
@@ -99,12 +98,11 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, 
 };
 
 // =========================================================================
-// 🚀 الصفحة الرئيسية
+// 🚀 الصفحة الرئيسية والمحرك المالي
 // =========================================================================
 export default function CashFlowsPage() {
     const logic = useCashFlowsLogic();
 
-    // حالة التحكم في فتح وإغلاق الشجرة التجميعية
     const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
     const toggleGroup = (groupName: string) => {
@@ -115,46 +113,54 @@ export default function CashFlowsPage() {
         }
     };
 
-    // 🚀 الفلاتر المتقدمة
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const [selectedPartners, setSelectedPartners] = useState<string[]>([]); 
 
-    // استخراج أسماء المشاريع المتاحة في الكاش فلو (بدون تكرار)
     const uniqueProjects = useMemo(() => {
         const projects = logic.cashFlows.map((row: any) => row.project?.Property).filter(Boolean);
         return Array.from(new Set(projects)) as string[];
     }, [logic.cashFlows]);
 
-    // استخراج أسماء الشركاء (العملاء/الموردين) المتاحين (بدون تكرار)
     const uniquePartners = useMemo(() => {
         const partners = logic.cashFlows.map((row: any) => row.partner?.name).filter(Boolean);
         return Array.from(new Set(partners)) as string[];
     }, [logic.cashFlows]);
 
-    // =========================================================================
-    // 🔍 تطبيق الفلاتر
-    // =========================================================================
+    // 🛡️ المحرك المصفح: تحديد نوع الحركة والمبلغ بدقة متناهية
+    const parseAmount = (val: any) => Math.abs(Number(String(val).replace(/,/g, '')) || 0);
+    
+    const getFlowDirection = (row: any) => {
+        const type = String(row.flow_type || '').toLowerCase().trim();
+        const source = String(row.source_type || '').toLowerCase().trim();
+        const rawAmount = Number(String(row.amount).replace(/,/g, '')) || 0;
+
+        // دعم كل المصطلحات الممكنة (إنجليزي/عربي/سندات)
+        if (['inflow', 'in', 'وارد', 'مقبوضات', 'قبض'].includes(type) || source === 'receipt_voucher') return 'inflow';
+        if (['outflow', 'out', 'منصرف', 'مدفوعات', 'صرف'].includes(type) || source === 'payment_voucher') return 'outflow';
+        
+        // لو مفيش تصنيف، نعتمد على إشارة المبلغ (موجب = وارد، سالب = منصرف)
+        if (rawAmount > 0) return 'inflow';
+        if (rawAmount < 0) return 'outflow';
+
+        return 'inflow'; // كاحتياطي أخير
+    };
+
+    // 🔍 الفلترة المتقدمة
     const filteredData = useMemo(() => {
         return logic.cashFlows.filter((row: any) => {
-            // فلتر البحث النصي
             const searchString = `${row.description || ''} ${row.reference_number || ''} ${row.project?.Property || ''} ${row.partner?.name || ''} ${row.sub_category || ''}`.toLowerCase();
             const matchesSearch = searchString.includes(logic.searchTerm.toLowerCase());
 
-            // فلتر نوع التدفق
-            const matchesType = logic.filterType === 'all' 
-                ? true 
-                : row.flow_type === logic.filterType;
+            const direction = getFlowDirection(row);
+            const matchesType = logic.filterType === 'all' ? true : direction === logic.filterType;
 
-            // فلتر التاريخ
-            const rowDate = new Date(row.transaction_date);
-            const matchesDateFrom = logic.dateFrom ? rowDate >= new Date(logic.dateFrom) : true;
-            const matchesDateTo = logic.dateTo ? rowDate <= new Date(logic.dateTo) : true;
+            const rowDateStr = row.transaction_date ? String(row.transaction_date).substring(0, 10) : '';
+            const matchesDateFrom = logic.dateFrom ? rowDateStr >= logic.dateFrom : true;
+            const matchesDateTo = logic.dateTo ? rowDateStr <= logic.dateTo : true;
 
-            // فلتر التوجيه (المشاريع)
             const projectName = row.project?.Property;
             const matchesProject = selectedProjects.length === 0 || (projectName && selectedProjects.includes(projectName));
 
-            // فلتر الشريك (العميل/المورد)
             const partnerName = row.partner?.name;
             const matchesPartner = selectedPartners.length === 0 || (partnerName && selectedPartners.includes(partnerName));
 
@@ -162,30 +168,38 @@ export default function CashFlowsPage() {
         });
     }, [logic.cashFlows, logic.searchTerm, logic.filterType, logic.dateFrom, logic.dateTo, selectedProjects, selectedPartners]);
 
-    // =========================================================================
-    // 🌳 تجميع الحركات أوتوماتيكياً وتحويلها لشجرة ماليّة بناءً على (الشريك)
-    // =========================================================================
+    // 📊 الإحصائيات الدقيقة للملخص (Summary Stats)
+    const summaryStats = useMemo(() => {
+        let totalIn = 0;
+        let totalOut = 0;
+
+        filteredData.forEach((row: any) => {
+            const amount = parseAmount(row.amount);
+            const direction = getFlowDirection(row);
+
+            if (direction === 'inflow') totalIn += amount;
+            else if (direction === 'outflow') totalOut += amount;
+        });
+
+        return { totalIn, totalOut, netCash: totalIn - totalOut };
+    }, [filteredData]);
+
+    // 🌳 تجميع الحركات للشجرة
     const treeGroupedData = useMemo(() => {
         const groups: { [key: string]: { name: string, totalIn: number, totalOut: number, items: any[] } } = {};
 
         filteredData.forEach((row: any) => {
-            // التجميع الأساسي هيكون على الشريك، ولو مفيش هيبقى حركات عامة
             const groupName = row.partner?.name || '📦 حركات عامة (بدون شريك محدد)';
             if (!groups[groupName]) {
-                groups[groupName] = {
-                    name: groupName,
-                    totalIn: 0,
-                    totalOut: 0,
-                    items: []
-                };
+                groups[groupName] = { name: groupName, totalIn: 0, totalOut: 0, items: [] };
             }
 
-            const amount = Number(row.amount) || 0;
-            if (row.flow_type === 'inflow') {
-                groups[groupName].totalIn += amount;
-            } else if (row.flow_type === 'outflow') {
-                groups[groupName].totalOut += amount;
-            }
+            const amount = parseAmount(row.amount);
+            const direction = getFlowDirection(row);
+
+            if (direction === 'inflow') groups[groupName].totalIn += amount;
+            else if (direction === 'outflow') groups[groupName].totalOut += amount;
+            
             groups[groupName].items.push(row);
         });
 
@@ -193,69 +207,44 @@ export default function CashFlowsPage() {
     }, [filteredData]);
 
     // =========================================================================
-    // 📊 الإحصائيات والسامري
-    // =========================================================================
-    const summaryStats = useMemo(() => {
-        let totalIn = 0;
-        let totalOut = 0;
-
-        filteredData.forEach((row: any) => {
-            const amount = Number(row.amount) || 0;
-            if (row.flow_type === 'inflow') totalIn += amount;
-            else if (row.flow_type === 'outflow') totalOut += amount;
-        });
-
-        return {
-            totalIn,
-            totalOut,
-            netCash: totalIn - totalOut
-        };
-    }, [filteredData]);
-
-    // =========================================================================
     // 🖨️ التصدير للإكسيل
     // =========================================================================
     const handleExportExcel = () => {
-        if (!filteredData || filteredData.length === 0) {
-            alert("لا توجد بيانات لتصديرها!");
-            return;
-        }
+        if (!filteredData || filteredData.length === 0) return alert("لا توجد بيانات لتصديرها!");
 
-        const excelData = filteredData.map((row: any) => ({
-            'التاريخ': row.transaction_date || '---',
-            'نوع التدفق': row.flow_type === 'inflow' ? 'وارد (+)' : 'منصرف (-)',
-            'المبلغ': row.amount || 0,
-            'التصنيف': row.category || '---',
-            'البيان الفرعي': row.sub_category || '---',
-            'طريقة الدفع': row.payment_method || '---',
-            'رقم المرجع': row.reference_number || '---',
-            'الخزينة/البنك': row.account?.name || '---',
-            'المشروع المربوط': row.project?.Property || '---',
-            'العميل / المورد': row.partner?.name || '---',
-            'ملاحظات': row.description || '---',
-            'المصدر': row.source_type === 'receipt_voucher' ? 'سند قبض' : row.source_type === 'payment_voucher' ? 'سند صرف' : 'أخرى'
-        }));
+        const excelData = filteredData.map((row: any) => {
+            const direction = getFlowDirection(row);
+            return {
+                'التاريخ': row.transaction_date ? String(row.transaction_date).substring(0, 10) : '---',
+                'نوع التدفق': direction === 'inflow' ? 'وارد (+)' : 'منصرف (-)',
+                'المبلغ': parseAmount(row.amount),
+                'التصنيف': row.category || '---',
+                'البيان الفرعي': row.sub_category || '---',
+                'طريقة الدفع': row.payment_method || '---',
+                'رقم المرجع': row.reference_number || '---',
+                'الخزينة/البنك': row.account?.name || '---',
+                'المشروع المربوط': row.project?.Property || '---',
+                'العميل / المورد': row.partner?.name || '---',
+                'ملاحظات': row.description || '---',
+                'المصدر': row.source_type === 'receipt_voucher' ? 'سند قبض' : row.source_type === 'payment_voucher' ? 'سند صرف' : 'أخرى'
+            };
+        });
 
         const worksheet = XLSX.utils.json_to_sheet(excelData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "التدفقات النقدية");
         
-        const wscols = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 35}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 25}, {wch: 25}, {wch: 40}, {wch: 15}];
-        worksheet['!cols'] = wscols;
-
+        worksheet['!cols'] = [{wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 35}, {wch: 15}, {wch: 15}, {wch: 25}, {wch: 25}, {wch: 25}, {wch: 40}, {wch: 15}];
+        worksheet['!dir'] = 'rtl';
         XLSX.writeFile(workbook, `تقرير_التدفقات_النقدية_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    // =========================================================================
-    // 🔢 تقسيم الصفحات بناءً على مجموعات التوجيه المفتوحة
-    // =========================================================================
+    // 🔢 تقسيم الصفحات
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = Math.ceil((treeGroupedData.length || 0) / rowsPerPage) || 1;
 
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [filteredData.length, logic.searchTerm, logic.filterType, logic.dateFrom, logic.dateTo, selectedProjects, selectedPartners]);
+    useEffect(() => { setCurrentPage(1); }, [filteredData.length, logic.searchTerm, logic.filterType, logic.dateFrom, logic.dateTo, selectedProjects, selectedPartners]);
 
     const paginatedGroups = useMemo(() => {
         const startIndex = (currentPage - 1) * rowsPerPage;
@@ -279,7 +268,6 @@ export default function CashFlowsPage() {
                     .filter-input { width: 100%; padding: 12px 15px; border-radius: 10px; border: 2px solid #e2e8f0; outline: none; font-weight: 700; color: #334155; transition: 0.2s; height: 48px; }
                     .filter-input:focus { border-color: ${THEME.goldAccent || '#ca8a04'}; }
 
-                    /* ستايل شجرة الجداول الاحترافي */
                     .tree-table { width: 100%; border-collapse: collapse; text-align: center; background: white; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
                     .tree-thead { background: #1e293b; color: white; }
                     .tree-thead th { padding: 15px; font-size: 13px; font-weight: 900; }
@@ -297,7 +285,7 @@ export default function CashFlowsPage() {
                     .arrow-expanded { transform: rotate(90deg); }
                 `}</style>
 
-                {/* 📊 بطاقات الملخص (Summary Cards) */}
+                {/* 📊 بطاقات الملخص */}
                 <div style={{ display: 'flex', gap: '20px', marginBottom: '25px', flexWrap: 'wrap' }}>
                     <div className="summary-card inflow" style={{ background: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.05)' }}>
                         <div className="summary-label"><span>📥</span> إجمالي الوارد (المقبوضات)</div>
@@ -331,7 +319,6 @@ export default function CashFlowsPage() {
                         />
                     </div>
 
-                    {/* 🚀 فلتر التوجيه / المشروع */}
                     <MultiSelectDropdown 
                         title="🏢 التوجيه (الفيلا)"
                         placeholder="كل التوجيهات"
@@ -341,7 +328,6 @@ export default function CashFlowsPage() {
                         accentColor={THEME.primary || '#2563eb'}
                     />
 
-                    {/* 🚀 فلتر الشريك (عميل / مقاول) الجديد */}
                     <MultiSelectDropdown 
                         title="👤 الشريك (عميل/مورد)"
                         placeholder="كل الشركاء"
@@ -378,7 +364,7 @@ export default function CashFlowsPage() {
                     </button>
                 </div>
 
-                {/* 🌳 جدول الشجرة التجميعي الذكي بناءً على الشريك */}
+                {/* 🌳 جدول الشجرة التجميعي */}
                 {logic.isLoading ? (
                     <div style={{ textAlign: 'center', padding: '5px', fontWeight: 900, color: '#64748b' }}>⏳ جاري تحميل شجرة التدفقات النقدية...</div>
                 ) : (
@@ -386,10 +372,10 @@ export default function CashFlowsPage() {
                         <thead className="tree-thead">
                             <tr>
                                 <th style={{ textAlign: 'right', width: '35%' }}>👤 الشريك (مقاول / مورد / عميل)</th>
-                                <th style={{ width: '15%' }}>📥 إجمالي المقبوضات</th>
-                                <th style={{ width: '15%' }}>📤 إجمالي المدفوعات</th>
-                                <th style={{ width: '20%' }}>⚖️ صافي السيولة للشريك</th>
-                                <th style={{ width: '15%' }}>🔢 عدد السندات</th>
+                                <th style={{ width: '15%' }}>📥 المقبوضات</th>
+                                <th style={{ width: '15%' }}>📤 المدفوعات</th>
+                                <th style={{ width: '20%' }}>⚖️ الصافي</th>
+                                <th style={{ width: '15%' }}>الحركات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -399,7 +385,6 @@ export default function CashFlowsPage() {
 
                                 return (
                                     <React.Fragment key={group.name}>
-                                        {/* السطر الرئيسي (التوتال) */}
                                         <tr className="master-group-row" onClick={() => toggleGroup(group.name)}>
                                             <td style={{ textAlign: 'right', color: THEME.coffeeDark || '#1e293b', paddingRight: '20px' }}>
                                                 <span className={`arrow-icon ${isExpanded ? 'arrow-expanded' : ''}`}>◀</span>
@@ -417,7 +402,6 @@ export default function CashFlowsPage() {
                                             </td>
                                         </tr>
 
-                                        {/* شجرة التفاصيل الهابطة (تظهر عند الضغط) */}
                                         {isExpanded && (
                                             <tr>
                                                 <td colSpan={5} style={{ padding: 0 }}>
@@ -435,17 +419,19 @@ export default function CashFlowsPage() {
                                                             </thead>
                                                             <tbody>
                                                                 {group.items.map((item: any) => {
-                                                                    const isChildInflow = item.flow_type === 'inflow';
+                                                                    const direction = getFlowDirection(item);
+                                                                    const isChildInflow = direction === 'inflow';
+                                                                    const itemAmount = parseAmount(item.amount);
                                                                     return (
                                                                         <tr key={item.id}>
-                                                                            <td>{item.transaction_date}</td>
+                                                                            <td>{item.transaction_date ? String(item.transaction_date).substring(0, 10) : '---'}</td>
                                                                             <td>
                                                                                 <span style={{ color: isChildInflow ? '#059669' : '#e11d48', fontSize: '11px', fontWeight: 900 }}>
                                                                                     {isChildInflow ? '📥 إيداع / قبض' : '📤 صرف / مدفوعات'}
                                                                                 </span>
                                                                             </td>
                                                                             <td style={{ fontWeight: 900, color: isChildInflow ? '#059669' : '#e11d48' }}>
-                                                                                {isChildInflow ? '+' : '-'}{formatCurrency(item.amount)}
+                                                                                {isChildInflow ? '+' : '-'}{formatCurrency(itemAmount)}
                                                                             </td>
                                                                             <td style={{ textAlign: 'right', fontWeight: 800, color: '#2563eb' }}>
                                                                                 {item.project?.Property ? `🏢 ${item.project.Property}` : '---'}
@@ -474,6 +460,18 @@ export default function CashFlowsPage() {
                                     </React.Fragment>
                                 );
                             })}
+                            
+                            {/* 🚀 إجمالي الشاشة الحالية للمطابقة البصرية */}
+                            {treeGroupedData.length > 0 && (
+                                <tr style={{ background: '#fef3c7' }}>
+                                    <td style={{ padding: '20px', fontWeight: 900, color: '#b45309', textAlign: 'left' }}>الإجمالي الكلي للصفحة والفلتر:</td>
+                                    <td style={{ fontWeight: 900, color: '#059669', fontSize: '16px' }}>{formatCurrency(summaryStats.totalIn)}</td>
+                                    <td style={{ fontWeight: 900, color: '#dc2626', fontSize: '16px' }}>{formatCurrency(summaryStats.totalOut)}</td>
+                                    <td style={{ fontWeight: 900, color: summaryStats.netCash >= 0 ? '#059669' : '#dc2626', fontSize: '16px' }}>{formatCurrency(summaryStats.netCash)}</td>
+                                    <td></td>
+                                </tr>
+                            )}
+
                             {treeGroupedData.length === 0 && (
                                 <tr>
                                     <td colSpan={5} style={{ padding: '30px', color: '#94a3b8', fontWeight: 900 }}>❌ لا توجد أي تدفقات نقدية مطابقة للفلاتر الحالية</td>
@@ -483,7 +481,7 @@ export default function CashFlowsPage() {
                     </table>
                 )}
 
-                {/* 🔢 تقسيم الصفحات (Pagination) للمجموعات */}
+                {/* 🔢 تقسيم الصفحات */}
                 {!logic.isLoading && treeGroupedData.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '15px', background: 'white', borderRadius: '12px', border: `1px solid #e2e8f0` }}>
                         <div style={{ fontSize: '13px', color: '#334155', fontWeight: 900 }}>
@@ -499,6 +497,7 @@ export default function CashFlowsPage() {
                                 <option value={10}>عرض 10 شركاء</option>
                                 <option value={50}>عرض 50 شريك</option>
                                 <option value={100}>عرض 100 شريك</option>
+                                <option value={100000}>عرض الكل</option>
                             </select>
                             
                             <div style={{ display: 'flex', gap: '8px' }}>

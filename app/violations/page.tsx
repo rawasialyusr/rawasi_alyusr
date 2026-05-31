@@ -11,9 +11,6 @@ import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
 
-/**
- * صفحة سجل رصد المخالفات - رواسي اليسر V11
- */
 export default function ViolationsPage() {
   const logic = useViolationsLogic();
   const [mounted, setMounted] = useState(false);
@@ -23,39 +20,23 @@ export default function ViolationsPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   
-  // 🚀 الترقيم المحلي للجدول
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 50;
 
   useEffect(() => { setMounted(true); }, []);
 
-  // 🚀 السحر هنا: استخراج معرفات *كل* السجلات المفلترة (وليس الصفحة الحالية فقط)
-  const allFilteredIds = useMemo(() => {
-      return logic.data.map((v: any) => String(v.id));
-  }, [logic.data]);
-
-  // التحقق مما إذا كان قد تم تحديد جميع السجلات المفلترة فعلاً
+  const allFilteredIds = useMemo(() => logic.data.map((v: any) => String(v.id)), [logic.data]);
   const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id: string) => logic.state.selectedIds.includes(id));
 
-  // تعريف الأعمدة مع الالتزام بحراس الرندر (Render Guards)
   const columns = useMemo(() => [
     {
       key: 'select',
       label: (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <input 
-                  type="checkbox" 
-                  className="custom-checkbox"
-                  checked={isAllSelected}
-                  title="تحديد كل السجلات المفلترة عبر الصفحات"
+              <input type="checkbox" className="custom-checkbox" checked={isAllSelected}
                   onChange={() => {
-                      if (isAllSelected) {
-                          // إلغاء تحديد السجلات المفلترة الحالية فقط من القائمة الكلية
-                          logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
-                      } else {
-                          // إضافة كل السجلات المفلترة للقائمة المحددة (مع منع التكرار)
-                          logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...allFilteredIds])]);
-                      }
+                      if (isAllSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
+                      else logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...allFilteredIds])]);
                   }}
               />
           </div>
@@ -65,10 +46,7 @@ export default function ViolationsPage() {
         const isSelected = logic.state.selectedIds.includes(String(row.id));
         return (
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
-              <input 
-                  type="checkbox" 
-                  className="custom-checkbox" 
-                  checked={isSelected} 
+              <input type="checkbox" className="custom-checkbox" checked={isSelected} 
                   onChange={(e) => {
                       e.stopPropagation();
                       if (isSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((i:any) => i !== String(row.id))); 
@@ -90,29 +68,32 @@ export default function ViolationsPage() {
       render: (row: any) => row?.emp_name ? <b style={{ color: THEME.primary }}>{row.emp_name}</b> : null
     },
     { 
-      key: 'profession',
-      header: 'المهنة', 
-      render: (row: any) => <span style={{ fontSize: '12px', fontWeight: 700 }}>{row?.profession || '---'}</span>
+      key: 'violation_type',
+      header: 'نوع الخصم', 
+      render: (row: any) => {
+          const type = row?.violation_type || 'غرامة';
+          const bg = type === 'غرامة' ? '#fef2f2' : '#fff7ed';
+          const fg = type === 'غرامة' ? '#ef4444' : '#d97706';
+          return <span style={{ background: bg, color: fg, padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 900 }}>{type}</span>;
+      }
     },
     { 
       key: 'reason',
-      header: 'نوع المخالفة', 
-      render: (row: any) => row?.reason ? <span style={{ color: THEME.ruby, fontWeight: 800 }}>{row.reason}</span> : null
+      header: 'البيان الوصفي', 
+      render: (row: any) => row?.reason ? <span style={{ color: '#334155', fontWeight: 800 }}>{row.reason}</span> : null
     },
     { 
       key: 'image_url',
-      header: 'الدليل 📸', 
+      header: 'المرفق 📸', 
       render: (row: any) => {
         return row?.image_url ? (
-          <img src={row.image_url} alt="دليل" style={{width:'45px', height:'45px', borderRadius:'10px', border:'2px solid #e2e8f0', objectFit: 'cover'}} />
-        ) : (
-          <span style={{color: '#94a3b8', fontSize: '11px', fontWeight: 800}}>لا يوجد</span>
-        );
+          <img src={row.image_url} alt="مرفق" style={{width:'45px', height:'45px', borderRadius:'10px', border:'2px solid #e2e8f0', objectFit: 'cover'}} />
+        ) : <span style={{color: '#94a3b8', fontSize: '11px', fontWeight: 800}}>بدون</span>;
       } 
     },
     { 
       key: 'amount',
-      header: 'الغرامة 💰', 
+      header: 'المبلغ 💰', 
       render: (row: any) => <span style={{ fontWeight: 900, color: THEME.ruby, fontSize: '15px' }}>{formatCurrency(row?.amount || 0)}</span>
     },
     {
@@ -120,14 +101,12 @@ export default function ViolationsPage() {
       header: 'الحالة',
       render: (row: any) => {
         if (!row) return null;
-        return row.is_posted ? 
-          <span className="badge-glass green">مُرحل ✅</span> : 
-          <span className="badge-glass yellow">معلق ⏳</span>;
+        return row.is_posted ? <span className="badge-glass green">مُرحل ✅</span> : <span className="badge-glass yellow">معلق ⏳</span>;
       }
     },
     {
       key: 'actions',
-      header: 'تعديل',
+      header: 'إجراء',
       render: (row: any) => {
         if (!row) return null;
         return (
@@ -139,25 +118,21 @@ export default function ViolationsPage() {
     }
   ], [can, logic.actions, isAllSelected, allFilteredIds, logic.state.selectedIds]);
 
-  // جسر الترحيل للأكشنز عبر SidebarManager
   const sidebarActions = useMemo(() => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <SecureAction module="violations" action="create">
-        <button className="btn-main-glass gold" onClick={() => logic.actions.handleEdit()}>📸 تسجيل مخالفة جديدة</button>
+        <button className="btn-main-glass gold" onClick={() => logic.actions.handleEdit()}>➕ تسجيل خصم / غرامة</button>
       </SecureAction>
       
       {logic.state.selectedIds.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
           <p style={{fontSize:'11px', textAlign:'center', color:'#94a3b8', fontWeight:900, margin:0}}>تم تحديد ({logic.state.selectedIds.length}) سجل</p>
-          
           <SecureAction module="violations" action="post">
-            <button className="btn-main-glass green" onClick={logic.actions.handlePost}>🚀 ترحيل المخالفات</button>
+            <button className="btn-main-glass green" onClick={logic.actions.handlePost}>🚀 ترحيل للرواتب</button>
           </SecureAction>
-          
           <SecureAction module="violations" action="post">
             <button className="btn-main-glass yellow" onClick={logic.actions.handleUnpost}>↩️ فك الترحيل</button>
           </SecureAction>
-          
           <SecureAction module="violations" action="delete">
             <button className="btn-main-glass red" onClick={logic.actions.handleDelete}>🗑️ حذف نهائي</button>
           </SecureAction>
@@ -166,14 +141,13 @@ export default function ViolationsPage() {
     </div>
   ), [logic.state.selectedIds, logic.actions]);
 
-  // دوال الكاميرا المتقدمة
   const startCamera = async () => {
     setIsCameraOpen(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) { 
-      alert("❌ الكاميرا غير متاحة أو تحتاج إذن."); 
+      alert("❌ الكاميرا غير متاحة."); 
       setIsCameraOpen(false); 
     }
   };
@@ -184,27 +158,24 @@ export default function ViolationsPage() {
       canvasRef.current.width = videoRef.current.videoWidth;
       canvasRef.current.height = videoRef.current.videoHeight;
       context?.drawImage(videoRef.current, 0, 0);
-      const imageDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8);
-      logic.state.setEditingRecord({ ...logic.state.editingRecord, image_url: imageDataUrl });
+      logic.state.setEditingRecord({ ...logic.state.editingRecord, image_url: canvasRef.current.toDataURL('image/jpeg', 0.8) });
       stopCamera();
     }
   };
 
   const stopCamera = () => {
-    if (videoRef.current?.srcObject) { 
-      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop()); 
-    }
+    if (videoRef.current?.srcObject) (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop()); 
     setIsCameraOpen(false);
   };
 
   return (
     <>
       <div className="clean-page">
-        <MasterPage title="سجل رصد المخالفات 📸" subtitle="رصد وإدارة مخالفات العمالة وتوثيقها بالصور والتوجيه المحاسبي التلقائي.">
+        <MasterPage title="سجل الاستقطاعات والجزاءات ⚠️" subtitle="تسجيل الغرامات الإدارية، واستقطاعات الإعاشة وتوجيهها للرواتب.">
             <RawasiSidebarManager 
               summary={
                 <div className="summary-glass-card">
-                  <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي الخصومات المفلترة ⚠️</span>
+                  <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي المبالغ المفلترة</span>
                   <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.ruby, marginTop:'5px'}}>{formatCurrency(logic.totals.totalSum)}</div>
                   <div style={{fontSize:'11px', color:'#10b981', fontWeight:800, marginTop:'5px'}}>عدد السجلات: {logic.totals.totalCount}</div>
                 </div>
@@ -213,28 +184,16 @@ export default function ViolationsPage() {
               customFilters={
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
                   <div>
-                    <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>تصفية حسب الحالة:</label>
+                    <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>الحالة:</label>
                     <div style={{ display: 'flex', gap: '5px' }}>
                       {['الكل', 'مرحل', 'معلق'].map(type => (
-                        <button 
-                          key={type} 
-                          onClick={() => {
-                              logic.actions.setFilterStatus(type);
-                              setCurrentPage(1);
-                          }} 
-                          className={`filter-btn ${logic.state.filterStatus === type ? 'active' : ''}`}
-                        >
-                          {type}
-                        </button>
+                        <button key={type} onClick={() => { logic.actions.setFilterStatus(type); setCurrentPage(1); }} className={`filter-btn ${logic.state.filterStatus === type ? 'active' : ''}`}>{type}</button>
                       ))}
                     </div>
                   </div>
                 </div>
               }
-              onSearch={(val) => {
-                  logic.actions.setGlobalSearch(val);
-                  setCurrentPage(1);
-              }} 
+              onSearch={(val) => { logic.actions.setGlobalSearch(val); setCurrentPage(1); }} 
               watchDeps={[logic.state.selectedIds, logic.totals.totalSum, logic.state.filterStatus]}
             />
 
@@ -254,42 +213,56 @@ export default function ViolationsPage() {
               .badge-glass.yellow { background: #fff7ed; color: #d97706; }
               .btn-glass-print { background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 0, 0, 0.1); padding: 8px 14px; border-radius: 12px; cursor: pointer; transition: 0.2s; }
               .btn-glass-print:hover { background: rgba(0,0,0,0.08); transform: translateY(-2px); }
+              
+              /* Radio Button Styles */
+              .type-selector { display: flex; gap: 10px; background: #f8fafc; padding: 10px; border-radius: 14px; border: 2px solid #e2e8f0; }
+              .type-radio { flex: 1; position: relative; cursor: pointer; }
+              .type-radio input { position: absolute; opacity: 0; cursor: pointer; }
+              .type-label { display: block; padding: 12px 10px; text-align: center; border-radius: 10px; font-size: 12px; font-weight: 900; color: #64748b; cursor: pointer; transition: 0.2s; border: 2px solid transparent; }
+              .type-radio input:checked + .type-label.penalty { background: #fef2f2; color: #ef4444; border-color: #fca5a5; }
+              .type-radio input:checked + .type-label.housing { background: #fff7ed; color: #d97706; border-color: #fcd34d; }
             `}</style>
 
             {(logic.isLoading || permsLoading) ? (
               <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
             ) : (
-              <RawasiSmartTable 
-                  data={logic.data} 
-                  columns={columns} 
-                  enablePagination={true}
-                  currentPage={currentPage}
-                  totalItems={logic.data.length}
-                  rowsPerPage={rowsPerPage}
-                  onPageChange={setCurrentPage}
-              />
+              <RawasiSmartTable data={logic.data} columns={columns} enablePagination={true} currentPage={currentPage} totalItems={logic.data.length} rowsPerPage={rowsPerPage} onPageChange={setCurrentPage} />
             )}
         </MasterPage>
       </div>
 
       {mounted && logic.state.isEditModalOpen && logic.state.editingRecord && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100dvh', backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 999999, padding: '5vh 20px', overflowY: 'auto' }}>
-          
           <div style={{ background: 'white', padding: '35px', borderRadius: '24px', width: '100%', maxWidth: '650px', direction: 'rtl', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', margin: 'auto' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', paddingBottom: '15px', borderBottom: '2px dashed #f1f5f9' }}>
-                <h3 style={{fontWeight:900, fontSize:'20px', color: THEME.ruby, margin: 0}}>📸 توثيق مخالفة وإصدار غرامة</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '15px', borderBottom: '2px dashed #f1f5f9' }}>
+                <h3 style={{fontWeight:900, fontSize:'20px', color: THEME.primary, margin: 0}}>📝 تسجيل حركة خصم / استقطاع</h3>
                 <button onClick={() => { stopCamera(); logic.state.setIsEditModalOpen(false); }} style={{ background: '#f1f5f9', border: 'none', width: '35px', height: '35px', borderRadius: '50%', cursor: 'pointer', fontWeight: 900, color: '#64748b' }}>✕</button>
             </div>
             
+            {/* 🎯 أزرار اختيار نوع الحركة (تم إزالة السلف) */}
+            <div style={{ marginBottom: '25px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 900, color: '#334155', display: 'block', marginBottom: '8px' }}>📌 حدد طبيعة الخصم (للتوجيه المحاسبي):</label>
+                <div className="type-selector">
+                    <label className="type-radio">
+                        <input type="radio" name="v_type" checked={logic.state.editingRecord.violation_type === 'غرامة'} onChange={() => logic.state.setEditingRecord({...logic.state.editingRecord, violation_type: 'غرامة'})} />
+                        <span className="type-label penalty">🔴 غرامة / جزاء</span>
+                    </label>
+                    <label className="type-radio">
+                        <input type="radio" name="v_type" checked={logic.state.editingRecord.violation_type === 'استقطاع سكن'} onChange={() => logic.state.setEditingRecord({...logic.state.editingRecord, violation_type: 'استقطاع سكن'})} />
+                        <span className="type-label housing">🏠 استرداد سكن / إعاشة</span>
+                    </label>
+                </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' }}>
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>📅 تاريخ المخالفة</label>
+                <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>📅 تاريخ الاستقطاع</label>
                 <input type="date" value={logic.state.editingRecord.date || ''} onChange={(e) => logic.state.setEditingRecord({...logic.state.editingRecord, date: e.target.value})} style={{ padding: '14px', borderRadius: '14px', border: '2px solid #e2e8f0', width: '100%', fontWeight: 800, outline: 'none', background: '#f8fafc' }} />
               </div>
               <div style={{ zIndex: 100 }}>
                 <SmartCombo 
-                    label="👷 العامل المخالف" 
+                    label="👷 الموظف / العامل" 
                     table="partners"
                     displayCol="name"
                     freeText={true} 
@@ -316,36 +289,34 @@ export default function ViolationsPage() {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>📝 نوع / وصف المخالفة</label>
-                <input type="text" placeholder="مثال: عدم ارتداء معدات السلامة أثناء العمل" value={logic.state.editingRecord.reason || ''} onChange={(e) => logic.state.setEditingRecord({...logic.state.editingRecord, reason: e.target.value})} style={{ padding: '14px', borderRadius: '14px', border: '2px solid #e2e8f0', width: '100%', fontWeight: 800, outline: 'none', background: '#f8fafc' }} />
+                <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>📝 البيان الوصفي (السبب)</label>
+                <input type="text" placeholder="مثال: خصم إيجار سكن شهر مايو" value={logic.state.editingRecord.reason || ''} onChange={(e) => logic.state.setEditingRecord({...logic.state.editingRecord, reason: e.target.value})} style={{ padding: '14px', borderRadius: '14px', border: '2px solid #e2e8f0', width: '100%', fontWeight: 800, outline: 'none', background: '#f8fafc' }} />
             </div>
 
             <div style={{ marginBottom: '30px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.ruby, display: 'block', marginBottom: '8px' }}>💰 قيمة الغرامة / الخصم</label>
+                <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.ruby, display: 'block', marginBottom: '8px' }}>💰 قيمة المبلغ المخصوم</label>
                 <input type="number" value={logic.state.editingRecord.amount || ''} onChange={(e) => logic.state.setEditingRecord({...logic.state.editingRecord, amount: Number(e.target.value)})} style={{ padding: '14px', borderRadius: '14px', border: `2px solid ${THEME.ruby}40`, width: '100%', fontWeight: 900, outline: 'none', background: '#fef2f2', color: THEME.ruby, fontSize: '20px' }} />
             </div>
 
             <div style={{ background: '#f8fafc', padding: '25px', borderRadius: '20px', border: '2px dashed #cbd5e1', marginBottom: '30px', textAlign: 'center' }}>
                 {!isCameraOpen && !logic.state.editingRecord.image_url && (
                     <button onClick={startCamera} style={{ background: THEME.primary, color: 'white', padding: '16px 30px', borderRadius: '14px', fontWeight: 900, border: 'none', cursor: 'pointer' }}>
-                        📷 فتح الكاميرا والتقاط الدليل
+                        📷 إرفاق مستند أو صورة (اختياري)
                     </button>
                 )}
-
                 {isCameraOpen && (
                     <div style={{ position: 'relative' }}>
                         <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: '16px', border: `4px solid ${THEME.ruby}` }} />
                         <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-                            <button onClick={takePhoto} style={{ flex: 2, background: THEME.ruby, color: 'white', padding: '16px', borderRadius: '14px', fontWeight: 900, border: 'none' }}>📸 التقاط الصورة</button>
+                            <button onClick={takePhoto} style={{ flex: 2, background: THEME.ruby, color: 'white', padding: '16px', borderRadius: '14px', fontWeight: 900, border: 'none' }}>📸 التقاط</button>
                             <button onClick={stopCamera} style={{ flex: 1, background: '#e2e8f0', color: '#475569', padding: '16px', borderRadius: '14px', fontWeight: 900, border: 'none' }}>إلغاء</button>
                         </div>
                     </div>
                 )}
-
                 {logic.state.editingRecord.image_url && !isCameraOpen && (
                     <div>
-                        <img src={logic.state.editingRecord.image_url} alt="مخالفة" style={{ width: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '16px', border: '3px solid #e2e8f0', marginBottom: '20px' }} />
-                        <button onClick={() => logic.state.setEditingRecord({...logic.state.editingRecord, image_url: null})} style={{ background: '#fef2f2', color: THEME.ruby, padding: '12px 24px', borderRadius: '12px', fontWeight: 900, border: `1px solid ${THEME.ruby}50` }}>🗑️ إعادة التصوير</button>
+                        <img src={logic.state.editingRecord.image_url} alt="مرفق" style={{ width: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '16px', border: '3px solid #e2e8f0', marginBottom: '20px' }} />
+                        <button onClick={() => logic.state.setEditingRecord({...logic.state.editingRecord, image_url: null})} style={{ background: '#fef2f2', color: THEME.ruby, padding: '12px 24px', borderRadius: '12px', fontWeight: 900, border: `1px solid ${THEME.ruby}50` }}>🗑️ مسح وإعادة تصوير</button>
                     </div>
                 )}
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -353,7 +324,7 @@ export default function ViolationsPage() {
 
             <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
               <button onClick={logic.actions.handleSave} disabled={logic.isLoading} style={{ flex: 2, background: THEME.ruby, color: 'white', padding: '18px', borderRadius: '16px', border: 'none', fontWeight: 900, opacity: logic.isLoading ? 0.7 : 1 }}>
-                  {logic.isLoading ? '⏳ جاري الحفظ...' : '💾 حفظ وتوثيق الغرامة'}
+                  {logic.isLoading ? '⏳ جاري التسجيل...' : '💾 اعتماد الخصم والتوجيه المحاسبي'}
               </button>
               <button onClick={() => { stopCamera(); logic.state.setIsEditModalOpen(false); }} style={{ flex: 1, background: '#f1f5f9', color: '#475569', padding: '18px', borderRadius: '16px', border: 'none', fontWeight: 900 }}>
                   إلغاء

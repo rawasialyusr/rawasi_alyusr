@@ -64,6 +64,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'journal', title: 'قيود اليومية', icon: '📝', path: '/journal' }, 
             { id: 'ledger', title: 'دفتر الأستاذ', icon: '📒', path: '/ledger' }, 
             { id: 'journal_errors', title: 'رادار الأخطاء', icon: '🛡️', path: '/journal-errors' }, 
+            { id: 'cashflows', title: 'التدفقات النقدية', icon: '🔄', path: '/cashflows' }, 
             { id: 'payments', title: 'سندات الصرف', icon: '🔴', path: '/PaymentVouchers' }, 
             { id: 'receipts', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' }, 
             { id: 'revenue', title: 'الإيرادات', icon: '📈', path: '/revenue' }, 
@@ -79,7 +80,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'materials', title: 'توريد الخامات', icon: '🧱', path: '/materials' },
             { id: 'subclaims', title: 'مستخلصات مقاولي الباطن', icon: '📑', path: '/subclaims' },
             { id: 'boqcatalog', title: 'الدليل الموحد للبنود (BOQ)', icon: '📚', path: '/boqcatalog' },
-            { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' }
+            { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' },
+            { id: 'partner_balances', title: 'أرصدة الشركاء', icon: '⚖️', path: '/PartnerBalances' } // 🚀 تم الإضافة هنا
         ] 
     },
     { 
@@ -88,10 +90,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'employees', title: 'سجل الموظفين', icon: '👔', path: '/employees' }, 
             { id: 'team', title: 'إدارة فرق العمل', icon: '👥', path: '/team' },
             { id: 'labor_logs', title: 'يوميات الميدان', icon: '👷', path: '/labor_logs' }, 
-            { id: 'payroll', title: 'مسيرات الرواتب', icon: '💵', path: '/payroll' }, 
-            { id: 'emp_adv', title: 'سلف الموظفين', icon: '💸', path: '/emp_adv' }, 
-            { id: 'violations', title: 'المخالفات والجزاءات', icon: '⚠️', path: '/violations' },
-            { id: 'housing', title: 'الإعاشة والسكن', icon: '🏠', path: '/housing' }
+            // ❌ تم إزالة مسيرات الرواتب من هنا
+            { id: 'violations', title: 'المخالفات والجزاءات', icon: '⚠️', path: '/violations' }
         ] 
     },
     { 
@@ -134,7 +134,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [isDragging]);
 
   const currentMargin = mounted && isSidebarOpen ? '280px' : '65px';
-  let animationDelayCounter = 0; // تعريف العداد للأنيميشن
+  let animationDelayCounter = 0;
 
   if (pathname === '/login') return <>{children}</>;
 
@@ -190,7 +190,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 مسؤول نظام'}
             </div>
 
-            {/* 🚀 استرجاع كود الـ Loop اللي بيظهر الصفحات */}
             {menuGroups.map((group, gIdx) => {
               const filteredItems = group.items.filter(item => canView(item.id));
               if (filteredItems.length === 0) return null;

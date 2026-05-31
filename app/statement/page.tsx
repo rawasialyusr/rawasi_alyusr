@@ -136,7 +136,7 @@ export default function PartnerStatementPage() {
                 </button>
             </SecureAction>
         </div>
-    ), [logic.partnerId, selectedPartnerName]); 
+    ), [logic.partnerId, selectedPartnerName, logic.exportToExcel]); 
 
     if (!mounted) return null;
 
@@ -151,7 +151,42 @@ export default function PartnerStatementPage() {
 
                 <div className="main-content-flow">
                     
-                    {/* 1️⃣ لوحة الملخص المالي المبسطة (السامري) */}
+                    {/* 1️⃣ أدوات البحث والتصفية (تم التعديل لتكون في المقدمة المطلقة) */}
+                    <div className="filter-dashboard-glass" style={{ position: 'relative', zIndex: 50 }}>
+                        <div className="filter-header">
+                            <span className="filter-title">🔍 أدوات البحث والتصفية المتقدمة</span>
+                        </div>
+                        <div className="filters-grid">
+                            {/* 🚀 السر هنا: position relative مع z-index يخلي القائمة تفرش فوق أي حاجة تحتها */}
+                            <div className="filter-col" style={{ position: 'relative', zIndex: 100 }}>
+                                <label>👤 الشريك (عامل / مقاول / مورد)</label>
+                                <SmartCombo 
+                                    label="" 
+                                    table="partners" 
+                                    displayCol="name" 
+                                    initialDisplay={logic.partnerName || logic.partnerId} 
+                                    onSelect={(v: any) => { 
+                                        logic.setPartnerId(v?.id || ''); 
+                                        setSelectedPartnerName(v?.name || ''); 
+                                    }} 
+                                />
+                            </div>
+                            <div className="filter-col">
+                                <label>📅 من تاريخ</label>
+                                <input type="date" className="glass-input" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
+                            </div>
+                            <div className="filter-col">
+                                <label>📅 إلى تاريخ</label>
+                                <input type="date" className="glass-input" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
+                            </div>
+                            <div className="filter-col">
+                                <label>🔎 بحث في الكشف</label>
+                                <input type="text" className="glass-input search-input" placeholder="ابحث في البيان..." value={logic.globalSearch || ''} onChange={e => logic.setGlobalSearch(e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2️⃣ لوحة الملخص المالي المبسطة (السامري) */}
                     {logic.partnerId && (
                         <div className="glass-panel summary-container">
                             <div className="balances-grid" style={{ gridTemplateColumns: '1fr 1fr 1.5fr' }}>
@@ -194,39 +229,7 @@ export default function PartnerStatementPage() {
                         </div>
                     )}
 
-                    <div className="filter-dashboard-glass">
-                        <div className="filter-header">
-                            <span className="filter-title">🔍 أدوات البحث والتصفية المتقدمة</span>
-                        </div>
-                        <div className="filters-grid">
-                            <div className="filter-col" style={{ zIndex: 100 }}>
-                                <label>👤 الشريك (عامل / مقاول / مورد)</label>
-                                <SmartCombo 
-                                    label="" 
-                                    table="partners" 
-                                    displayCol="name" 
-                                    initialDisplay={logic.partnerName || logic.partnerId} 
-                                    onSelect={(v: any) => { 
-                                        logic.setPartnerId(v?.id || ''); 
-                                        setSelectedPartnerName(v?.name || ''); 
-                                    }} 
-                                />
-                            </div>
-                            <div className="filter-col">
-                                <label>📅 من تاريخ</label>
-                                <input type="date" className="glass-input" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
-                            </div>
-                            <div className="filter-col">
-                                <label>📅 إلى تاريخ</label>
-                                <input type="date" className="glass-input" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
-                            </div>
-                            <div className="filter-col">
-                                <label>🔎 بحث في الكشف</label>
-                                <input type="text" className="glass-input search-input" placeholder="ابحث في البيان..." value={logic.globalSearch || ''} onChange={e => logic.setGlobalSearch(e.target.value)} />
-                            </div>
-                        </div>
-                    </div>
-
+                    {/* 3️⃣ الجدول أو رسالة الترحيب */}
                     {!logic.partnerId ? (
                         <div className="welcome-placeholder">
                             <div className="icon">🧾</div>
@@ -294,6 +297,9 @@ export default function PartnerStatementPage() {
                 .btn-main-glass:disabled { opacity: 0.5; cursor: not-allowed; }
                 .welcome-placeholder { text-align: center; padding: 100px; color: #bba58f; background: rgba(44, 34, 27, 0.4); border-radius: 20px; border: 1px dashed rgba(197, 160, 89, 0.3); }
                 .welcome-placeholder .icon { font-size: 64px; margin-bottom: 20px; color: ${THEME.goldAccent}; }
+                
+                /* 🚀 تم إضافة الدعم الكافي لكلاس الحاوية الزجاجية للجدول */
+                .table-wrapper-glass { background: rgba(255, 255, 255, 0.95); border-radius: 20px; overflow: hidden; padding: 10px; border: 1px solid rgba(197, 160, 89, 0.2); box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
                 .table-container-wrapper { background: rgba(255,255,255,0.95); border-radius: 20px; overflow: hidden; padding: 10px; border: 1px solid rgba(197, 160, 89, 0.2); box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
             `}</style>
         </div>

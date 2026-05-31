@@ -55,6 +55,7 @@ function useJournalLogic() {
                     .select('*')
                     .order('entry_date', { ascending: false })
                     .order('line_created_at', { ascending: false })
+                    .order('line_id', { ascending: false }) // 🚀 تم إضافته هنا لضمان استقرار الترتيب وعدم سقوط أو تكرار أي مبالغ محاسبية
                     .range(from, from + step - 1);
                 
                 if (dateFrom) query = query.gte('entry_date', dateFrom);
@@ -140,6 +141,9 @@ function useJournalLogic() {
         onError: (err: any) => showToast(`فشل في الحذف: ${err.message}`, 'error')
     });
 
+    // كاشف الفلترة النشطة (لتغيير مسمى كارت الاتزان تلقائياً بدلاً من إرباك المستخدم)
+    const isFiltered = !!(filterAccountId || filterPartnerId);
+
     return {
         isLoading, isError,
         globalSearch, setGlobalSearch, 
@@ -152,6 +156,7 @@ function useJournalLogic() {
         paginatedLines, 
         totals,
         selectedIds, setSelectedIds,
+        isFiltered,
         handleDeleteHeaders: () => {
             if (confirm('تنبيه: سيتم حذف القيود المحددة بالكامل (مدين ودائن). هل أنت متأكد؟')) {
                 deleteHeadersMutation.mutate();
@@ -276,7 +281,7 @@ export default function JournalPage() {
                 </div>
                 <div style={{ borderTop: '1px dashed rgba(255,255,255,0.2)', paddingTop: '10px', background: logic.totals.balance !== 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)', padding: '10px', borderRadius: '10px' }}>
                   <span style={{fontSize:'12px', fontWeight:800, color: logic.totals.balance !== 0 ? '#d97706' : '#059669'}}>
-                     {logic.totals.balance === 0 ? 'متزن ⚖️' : (logic.totals.balance > 0 ? 'رصيد مدين' : 'رصيد دائن')}
+                     {logic.isFiltered ? 'صافي رصيد الفلترة 📊' : (logic.totals.balance === 0 ? 'متزن ⚖️' : (logic.totals.balance > 0 ? 'رصيد مدين' : 'رصيد دائن'))}
                   </span>
                   <div style={{fontSize:'20px', fontWeight:900, color: logic.totals.balance !== 0 ? '#d97706' : '#059669'}}>
                     {formatCurrency(Math.abs(logic.totals.balance))}
@@ -405,7 +410,7 @@ export default function JournalPage() {
                         className="btn-pagination" 
                         onClick={() => logic.setCurrentPage(p => Math.max(1, p - 1))} 
                         disabled={logic.currentPage === 1}
-                    >
+                    >\
                         ◀️ السابق
                     </button>
                     

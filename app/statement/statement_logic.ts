@@ -15,6 +15,7 @@ const translateVType = (type: string) => {
         case 'violation': 
         case 'violations': return 'قيد غرامة';
         case 'invoices': return 'فاتورة';
+        case 'مستخلص': return 'مستخلص أعمال';
         default: return type;
     }
 };
@@ -45,7 +46,7 @@ export function useStatementLogic() {
         enabled: !!partnerId,
     });
 
-    // 2️⃣ محرك جلب البيانات
+    // 2️⃣ محرك جلب البيانات المحدث ليطابق جدولك partner_statement_ledger
     const { data: rawLines = [], isLoading } = useQuery({
         queryKey: ['partner_statement_raw', partnerId],
         queryFn: async () => {
@@ -58,11 +59,10 @@ export function useStatementLogic() {
 
             while (hasMore) {
                 const { data, error } = await supabase
-                    .from('partner_statement_view')
+                    .from('partner_statement_ledger') // 👈 تم التحديث لاسم جدولك الحقيقي
                     .select('*')
                     .eq('partner_id', partnerId)
-                    .order('entry_date', { ascending: true }) 
-                    .order('line_id', { ascending: true })
+                    .order('transaction_date', { ascending: true }) // 👈 تم التحديث لعمود التاريخ الخاص بك
                     .range(from, from + step);
 
                 if (error) throw error;
@@ -83,7 +83,7 @@ export function useStatementLogic() {
         staleTime: 1000 * 60 * 5, 
     });
 
-    // 3️⃣ معالجة البيانات والحسابات المحاسبية الدقيقة
+    // 3️⃣ معالجة البيانات والحسابات المحاسبية الدقيقة (بدون حذف أي ميزة)
     const processedData = useMemo(() => {
         if (!rawLines || rawLines.length === 0) return null;
 
@@ -100,10 +100,10 @@ export function useStatementLogic() {
         const periodLines: any[] = [];
         const typeSummaries: Record<string, { debit: number, credit: number }> = {};
 
-        rawLines.forEach((line: any) => {
+        rawLines.forEach((line: any, index: number) => {
             const credit = Number(line.credit || 0);
             const debit = Number(line.debit || 0);
-            const lineDate = line.entry_date;
+            const lineDate = line.transaction_date; // 👈 تحديث لعمود تاريخ جدولك الحالي
 
             cumulativeBalance += (credit - debit);
 
@@ -117,15 +117,32 @@ export function useStatementLogic() {
                 periodDebit += debit;
                 periodCredit += credit;
 
-                const vType = translateVType(line.v_type);
-                const desc = line.description || line.line_notes || '';
+                // 🧠 محرك استنتاج ذكي لتعويض العواميد المفقودة في الـ View الحالي
+                const headerDesc = line.main_description || '';
+                const lineDesc = line.line_details || '';
+                const fullDesc = `${headerDesc} ${lineDesc}`.toLowerCase();
+                
+                let inferredVType = line.v_type || '';
+                
+                // لو عمود النوع مش موجود، بنستنتجه من الكلمات المفتاحية في البيان والشرح
+                if (!inferredVType) {
+                    if (fullDesc.includes('صرف') || fullDesc.includes('سند صرف')) inferredVType = 'payment_vouchers';
+                    else if (fullDesc.includes('قبض') || fullDesc.includes('سند قبض')) inferredVType = 'receipt_vouchers';
+                    else if (fullDesc.includes('يومية') || fullDesc.includes('عمالة') || fullDesc.includes('حضور')) inferredVType = 'labor_daily_logs';
+                    else if (fullDesc.includes('غرامة') || fullDesc.includes('مخالفة') || fullDesc.includes('جزاء')) inferredVType = 'violations';
+                    else if (fullDesc.includes('فاتورة')) inferredVType = 'invoices';
+                    else if (fullDesc.includes('مستخلص')) inferredVType = 'مستخلص';
+                }
+
+                const vType = translateVType(inferredVType);
+                const finalDesc = lineDesc || headerDesc || 'بدون بيان';
 
                 periodLines.push({
-                    id: line.line_id,
+                    id: line.line_id || `line-${index}`, // 👈 معرف بديل ذكي طالما الـ line_id مش بالجدول
                     date: lineDate,
-                    description: desc,
+                    description: finalDesc,
                     v_type: vType,
-                    reference_id: line.reference_id,
+                    reference_id: line.reference_id || '',
                     debit,
                     credit,
                     balance: cumulativeBalance
@@ -135,10 +152,9 @@ export function useStatementLogic() {
                 typeSummaries[vType].debit += debit;
                 typeSummaries[vType].credit += credit;
 
-                // 🚀 تحديث منطق التعرف على أيام العمل بناءً على attendance_value 
-                if (vType === 'يومية عمالة' || desc.includes('يومية عامل')) {
+                // 🚀 احتساب الإحصائيات الدقيقة بالاعتماد على محرك الاستنتاج + الشرح
+                if (vType === 'يومية عمالة' || finalDesc.includes('يومية عامل')) {
                     let qty = 1;
-                    // الأولوية لـ attendance_value كما كان في السكربت القديم
                     if (line.attendance_value !== undefined && line.attendance_value !== null && line.attendance_value !== '') {
                         qty = Number(line.attendance_value);
                     } else if (line.quantity !== null && line.quantity !== undefined && line.quantity !== '') {
@@ -147,7 +163,7 @@ export function useStatementLogic() {
                     
                     attendanceCount += qty; 
                     totalLaborAmount += credit;
-                } else if (vType === 'قيد غرامة' || desc.includes('غرامة') || desc.includes('جزاء') || desc.includes('مخالفة')) {
+                } else if (vType === 'قيد غرامة' || finalDesc.includes('غرامة') || finalDesc.includes('جزاء') || finalDesc.includes('مخالفة')) {
                     totalViolations += debit; 
                 } else if (vType === 'سند صرف') {
                     totalPayments += debit;
