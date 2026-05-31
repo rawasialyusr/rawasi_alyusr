@@ -80,7 +80,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'materials', title: 'توريد الخامات', icon: '🧱', path: '/materials' },
             { id: 'subclaims', title: 'مستخلصات مقاولي الباطن', icon: '📑', path: '/subclaims' },
             { id: 'boqcatalog', title: 'الدليل الموحد للبنود (BOQ)', icon: '📚', path: '/boqcatalog' },
-            { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' }
+            { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' },
+            { id: 'partner_balances', title: 'أرصدة الشركاء', icon: '⚖️', path: '/PartnerBalances' } // 🚀 تم الإضافة هنا
         ] 
     },
     { 
@@ -133,7 +134,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [isDragging]);
 
   const currentMargin = mounted && isSidebarOpen ? '280px' : '65px';
-  let animationDelayCounter = 0; // تعريف العداد للأنيميشن
+  let animationDelayCounter = 0;
 
   if (pathname === '/login') return <>{children}</>;
 
@@ -189,7 +190,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 مسؤول نظام'}
             </div>
 
-            {/* 🚀 استرجاع كود الـ Loop اللي بيظهر الصفحات */}
             {menuGroups.map((group, gIdx) => {
               const filteredItems = group.items.filter(item => canView(item.id));
               if (filteredItems.length === 0) return null;
