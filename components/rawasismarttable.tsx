@@ -233,7 +233,7 @@ export default function RawasiSmartTable({
                             // 🚀 رسم البيانات المقطوعة فقط لمنع تهنيج المتصفح
                             paginatedData.map((row, rowIndex) => (
                                 <motion.tr 
-                                    key={row.id || rowIndex} 
+                                    key={row._unique_key || row.id || rowIndex} 
                                     variants={itemVariants} 
                                     onClick={() => onRowClick?.(row)} 
                                     style={{ 

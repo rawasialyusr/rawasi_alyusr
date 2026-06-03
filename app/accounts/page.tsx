@@ -23,7 +23,7 @@ export default function HierarchicalLedgerPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // 🧮 السامري المحاسبي الدقيق (ميزان المراجعة)
+  // 🧮 السامري المحاسبي الدقيق (ميزان المراجعة) محمي ضد الكسور العائمة
   const summary = useMemo(() => {
     let totalDebit = 0;
     let totalCredit = 0;
@@ -33,11 +33,16 @@ export default function HierarchicalLedgerPage() {
       totalCredit += Number(node.totalCredit) || 0;
     });
 
+    // 🚀 تطبيق الحماية هنا: تقريب لأقرب رقمين عشريين لمنع أي كسور لانهائية
+    const roundedDebit = Math.round(totalDebit * 100) / 100;
+    const roundedCredit = Math.round(totalCredit * 100) / 100;
+    const roundedBalance = Math.round(Math.abs(roundedDebit - roundedCredit) * 100) / 100;
+
     return {
-      debit: totalDebit,
-      credit: totalCredit,
-      balance: Math.abs(totalDebit - totalCredit),
-      isDebitBalance: totalDebit >= totalCredit
+      debit: roundedDebit,
+      credit: roundedCredit,
+      balance: roundedBalance,
+      isDebitBalance: roundedDebit >= roundedCredit
     };
   }, [paginatedTree]);
 
@@ -264,19 +269,16 @@ export default function HierarchicalLedgerPage() {
           background: rgba(0,0,0,0.02); border-radius: 16px; margin-bottom: 15px; border: 1px solid #f1f5f9;
         }
 
-        /* 🚀 تمييز مرئي قوي للحساب الرئيسي مقابل الفرعي */
         .acc-row { 
           border-radius: 16px; margin-bottom: 8px; 
           display: grid; grid-template-columns: 40px 2.5fr 1fr 1fr 1fr 1.2fr; 
           align-items: center; padding: 15px 20px; cursor: pointer; 
           border: 1px solid #f1f5f9; transition: 0.2s; box-shadow: 0 2px 10px rgba(0,0,0,0.01);
         }
-        /* تصميم الحساب الرئيسي (Root) */
         .acc-row.root-node {
-          background: rgba(15, 23, 42, 0.03); /* لون رمادي داكن خفيف */
+          background: rgba(15, 23, 42, 0.03); 
           border: 1px solid rgba(15, 23, 42, 0.1);
         }
-        /* تصميم الحساب الفرعي (Child) */
         .acc-row.child-node {
           background: white;
         }
@@ -308,15 +310,14 @@ function AccountNode({ node, expandedIds, toggleExpand, selectedIds, toggleSelec
   const isSelected = selectedIds.includes(node.id);
   const hasSub = (node.children?.length > 0) || (node.transactions?.length > 0);
   
-  // 💡 تحديد ما إذا كان الحساب جذرياً أم فرعياً لتطبيق الـ CSS
   const isRoot = depth === 1;
 
   return (
-    <div style={{ marginRight: `${(depth - 1) * 30}px` /* 👈 مسافة بادئة أكبر للأبناء */ }}>
+    <div style={{ marginRight: `${(depth - 1) * 30}px` }}>
       <div 
         className={`acc-row ${isRoot ? 'root-node' : 'child-node'} ${isSelected ? 'selected' : ''}`}
         onClick={() => hasSub && toggleExpand(node.id)} 
-        style={{ borderRight: `${isRoot ? '5px' : '2px'} solid ${isRoot ? THEME.primary : THEME.goldAccent}` }} /* 👈 الشريط الجانبي بيفرق بينهم */
+        style={{ borderRight: `${isRoot ? '5px' : '2px'} solid ${isRoot ? THEME.primary : THEME.goldAccent}` }} 
       >
         <input 
           type="checkbox" className="custom-checkbox" checked={isSelected} 

@@ -18,8 +18,10 @@ export function useProjectsLogic() {
   const [projects, setProjects] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]); 
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  
+  // 🚀 تم إضافة ledger هنا بدون حذف الباقي
   const [projectDetails, setProjectDetails] = useState<any>({
-    stages: [], boq: [], expenses: [], invoices: [], inspections: [], laborStats: null, materials: [], contractorAssignments: []
+    stages: [], boq: [], expenses: [], ledger: [], invoices: [], inspections: [], laborStats: null, materials: [], contractorAssignments: []
   });
   
   const [isLoading, setIsLoading] = useState(true);
@@ -127,7 +129,7 @@ export function useProjectsLogic() {
   const [isBoqModalOpen, setIsBoqModalOpen] = useState(false);
   const [currentBoqRecord, setCurrentBoqRecord] = useState<any>({
       item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, 
-      estimated_labor_cost: 0, estimated_operational_cost: 0,
+      estimated_labor_cost: 0, estimated_material_cost: 0, estimated_expenses_cost: 0,
       start_date: '', end_date: '' 
   });
 
@@ -135,6 +137,7 @@ export function useProjectsLogic() {
       mutationFn: async (record: any) => {
           if (!record.work_item) throw new Error("يرجى إدخال اسم البند أو المرحلة أولاً!");
 
+          // 🚀 تم تنظيف الـ Payload من حقول التشغيل واستبدالها بالخامات
           const payload = {
               project_id: selectedProject.id,
               parent_id: record.item_type === 'فرعي' ? record.parent_id : null,
@@ -144,7 +147,7 @@ export function useProjectsLogic() {
               contract_quantity: Number(record.contract_quantity) || 0,
               unit_contract_price: Number(record.unit_contract_price) || 0,
               estimated_labor_cost: Number(record.estimated_labor_cost) || 0,
-              estimated_operational_cost: Number(record.estimated_operational_cost) || 0,
+              estimated_material_cost: Number(record.estimated_material_cost) || 0,
               boq_item_id: record.boq_item_id || null, 
               estimated_expenses_cost: Number(record.estimated_expenses_cost) || 0, 
               main_category: record.main_category || null, 
@@ -227,7 +230,8 @@ export function useProjectsLogic() {
                   contract_quantity: 0, 
                   unit_contract_price: Number(libraryItem.default_unit_price) || 0,
                   estimated_labor_cost: Number(libraryItem.default_labor_price) || 0,
-                  estimated_operational_cost: Number(libraryItem.default_material_price) || 0,
+                  // 🚀 تم توجيه تكلفة الخامات التقديرية إلى مسارها الصحيح بدلاً من التشغيل
+                  estimated_material_cost: Number(libraryItem.default_material_price) || 0,
                   estimated_expenses_cost: 0,
                   main_category: libraryItem.main_category || 'بند عام',
                   sub_category: libraryItem.sub_category || 'بند عام',
@@ -274,7 +278,7 @@ export function useProjectsLogic() {
       if (invTest.error) console.error("❌ إيرور في invoices:", invTest.error.message);
       else console.log(`✅ المستخلصات: تم سحب (${invTest.data?.length}) سجل بنجاح.`, invTest.data);
 
-      print("=========================================");
+      console.log("=========================================");
       alert("تم الفحص! راجع الـ Console (F12) لمعرفة التفاصيل.");
     } catch (err) {
       console.error("حدث خطأ غير متوقع أثناء الفحص:", err);
@@ -336,6 +340,14 @@ export function useProjectsLogic() {
       const { data: fullDetails, error } = await supabase.rpc('get_project_full_details', { p_project_id: project.id });
       if (error) throw error;
 
+      // 🚀 إضافة سحب كشف الحساب الموحد من الفيو الجديد (بدون حذف أي شيء)
+      const { data: ledgerData, error: ledgerError } = await supabase
+        .from('vw_project_comprehensive_ledger')
+        .select('*')
+        .eq('project_id', project.id)
+        .order('التاريخ', { ascending: false });
+      if (ledgerError) console.error("Ledger fetch error:", ledgerError);
+
       const boqData = fullDetails.boq || [];
       const expensesData = fullDetails.expenses || [];
       const materialsData = fullDetails.materials || [];
@@ -373,6 +385,7 @@ export function useProjectsLogic() {
         stages: stagesRes.data || [],
         boq: boqData,
         expenses: expensesData, 
+        ledger: ledgerData || [], // 👈 تخزين كشف الحساب الجديد في الـ State
         materials: materialsData,
         invoices: [...processedInvoices, ...processedSubClaims], 
         laborStats: laborStats,
@@ -506,7 +519,8 @@ export function useProjectsLogic() {
       // 🎯 إجمالي التكلفة المباشرة للبند فقط (لعدم تشويه الميزانية بالتكاليف الإدارية المحملة)
       const actualSpentOnItem = Number(item.actual_material_cost || 0) + Number(item.actual_labor_cost || 0) + directExp;
 
-      const estimatedCost = Number(item.estimated_labor_cost || 0) + Number(item.estimated_operational_cost || 0) + Number(item.estimated_expenses_cost || 0);
+      // 🚀 تم تبديل التشغيل بالخامات في المعادلة التقديرية
+      const estimatedCost = Number(item.estimated_labor_cost || 0) + Number(item.estimated_material_cost || 0) + Number(item.estimated_expenses_cost || 0);
       const variance = estimatedCost - actualSpentOnItem;
       
       return {

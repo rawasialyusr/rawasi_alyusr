@@ -31,9 +31,10 @@ export function useBOQLogic() {
     const { data: boqItems = [], isLoading: isBoqLoading } = useQuery({
         queryKey: ['boq_budget'],
         queryFn: async () => {
+            // 🚀 التحديث هنا: تم إضافة unit_type عشان يتسحب من جدول projects
             const { data, error } = await supabase
                 .from('boq_budget')
-                .select(`*, projects(Property)`);
+                .select(`*, projects(Property, unit_type)`);
             if (error) throw error;
             return data || [];
         }
@@ -42,7 +43,8 @@ export function useBOQLogic() {
     const { data: projects = [], isLoading: isProjLoading } = useQuery({
         queryKey: ['projects'],
         queryFn: async () => {
-            const { data, error } = await supabase.from('projects').select('id, Property');
+            // 🚀 التحديث هنا برضه لو محتاجين نستخدمه في أي مكان في الشاشة
+            const { data, error } = await supabase.from('projects').select('id, Property, unit_type');
             if (error) throw error;
             return data || [];
         }
@@ -116,7 +118,9 @@ export function useBOQLogic() {
                 work_item: record.work_item,
                 item_type: record.item_type || 'رئيسي',
                 unit: record.unit || 'مقطوعية',
-                main_category: record.main_category || null
+                main_category: record.main_category || null,
+                // 👇 التحديث هنا: إضافة حقل حالة التنفيذ لارساله لقاعدة البيانات
+                execution_status: record.execution_status || 'لم يتم البدئ' 
             };
 
             numericFields.forEach(field => {

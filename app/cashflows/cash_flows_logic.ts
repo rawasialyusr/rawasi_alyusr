@@ -17,7 +17,7 @@ export function useCashFlowsLogic() {
             let step = 0;
             const pageSize = 1000;
 
-            // 🚀 محرك السحب العميق: بيلف يسحب الداتا ألف بألف عشان يتخطى حاجز الـ 1000 سطر بتاع Supabase
+            // 🚀 محرك السحب العميق المُحصّن
             while (hasMore) {
                 const { data, error } = await supabase
                     .from('cash_flows')
@@ -28,7 +28,7 @@ export function useCashFlowsLogic() {
                         account:accounts(name)
                     `)
                     .order('transaction_date', { ascending: false })
-                    .order('created_at', { ascending: false })
+                    .order('id', { ascending: true }) // ⚓ حسم الترتيب بالـ id الفريد لمنع انزلاق السطور
                     .range(step * pageSize, (step + 1) * pageSize - 1);
                 
                 if (error) {
@@ -49,7 +49,15 @@ export function useCashFlowsLogic() {
                 }
             }
             
-            return allData;
+            // 🛡️ درع الحماية المالي: فلترة ومنع تكرار الـ ID نهائياً لضمان سلامة الحسابات
+            const uniqueDataMap = new Map();
+            allData.forEach((item) => {
+                if (item.id) {
+                    uniqueDataMap.set(item.id, item); // الـ Map بيمسح النسخة القديمة لو الـ ID اتكرر
+                }
+            });
+            
+            return Array.from(uniqueDataMap.values());
         }
     });
 

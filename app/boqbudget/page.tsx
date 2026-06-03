@@ -1,156 +1,134 @@
 "use client";
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { useBOQLogic } from './boqbudget_logic';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers'; 
 import MasterPage from '@/components/MasterPage';
-import RawasiSmartTable from '@/components/rawasismarttable';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
 import SmartCombo from '@/components/SmartCombo'; 
 import BOQModal from './BOQModal';
 
-// 🎨 مكون مساعد لتغليف الخلايا (موضع الاحتواء الشامل والألوان الزجاجية)
-const CellWrapper = ({ row, children, justify = 'flex-start', maxWidth = 'none' }: { row: any, children: React.ReactNode, justify?: string, maxWidth?: string }) => (
+const CellWrapper = ({ row, children, justify = 'center' }: { row: any, children: React.ReactNode, justify?: string }) => (
     <div style={{ 
-        background: row.project_color, 
-        padding: '2px 4px', 
-        borderRadius: '4px', 
+        padding: '6px 10px', 
         height: '100%',
-        minHeight: '26px', 
+        minHeight: '35px', 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: justify,
-        border: '1px solid rgba(255,255,255,0.4)',
-        transition: '0.2s',
-        fontSize: '9.5px', 
+        fontSize: '11px', 
         whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        maxWidth: maxWidth,
-        textOverflow: 'ellipsis'
+        fontWeight: 700
     }}>
         {children}
     </div>
 );
 
+const parseAmt = (val: any) => Number(String(val || '0').replace(/,/g, '')) || 0;
+
 export default function BOQBudgetPage() {
   const logic = useBOQLogic(); 
-  
   const [mounted, setMounted] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
+
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const hasDragged = useRef(false);
+  const startX = useRef(0);
+  const scrollLeft = useRef(0);
+
   useEffect(() => { setMounted(true); }, []);
 
-  const currentVisibleIds = useMemo(() => {
-    return logic.allFiltered
-      .slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage)
-      .map((v: any) => String(v.id));
-  }, [logic.allFiltered, logic.currentPage, logic.rowsPerPage]);
+  const groupedProjects = useMemo(() => {
+      const groups: Record<string, any> = {};
+      
+      logic.allFiltered.forEach((item: any) => {
+          const pName = item.Property || item.projects?.Property || 'عام / غير مصنف';
+          const pType = item.projects?.unit_type || ''; 
 
-  const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
+          if (!groups[pName]) {
+              groups[pName] = { 
+                  projectName: pName, 
+                  projectType: pType, 
+                  items: [], 
+                  total_contract: 0,
+                  est_material: 0, est_labor: 0, est_exp: 0, 
+                  act_material: 0, act_labor: 0, act_exp: 0, act_rev: 0, 
+                  var_material: 0, var_labor: 0, var_total: 0, net_profit: 0
+              };
+          }
+          groups[pName].items.push(item);
 
-  // 💎 أعمدة الجدول الشاملة والمضغوطة بالكامل لابتلاع الـ 31 عمود
-  const boqColumns = useMemo(() => [
-    {
-      key: 'select',
-      label: (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <input type="checkbox" className="custom-checkbox" checked={isAllVisibleSelected}
-                  onChange={() => {
-                      if (isAllVisibleSelected) logic.setSelectedIds(logic.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
-                      else logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
-                  }}
-              />
-          </div>
-      ), 
-      render: (row: any) => {
-        const isSelected = logic.selectedIds.includes(String(row.id));
-        return (
-          <CellWrapper row={row} justify="center">
-            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
-                <input type="checkbox" className="custom-checkbox" checked={isSelected} 
-                    onChange={(e) => {
-                        e.stopPropagation();
-                        if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
-                        else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
-                    }} 
-                />
-            </div>
-          </CellWrapper>
-        );
+          groups[pName].total_contract += parseAmt(item.total_contract_amount);
+          groups[pName].est_material += parseAmt(item.estimated_material_cost);
+          groups[pName].est_labor += parseAmt(item.estimated_labor_cost);
+          groups[pName].est_exp += parseAmt(item.estimated_expenses_cost);
+          groups[pName].act_material += parseAmt(item.actual_material_cost);
+          groups[pName].act_labor += parseAmt(item.actual_labor_cost);
+          groups[pName].act_exp += parseAmt(item.actual_expenses_cost);
+          groups[pName].act_rev += parseAmt(item.actual_revenue);
+          groups[pName].var_material += parseAmt(item.material_variance);
+          groups[pName].var_labor += parseAmt(item.labor_variance);
+          groups[pName].var_total += parseAmt(item.total_budget_variance);
+          groups[pName].net_profit += parseAmt(item.item_net_profit);
+      });
+      
+      return Object.values(groups).sort((a, b) => b.total_contract - a.total_contract);
+  }, [logic.allFiltered]);
+
+  const paginatedGroups = useMemo(() => {
+      const start = (logic.currentPage - 1) * logic.rowsPerPage;
+      return groupedProjects.slice(start, start + logic.rowsPerPage);
+  }, [groupedProjects, logic.currentPage, logic.rowsPerPage]);
+
+  const totalPages = Math.ceil(groupedProjects.length / logic.rowsPerPage) || 1;
+
+  const toggleProject = (projectName: string) => {
+      setExpandedProjects(prev => prev.includes(projectName) ? prev.filter(p => p !== projectName) : [...prev, projectName]);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName.toLowerCase() === 'input' || target.tagName.toLowerCase() === 'select' || target.tagName.toLowerCase() === 'button' || target.closest('button')) return;
+
+      if (!scrollerRef.current) return;
+      isDragging.current = true;
+      hasDragged.current = false;
+      scrollerRef.current.classList.add('is-dragging');
+      startX.current = e.pageX - scrollerRef.current.offsetLeft;
+      scrollLeft.current = scrollerRef.current.scrollLeft;
+  };
+
+  const handleMouseLeave = () => {
+      isDragging.current = false;
+      if (scrollerRef.current) scrollerRef.current.classList.remove('is-dragging');
+  };
+
+  const handleMouseUp = () => {
+      isDragging.current = false;
+      if (scrollerRef.current) scrollerRef.current.classList.remove('is-dragging');
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+      if (!isDragging.current || !scrollerRef.current) return;
+      e.preventDefault();
+      const x = e.pageX - scrollerRef.current.offsetLeft;
+      const walk = (x - startX.current) * 1.5; 
+
+      if (Math.abs(x - startX.current) > 5) {
+          hasDragged.current = true;
       }
-    },
-    // --- 📌 الأساسيات ---
-    { 
-      key: 'project_name', label: 'المشروع', 
-      render: (row: any) => (
-        <CellWrapper row={row} maxWidth="120px">
-            <div style={{ fontWeight: row.is_first_in_group ? 900 : 700, color: row.is_first_in_group ? '#0f172a' : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {row.is_first_in_group ? '🏢' : <span style={{ opacity: 0.4 }}>↳</span>} {row.Property || row.projects?.Property || 'عام'}
-            </div>
-        </CellWrapper>
-      )
-    },
-    { key: 'work_item', label: 'وصف البند', render: (row: any) => <CellWrapper row={row} maxWidth="150px"><span style={{ fontWeight: 900, color: THEME.primary, overflow:'hidden', textOverflow:'ellipsis' }}>{row.work_item}</span></CellWrapper> },
-    { key: 'unit', label: 'الوحدة', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color: '#64748b'}}>{row.unit}</span></CellWrapper> },
-    { key: 'start_date', label: 'بدء', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{fontSize:'8.5px'}}>{row.start_date || '-'}</span></CellWrapper> },
-    { key: 'end_date', label: 'انتهاء', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{fontSize:'8.5px'}}>{row.end_date || '-'}</span></CellWrapper> },
 
-    // --- 🤝 التعاقد ---
-    { key: 'contract_quantity', label: 'كمية عق.', render: (row: any) => <CellWrapper row={row} justify="center"><strong style={{color:'#4f46e5'}}>{Number(row.contract_quantity || 0).toLocaleString()}</strong></CellWrapper> },
-    { key: 'unit_contract_price', label: 'سعر و.', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#4f46e5'}}>{formatCurrency(row.unit_contract_price)}</span></CellWrapper> },
-    { key: 'total_contract_amount', label: 'إجمالي العق.', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{fontWeight:900, color:'#4338ca', background:'rgba(79,70,229,0.1)', padding:'1px 4px', borderRadius:'4px'}}>{formatCurrency(row.total_contract_amount)}</span></CellWrapper> },
-    { key: 'retention_percentage', label: 'ضمان%', render: (row: any) => <CellWrapper row={row} justify="center"><span>{Number(row.retention_percentage || 0)}%</span></CellWrapper> },
-    { key: 'actual_retention_amount', label: 'قيمة الضم.', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#dc2626'}}>{formatCurrency(row.actual_retention_amount)}</span></CellWrapper> },
+      scrollerRef.current.scrollLeft = scrollLeft.current - walk;
+  };
 
-    // --- 📊 الموازنة التقديرية ---
-    { key: 'estimated_material_cost', label: 'خامات(ت)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#b45309'}}>{formatCurrency(row.estimated_material_cost)}</span></CellWrapper> },
-    { key: 'estimated_labor_cost', label: 'عمالة(ت)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#b45309'}}>{formatCurrency(row.estimated_labor_cost)}</span></CellWrapper> },
-    { key: 'estimated_operational_cost', label: 'تشغيل(ت)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#b45309'}}>{formatCurrency(row.estimated_operational_cost)}</span></CellWrapper> },
-    { key: 'estimated_expenses_cost', label: 'مصروف(ت)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#b45309'}}>{formatCurrency(row.estimated_expenses_cost)}</span></CellWrapper> },
-
-    // --- 🟢 الفعلي (المسحوب تلقائياً من الحركة واليوميات) ---
-    { key: 'actual_quantity', label: 'منفذ', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{ fontWeight: 900, color: '#047857', background: 'rgba(255,255,255,0.6)', padding: '1px 6px', borderRadius: '4px', border: '1px solid #10b981' }}>{Number(row.actual_quantity || 0).toLocaleString()}</span></CellWrapper> },
-    { 
-      key: 'completed_percentage', label: 'إنجاز%', 
-      render: (row: any) => (
-        <CellWrapper row={row} justify="center">
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', width: '35px' }}>
-                <span style={{ fontSize: '8.5px', fontWeight: 900, color: '#334155' }}>{Number(row.completed_percentage || 0).toFixed(0)}%</span>
-                <div style={{ width: '100%', height: '3px', background: 'rgba(0,0,0,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: THEME.accent, width: `${Math.min(row.completed_percentage || 0, 100)}%` }}></div>
-                </div>
-            </div>
-        </CellWrapper>
-      )
-    },
-    { key: 'actual_material_cost', label: 'خامات(ف)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#047857'}}>{formatCurrency(row.actual_material_cost)}</span></CellWrapper> },
-    { key: 'actual_labor_cost', label: 'عمالة(ف)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#047857'}}>{formatCurrency(row.actual_labor_cost)}</span></CellWrapper> },
-    { key: 'actual_operational_cost', label: 'تشغيل(ف)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#047857'}}>{formatCurrency(row.actual_operational_cost)}</span></CellWrapper> },
-    { key: 'actual_expenses_cost', label: 'مصروف(ف)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#047857'}}>{formatCurrency(row.actual_expenses_cost)}</span></CellWrapper> },
-    { key: 'actual_revenue', label: 'إيراد(ف)', render: (row: any) => <CellWrapper row={row} justify="center"><span style={{color:'#15803d', fontWeight:900}}>{formatCurrency(row.actual_revenue)}</span></CellWrapper> },
-
-    // --- 🚨 الانحرافات التلقائية ---
-    { key: 'material_variance', label: '± خامات', render: (row: any) => { const v = Number(row.material_variance||0); return <CellWrapper row={row} justify="center"><span style={{color: v>=0?'#10b981':'#ef4444', fontWeight:700}}>{formatCurrency(v)}</span></CellWrapper>; } },
-    { key: 'labor_variance', label: '± العمالة', render: (row: any) => { const v = Number(row.labor_variance||0); return <CellWrapper row={row} justify="center"><span style={{color: v>=0?'#10b981':'#ef4444', fontWeight:700}}>{formatCurrency(v)}</span></CellWrapper>; } },
-    { key: 'operational_variance', label: '± تشغيل', render: (row: any) => { const v = Number(row.operational_variance||0); return <CellWrapper row={row} justify="center"><span style={{color: v>=0?'#10b981':'#ef4444', fontWeight:700}}>{formatCurrency(v)}</span></CellWrapper>; } },
-    { key: 'expenses_variance', label: '± مصروف', render: (row: any) => { const v = Number(row.expenses_variance||0); return <CellWrapper row={row} justify="center"><span style={{color: v>=0?'#10b981':'#ef4444', fontWeight:700}}>{formatCurrency(v)}</span></CellWrapper>; } },
-    { key: 'total_budget_variance', label: '± الإجمالي', render: (row: any) => { const v = Number(row.total_budget_variance||0); return <CellWrapper row={row} justify="center"><span style={{color: v>=0?'#10b981':'#ef4444', fontWeight:900, background:'rgba(255,255,255,0.6)', padding:'1px 4px', borderRadius:'4px'}}>{formatCurrency(v)}</span></CellWrapper>; } },
-    
-    // --- 💰 صافي الأرباح الاستثمارية للبند ---
-    { 
-      key: 'item_net_profit', label: 'الربح الصافي', 
-      render: (row: any) => {
-        const p = Number(row.item_net_profit || 0);
-        return (
-            <CellWrapper row={row} justify="center">
-                <span style={{ fontWeight: 900, color: p >= 0 ? '#10b981' : '#ef4444', background: 'rgba(255,255,255,0.8)', padding: '2px 6px', borderRadius: '4px', boxShadow:'0 1px 2px rgba(0,0,0,0.05)' }}>
-                    {formatCurrency(p)}
-                </span>
-            </CellWrapper>
-        );
+  const handleClickCapture = (e: React.MouseEvent) => {
+      if (hasDragged.current) {
+          e.stopPropagation();
+          e.preventDefault();
       }
-    }
-  ], [logic.selectedIds, isAllVisibleSelected, currentVisibleIds, logic]);
+  };
 
-  // 🎛️ لوحة أزرار التحكم الجانبية
   const sidebarActions = useMemo(() => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         <button className="btn-main-glass gold" onClick={logic.handleAddNew}>
@@ -159,7 +137,7 @@ export default function BOQBudgetPage() {
 
       {logic.selectedIds.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>
-          <p style={{fontSize:'10px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
+          <p style={{fontSize:'11px', textAlign:'center', color:'#94a3b8', fontWeight:900, marginBottom:'-5px'}}>الإجراءات على ({logic.selectedIds.length})</p>
           
           {logic.selectedIds.length === 1 && (
               <button className="btn-main-glass white" onClick={() => logic.handleEdit(logic.allFiltered.find((i:any) => String(i.id) === logic.selectedIds[0]))}>
@@ -175,13 +153,14 @@ export default function BOQBudgetPage() {
   ), [logic.selectedIds, logic]);
 
   return (
-    <MasterPage title="المقايسات (BOQ)" subtitle="إدارة بنود الأعمال، التكاليف التقديرية والفعلية (مجمعة بالمشاريع)">
+    <MasterPage title="المقايسات (BOQ)" subtitle="إدارة بنود الأعمال، التكاليف التقديرية والفعلية بشكل هرمي لكل مشروع">
       
       <RawasiSidebarManager 
         summary={
           <div className="summary-glass-card">
-            <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي البنود المعروضة 📊</span>
-            <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.goldAccent, marginTop:'5px'}}>{logic.allFiltered.length}</div>
+            <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي المشاريع / الفلل 🏢</span>
+            <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.goldAccent, marginTop:'5px'}}>{groupedProjects.length}</div>
+            <div style={{fontSize:'10px', color:'#94a3b8', marginTop:'5px'}}>تضم {logic.allFiltered.length} بند أعمال</div>
           </div>
         }
         actions={sidebarActions}
@@ -199,63 +178,310 @@ export default function BOQBudgetPage() {
             </div>
         }
         onSearch={logic.setGlobalSearch}
-        watchDeps={[logic.selectedIds, logic.allFiltered.length]}
+        watchDeps={[logic.selectedIds, logic.allFiltered.length, groupedProjects.length]}
       />
 
       <style>{`
-        /* 🚀 هندسة الاحتواء الشامل - Ultra Compact View CSS */
-        .ultra-compact-wrapper {
+        .boq-table-scroller {
             width: 100%;
-            overflow-x: hidden !important; 
-            zoom: 0.75; 
+            overflow-x: auto !important; 
+            border-radius: 16px;
+            background: white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            cursor: grab;
         }
         
-        .ultra-compact-wrapper table {
-            width: 100% !important;
-            table-layout: auto !important;
+        .boq-table-scroller.is-dragging {
+            cursor: grabbing !important;
+            user-select: none !important;
+        }
+        .boq-table-scroller.is-dragging * {
+            user-select: none !important;
         }
 
-        .ultra-compact-wrapper th {
-            padding: 4px 2px !important;
-            font-size: 9px !important;
+        .boq-table-scroller table {
+            width: max-content !important;
+            min-width: 100% !important;
+            border-collapse: separate !important;
+            border-spacing: 0 !important;
+        }
+
+        .boq-table-scroller th {
+            padding: 15px 10px !important;
+            font-size: 11px !important;
             white-space: nowrap !important;
-            letter-spacing: -0.5px;
-            color: #475569;
+            font-weight: 900 !important;
+            color: white !important;
+            background: #1e293b !important;
+            border-bottom: 2px solid #e2e8f0 !important;
+            text-align: center;
         }
 
-        .ultra-compact-wrapper td {
-            padding: 1px !important; 
+        .boq-table-scroller td {
+            border-bottom: 1px solid #f1f5f9 !important;
         }
 
-        .custom-checkbox { width: 14px; height: 14px; accent-color: ${THEME.goldAccent}; cursor: pointer; transition: 0.1s; }
+        .sticky-col-1 { position: sticky !important; right: 0px !important; z-index: 10; background: inherit; min-width: 40px; }
+        .sticky-col-2 { position: sticky !important; right: 40px !important; z-index: 10; background: inherit; min-width: 180px; }
+        .sticky-col-3 { position: sticky !important; right: 220px !important; z-index: 10; background: inherit; border-left: 2px solid #cbd5e1; min-width: 200px; box-shadow: -4px 0 8px rgba(0,0,0,0.05); }
+        th.sticky-col-1, th.sticky-col-2, th.sticky-col-3 { background: #1e293b !important; z-index: 11; }
+
+        .master-row { background: #f8fafc !important; cursor: pointer; transition: 0.2s; }
+        .master-row:hover { background: #f1f5f9 !important; }
+        .master-row td { border-bottom: 2px solid #cbd5e1 !important; border-top: 2px solid #cbd5e1 !important; }
+
+        .child-row { background: white !important; transition: 0.2s; }
+        .child-row:hover { background: #f8fafc !important; }
+
+        .row-edit-btn { background: rgba(255,255,255,0.8); border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; padding: 2px 4px; cursor: pointer; font-size: 10px; transition: 0.2s; margin-right: 8px; }
+        .row-edit-btn:hover { background: #cbd5e1; transform: scale(1.1); }
+        .custom-checkbox { width: 14px; height: 14px; accent-color: ${THEME.goldAccent}; cursor: pointer; }
+        
+        .cinematic-scroll::-webkit-scrollbar { height: 8px; }
+        .cinematic-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .cinematic-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .cinematic-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
         .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .btn-main-glass.gold { background: linear-gradient(135deg, rgba(197, 160, 89, 0.9), rgba(151, 115, 50, 1)); color: white; }
         .btn-main-glass.white { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
         .btn-main-glass.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
         .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); }
-        .badge-glass { background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 4px; font-weight: 700; font-size: 9px; }
+
+        .type-badge {
+            background: rgba(15, 23, 42, 0.06);
+            color: #475569;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-right: 8px;
+            font-weight: 800;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+        }
+
+        .status-dropdown {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 900;
+            cursor: pointer;
+            border: 1px solid transparent;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .status-dropdown:hover {
+            filter: brightness(0.95);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-color: rgba(0,0,0,0.1);
+        }
+        .status-dropdown:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
       `}</style>
 
       {(logic.isLoading && logic.allFiltered.length === 0) ? (
-        <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
+        <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري تحميل المقايسات...</div>
       ) : (
-        <div className="ultra-compact-wrapper cinematic-scroll" style={{ background: 'white', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-          <RawasiSmartTable 
-              data={logic.allFiltered} 
-              columns={boqColumns} 
-              enablePagination={true}
-              currentPage={logic.currentPage}
-              totalItems={logic.allFiltered.length}
-              rowsPerPage={logic.rowsPerPage}
-              onPageChange={logic.setCurrentPage}
-              onRowsChange={logic.setRowsPerPage}
-              onRowClick={(row:any) => logic.handleEdit(row)}
-              rowStyle={(row: any) => ({ backgroundColor: row.project_color })}
-          />
+        <div 
+            className="boq-table-scroller cinematic-scroll"
+            ref={scrollerRef}
+            onMouseDown={handleMouseDown}
+            onMouseLeave={handleMouseLeave}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            onClickCapture={handleClickCapture} 
+        >
+          <table>
+            <thead>
+              <tr>
+                <th className="sticky-col-1">#</th>
+                <th className="sticky-col-2">المشروع / الفيلا</th>
+                <th className="sticky-col-3">وصف البند</th>
+                
+                <th style={{minWidth:'110px', background:'#475569'}}>حالة التنفيذ</th>
+                <th style={{minWidth:'80px'}}>الوحدة</th>
+                
+                <th style={{minWidth:'100px', background:'#312e81'}}>كمية عقدية</th>
+                <th style={{minWidth:'120px', background:'#312e81'}}>سعر الوحدة</th>
+                <th style={{minWidth:'140px', background:'#312e81'}}>إجمالي العقد</th>
+                
+                <th style={{minWidth:'120px', background:'#78350f'}}>خامات (ت)</th>
+                <th style={{minWidth:'120px', background:'#78350f'}}>عمالة (ت)</th>
+                <th style={{minWidth:'120px', background:'#78350f'}}>مصروف (ت)</th> 
+
+                <th style={{minWidth:'100px', background:'#064e3b'}}>منفذ فعلي</th>
+                <th style={{minWidth:'80px', background:'#064e3b'}}>إنجاز %</th>
+                <th style={{minWidth:'120px', background:'#064e3b'}}>خامات (ف)</th>
+                <th style={{minWidth:'120px', background:'#064e3b'}}>عمالة (ف)</th>
+                <th style={{minWidth:'120px', background:'#064e3b'}}>مصروف (ف)</th> 
+                <th style={{minWidth:'140px', background:'#064e3b'}}>إيراد فعلي</th>
+
+                <th style={{minWidth:'120px'}}>± خامات</th>
+                <th style={{minWidth:'120px'}}>± عمالة</th>
+                <th style={{minWidth:'120px'}}>± الإجمالي</th>
+                <th style={{minWidth:'140px', background:'#0f172a'}}>الربح الصافي</th>
+              </tr>
+            </thead>
+            <tbody>
+                {paginatedGroups.length === 0 ? (
+                    <tr><td colSpan={21} style={{textAlign:'center', padding:'30px', fontWeight:900, color:'#94a3b8'}}>لا توجد بيانات مطابقة</td></tr>
+                ) : (
+                    paginatedGroups.map((group, idx) => {
+                        const isExpanded = expandedProjects.includes(group.projectName);
+                        return (
+                            <React.Fragment key={idx}>
+                                <tr className="master-row" onClick={() => toggleProject(group.projectName)}>
+                                    <td className="sticky-col-1" style={{textAlign:'center'}}>{isExpanded ? '▼' : '▶'}</td>
+                                    
+                                    <td className="sticky-col-2" style={{fontWeight:900, color:THEME.primary, fontSize:'14px', display: 'flex', alignItems: 'center'}}>
+                                        🏢 {group.projectName}
+                                        {group.projectType && <span className="type-badge">{group.projectType}</span>}
+                                    </td>
+                                    
+                                    <td className="sticky-col-3" style={{color:'#64748b', fontSize:'11px'}}>يحتوي على {group.items.length} بنود أعمال</td>
+                                    
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    
+                                    <td style={{textAlign:'left', color:'#4338ca', fontSize:'11px', paddingRight:'10px'}}>إجمالي التعاقد ⬅</td>
+                                    <td style={{fontWeight:900, color:'#4338ca', textAlign:'center', fontSize:'14px', background:'rgba(79,70,229,0.08)'}}>{formatCurrency(group.total_contract)}</td>
+                                    
+                                    <td style={{fontWeight:800, color:'#b45309', textAlign:'center'}}>{formatCurrency(group.est_material)}</td>
+                                    <td style={{fontWeight:800, color:'#b45309', textAlign:'center'}}>{formatCurrency(group.est_labor)}</td>
+                                    <td style={{fontWeight:800, color:'#b45309', textAlign:'center'}}>{formatCurrency(group.est_exp)}</td>
+
+                                    <td></td>
+                                    <td></td>
+
+                                    <td style={{fontWeight:800, color:'#047857', textAlign:'center'}}>{formatCurrency(group.act_material)}</td>
+                                    <td style={{fontWeight:800, color:'#047857', textAlign:'center'}}>{formatCurrency(group.act_labor)}</td>
+                                    <td style={{fontWeight:800, color:'#047857', textAlign:'center'}}>{formatCurrency(group.act_exp)}</td>
+                                    <td style={{fontWeight:900, color:'#047857', textAlign:'center', background:'rgba(16,185,129,0.08)'}}>{formatCurrency(group.act_rev)}</td>
+
+                                    <td style={{fontWeight:800, color: group.var_material >= 0 ? '#10b981':'#ef4444', textAlign:'center'}}>{formatCurrency(group.var_material)}</td>
+                                    <td style={{fontWeight:800, color: group.var_labor >= 0 ? '#10b981':'#ef4444', textAlign:'center'}}>{formatCurrency(group.var_labor)}</td>
+                                    <td style={{fontWeight:900, color: group.var_total >= 0 ? '#10b981':'#ef4444', textAlign:'center'}}>{formatCurrency(group.var_total)}</td>
+
+                                    <td style={{fontWeight:900, color: group.net_profit >= 0 ? '#10b981' : '#ef4444', textAlign:'center', fontSize:'14px', background: group.net_profit >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}}>
+                                        {formatCurrency(group.net_profit)}
+                                    </td>
+                                </tr>
+
+                                {isExpanded && group.items.map((item: any, iIdx: number) => {
+                                    const isSelected = logic.selectedIds.includes(String(item.id));
+                                    const p = Number(item.item_net_profit || 0);
+                                    return (
+                                        <tr key={item.id || iIdx} className="child-row">
+                                            <td className="sticky-col-1" style={{textAlign:'center'}}>
+                                                <input type="checkbox" className="custom-checkbox" checked={isSelected} 
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(item.id))); 
+                                                        else logic.setSelectedIds([...logic.selectedIds, String(item.id)]); 
+                                                    }} 
+                                                />
+                                            </td>
+                                            <td className="sticky-col-2" style={{color:'#94a3b8', fontSize:'11px', paddingRight:'20px'}}>↳ تابع للمشروع</td>
+                                            
+                                            <td className="sticky-col-3">
+                                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                                    <span style={{fontWeight:800, color:'#334155'}}>{item.work_item}</span>
+                                                    <button onClick={(e) => { e.stopPropagation(); logic.handleEdit(item); }} className="row-edit-btn" title="تعديل">📝</button>
+                                                </div>
+                                            </td>
+
+                                            <td style={{textAlign:'center'}}>
+                                                <select 
+                                                    className="status-dropdown"
+                                                    value={item.execution_status || 'لم يتم البدئ'}
+                                                    onClick={(e) => e.stopPropagation()} 
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        logic.handleSave({ ...item, execution_status: e.target.value });
+                                                    }}
+                                                    disabled={logic.isSaving}
+                                                    style={{
+                                                        backgroundColor: 
+                                                            item.execution_status === 'انتهى' ? 'rgba(16, 185, 129, 0.15)' :
+                                                            item.execution_status === 'قيد التسليم' ? 'rgba(245, 158, 11, 0.15)' :
+                                                            item.execution_status === 'تحت التنفيذ' ? 'rgba(59, 130, 246, 0.15)' : 
+                                                            'rgba(100, 116, 139, 0.1)',
+                                                        color: 
+                                                            item.execution_status === 'انتهى' ? '#047857' :
+                                                            item.execution_status === 'قيد التسليم' ? '#b45309' :
+                                                            item.execution_status === 'تحت التنفيذ' ? '#1d4ed8' : 
+                                                            '#475569'
+                                                    }}
+                                                >
+                                                    <option value="لم يتم البدئ">لم يتم البدئ ⏸️</option>
+                                                    <option value="تحت التنفيذ">تحت التنفيذ 🏗️</option>
+                                                    <option value="قيد التسليم">قيد التسليم ⏳</option>
+                                                    <option value="انتهى">انتهى ✅</option>
+                                                </select>
+                                            </td>
+                                            
+                                            <td style={{textAlign:'center', color:'#64748b', fontSize:'12px', fontWeight:800}}>{item.unit}</td>
+                                            
+                                            <td style={{textAlign:'center', color:'#4f46e5', fontWeight:800}}>{Number(item.contract_quantity || 0).toLocaleString()}</td>
+                                            <td style={{textAlign:'center', color:'#4f46e5', fontWeight:800}}>{formatCurrency(item.unit_contract_price)}</td>
+                                            <td style={{textAlign:'center', color:'#4338ca', fontWeight:900, background:'rgba(79,70,229,0.05)'}}>{formatCurrency(item.total_contract_amount)}</td>
+
+                                            <td style={{textAlign:'center', color:'#b45309', fontWeight:700}}>{formatCurrency(item.estimated_material_cost)}</td>
+                                            <td style={{textAlign:'center', color:'#b45309', fontWeight:700}}>{formatCurrency(item.estimated_labor_cost)}</td>
+                                            <td style={{textAlign:'center', color:'#b45309', fontWeight:700}}>{formatCurrency(item.estimated_expenses_cost)}</td>
+
+                                            <td style={{textAlign:'center', color:'#047857', fontWeight:900}}><span style={{background:'#f1f5f9', padding:'2px 8px', borderRadius:'6px'}}>{Number(item.actual_quantity || 0).toLocaleString()}</span></td>
+                                            <td style={{textAlign:'center', fontWeight:900, fontSize:'11px'}}>{Number(item.completed_percentage || 0).toFixed(0)}%</td>
+                                            
+                                            <td style={{textAlign:'center', color:'#059669', fontWeight:700}}>{formatCurrency(item.actual_material_cost)}</td>
+                                            <td style={{textAlign:'center', color:'#059669', fontWeight:700}}>{formatCurrency(item.actual_labor_cost)}</td>
+                                            <td style={{textAlign:'center', color:'#059669', fontWeight:700}}>{formatCurrency(item.actual_expenses_cost)}</td>
+                                            <td style={{textAlign:'center', color:'#15803d', fontWeight:900, background:'rgba(16,185,129,0.05)'}}>{formatCurrency(item.actual_revenue)}</td>
+
+                                            <td style={{textAlign:'center', fontWeight:800, color: Number(item.material_variance||0) >= 0 ? '#10b981':'#ef4444'}}>{formatCurrency(item.material_variance)}</td>
+                                            <td style={{textAlign:'center', fontWeight:800, color: Number(item.labor_variance||0) >= 0 ? '#10b981':'#ef4444'}}>{formatCurrency(item.labor_variance)}</td>
+                                            <td style={{textAlign:'center', fontWeight:900, color: Number(item.total_budget_variance||0) >= 0 ? '#10b981':'#ef4444'}}>{formatCurrency(item.total_budget_variance)}</td>
+
+                                            <td style={{textAlign:'center', fontWeight:900, color: p >= 0 ? '#10b981' : '#ef4444', background: p >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.08)'}}>
+                                                {formatCurrency(p)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </React.Fragment>
+                        );
+                    })
+                )}
+            </tbody>
+          </table>
+
+          {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', position: 'sticky', left: 0 }}>
+                  <button 
+                      onClick={() => logic.setCurrentPage((p:number) => p - 1)} disabled={logic.currentPage === 1}
+                      style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 900, cursor: logic.currentPage === 1 ? 'not-allowed' : 'pointer' }}
+                  >
+                      ◀ السابق
+                  </button>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>
+                      صفحة {logic.currentPage} من {totalPages}
+                  </span>
+                  <button 
+                      onClick={() => logic.setCurrentPage((p:number) => p + 1)} disabled={logic.currentPage === totalPages}
+                      style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 900, cursor: logic.currentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                  >
+                      التالي ▶
+                  </button>
+              </div>
+          )}
         </div>
       )}
 
-      {/* --- النافذة المنبثقة للـ BOQ --- */}
       {mounted && logic.isEditModalOpen && (
           <BOQModal 
             isOpen={logic.isEditModalOpen} 
@@ -267,7 +493,6 @@ export default function BOQBudgetPage() {
             projects={logic.projects} 
           />
       )}
-      
     </MasterPage>
   );
 }

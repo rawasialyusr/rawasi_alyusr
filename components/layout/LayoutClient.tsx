@@ -85,7 +85,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             // 🚀 تم تعديل التعليق هنا إلى Syntax الجافا سكريبت الصحيح:
             { id: 'project_overhead', title: 'تحميل الأوفر هيد (Overhead)', icon: '🦅', path: '/overhead' },
             { id: 'boq_budget', title: 'ميزانية المقايسات (BOQ Budget)', icon: '💼', path: '/boqbudget' },
-            { id: 'cost_allocation', title: 'محرك توزيع التكاليف (Cost Allocation)', icon: '🧮', path: '/costallocation' }
+            { id: 'cost_allocation', title: 'محرك توزيع التكاليف (Cost Allocation)', icon: '🧮', path: '/costallocation' },
+            { id: 'project_ledger', title: 'دفتر  التكاليف', icon: '📋', path: '/project-ledger' }
+            
         ] 
     },
     { 

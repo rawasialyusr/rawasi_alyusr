@@ -97,13 +97,11 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder, title, 
     );
 };
 
-// =========================================================================
-// 🚀 الصفحة الرئيسية والمحرك المالي
-// =========================================================================
 export default function CashFlowsPage() {
     const logic = useCashFlowsLogic();
-
     const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+    const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+    const [selectedPartners, setSelectedPartners] = useState<string[]>([]); 
 
     const toggleGroup = (groupName: string) => {
         if (expandedGroups.includes(groupName)) {
@@ -112,9 +110,6 @@ export default function CashFlowsPage() {
             setExpandedGroups([...expandedGroups, groupName]);
         }
     };
-
-    const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-    const [selectedPartners, setSelectedPartners] = useState<string[]>([]); 
 
     const uniqueProjects = useMemo(() => {
         const projects = logic.cashFlows.map((row: any) => row.project?.Property).filter(Boolean);
@@ -126,7 +121,6 @@ export default function CashFlowsPage() {
         return Array.from(new Set(partners)) as string[];
     }, [logic.cashFlows]);
 
-    // 🛡️ المحرك المصفح: تحديد نوع الحركة والمبلغ بدقة متناهية
     const parseAmount = (val: any) => Math.abs(Number(String(val).replace(/,/g, '')) || 0);
     
     const getFlowDirection = (row: any) => {
@@ -134,18 +128,15 @@ export default function CashFlowsPage() {
         const source = String(row.source_type || '').toLowerCase().trim();
         const rawAmount = Number(String(row.amount).replace(/,/g, '')) || 0;
 
-        // دعم كل المصطلحات الممكنة (إنجليزي/عربي/سندات)
         if (['inflow', 'in', 'وارد', 'مقبوضات', 'قبض'].includes(type) || source === 'receipt_voucher') return 'inflow';
         if (['outflow', 'out', 'منصرف', 'مدفوعات', 'صرف'].includes(type) || source === 'payment_voucher') return 'outflow';
         
-        // لو مفيش تصنيف، نعتمد على إشارة المبلغ (موجب = وارد، سالب = منصرف)
         if (rawAmount > 0) return 'inflow';
         if (rawAmount < 0) return 'outflow';
 
-        return 'inflow'; // كاحتياطي أخير
+        return 'inflow';
     };
 
-    // 🔍 الفلترة المتقدمة
     const filteredData = useMemo(() => {
         return logic.cashFlows.filter((row: any) => {
             const searchString = `${row.description || ''} ${row.reference_number || ''} ${row.project?.Property || ''} ${row.partner?.name || ''} ${row.sub_category || ''}`.toLowerCase();
@@ -168,23 +159,44 @@ export default function CashFlowsPage() {
         });
     }, [logic.cashFlows, logic.searchTerm, logic.filterType, logic.dateFrom, logic.dateTo, selectedProjects, selectedPartners]);
 
-    // 📊 الإحصائيات الدقيقة للملخص (Summary Stats)
+    // 🚀 الإحصائيات المحدثة (شاملة تحليل المصادر)
     const summaryStats = useMemo(() => {
         let totalIn = 0;
         let totalOut = 0;
+        
+        // تفريغ المصادر
+        let receiptVouchersTotal = 0;
+        let paymentVouchersTotal = 0;
+        let otherInflowsTotal = 0;
+        let otherOutflowsTotal = 0;
 
         filteredData.forEach((row: any) => {
             const amount = parseAmount(row.amount);
             const direction = getFlowDirection(row);
+            const source = String(row.source_type || '').toLowerCase().trim();
 
-            if (direction === 'inflow') totalIn += amount;
-            else if (direction === 'outflow') totalOut += amount;
+            if (direction === 'inflow') {
+                totalIn += amount;
+                if (source === 'receipt_voucher') receiptVouchersTotal += amount;
+                else otherInflowsTotal += amount;
+            } else if (direction === 'outflow') {
+                totalOut += amount;
+                if (source === 'payment_voucher') paymentVouchersTotal += amount;
+                else otherOutflowsTotal += amount;
+            }
         });
 
-        return { totalIn, totalOut, netCash: totalIn - totalOut };
+        return { 
+            totalIn, 
+            totalOut, 
+            netCash: totalIn - totalOut,
+            receiptVouchersTotal,
+            paymentVouchersTotal,
+            otherInflowsTotal,
+            otherOutflowsTotal
+        };
     }, [filteredData]);
 
-    // 🌳 تجميع الحركات للشجرة
     const treeGroupedData = useMemo(() => {
         const groups: { [key: string]: { name: string, totalIn: number, totalOut: number, items: any[] } } = {};
 
@@ -206,9 +218,6 @@ export default function CashFlowsPage() {
         return Object.values(groups);
     }, [filteredData]);
 
-    // =========================================================================
-    // 🖨️ التصدير للإكسيل
-    // =========================================================================
     const handleExportExcel = () => {
         if (!filteredData || filteredData.length === 0) return alert("لا توجد بيانات لتصديرها!");
 
@@ -239,7 +248,6 @@ export default function CashFlowsPage() {
         XLSX.writeFile(workbook, `تقرير_التدفقات_النقدية_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    // 🔢 تقسيم الصفحات
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = Math.ceil((treeGroupedData.length || 0) / rowsPerPage) || 1;
@@ -264,6 +272,10 @@ export default function CashFlowsPage() {
                     
                     .summary-label { font-size: 13px; font-weight: 900; color: #64748b; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
                     .summary-val { font-size: 28px; font-weight: 900; color: #0f172a; }
+
+                    .source-breakdown-card { background: white; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.01); }
+                    .source-breakdown-title { font-size: 11px; font-weight: 800; color: #64748b; margin-bottom: 5px; }
+                    .source-breakdown-val { font-size: 18px; font-weight: 900; }
                     
                     .filter-input { width: 100%; padding: 12px 15px; border-radius: 10px; border: 2px solid #e2e8f0; outline: none; font-weight: 700; color: #334155; transition: 0.2s; height: 48px; }
                     .filter-input:focus { border-color: ${THEME.goldAccent || '#ca8a04'}; }
@@ -285,8 +297,8 @@ export default function CashFlowsPage() {
                     .arrow-expanded { transform: rotate(90deg); }
                 `}</style>
 
-                {/* 📊 بطاقات الملخص */}
-                <div style={{ display: 'flex', gap: '20px', marginBottom: '25px', flexWrap: 'wrap' }}>
+                {/* 📊 بطاقات الملخص الرئيسية */}
+                <div style={{ display: 'flex', gap: '20px', marginBottom: '15px', flexWrap: 'wrap' }}>
                     <div className="summary-card inflow" style={{ background: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.05)' }}>
                         <div className="summary-label"><span>📥</span> إجمالي الوارد (المقبوضات)</div>
                         <div className="summary-val" style={{ color: '#059669' }}>{formatCurrency(summaryStats.totalIn)}</div>
@@ -301,6 +313,37 @@ export default function CashFlowsPage() {
                         <div className="summary-label" style={{ color: '#94a3b8' }}><span>⚖️</span> صافي التدفق النقدي (Net)</div>
                         <div className="summary-val" style={{ color: summaryStats.netCash >= 0 ? '#34d399' : '#f87171' }}>
                             {summaryStats.netCash > 0 ? '+' : ''}{formatCurrency(summaryStats.netCash)}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 🔍 تفاصيل المصادر (Breakdown) */}
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '25px', flexWrap: 'wrap', background: '#f8fafc', padding: '15px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+                    <div className="source-breakdown-card" style={{ borderLeft: '4px solid #10b981' }}>
+                        <div>
+                            <div className="source-breakdown-title">🧾 مقبوضات من (سندات القبض)</div>
+                            <div className="source-breakdown-val" style={{ color: '#059669' }}>{formatCurrency(summaryStats.receiptVouchersTotal)}</div>
+                        </div>
+                    </div>
+
+                    <div className="source-breakdown-card" style={{ borderLeft: '4px solid #ef4444' }}>
+                        <div>
+                            <div className="source-breakdown-title">💸 مدفوعات من (سندات الصرف)</div>
+                            <div className="source-breakdown-val" style={{ color: '#e11d48' }}>{formatCurrency(summaryStats.paymentVouchersTotal)}</div>
+                        </div>
+                    </div>
+
+                    <div className="source-breakdown-card" style={{ borderLeft: '4px solid #34d399' }}>
+                        <div>
+                            <div className="source-breakdown-title">📥 إيداعات من (مصادر أخرى)</div>
+                            <div className="source-breakdown-val" style={{ color: '#059669' }}>{formatCurrency(summaryStats.otherInflowsTotal)}</div>
+                        </div>
+                    </div>
+
+                    <div className="source-breakdown-card" style={{ borderLeft: '4px solid #fb7185' }}>
+                        <div>
+                            <div className="source-breakdown-title">📤 سحوبات من (مصادر أخرى)</div>
+                            <div className="source-breakdown-val" style={{ color: '#e11d48' }}>{formatCurrency(summaryStats.otherOutflowsTotal)}</div>
                         </div>
                     </div>
                 </div>
@@ -461,7 +504,6 @@ export default function CashFlowsPage() {
                                 );
                             })}
                             
-                            {/* 🚀 إجمالي الشاشة الحالية للمطابقة البصرية */}
                             {treeGroupedData.length > 0 && (
                                 <tr style={{ background: '#fef3c7' }}>
                                     <td style={{ padding: '20px', fontWeight: 900, color: '#b45309', textAlign: 'left' }}>الإجمالي الكلي للصفحة والفلتر:</td>

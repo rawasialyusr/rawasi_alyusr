@@ -36,7 +36,7 @@ export function useHierarchicalAccountsLogic() {
     }
   });
 
-  // 🧠 2. بناء الشجرة (عملية خفيفة جداً للفرونت إند فقط لترتيب العرض)
+  // 🧠 2. بناء الشجرة (عملية خفيفة جداً للفرونت إند فقط لترتيب العرض وتطهير الأرقام)
   const treeData = useMemo(() => {
     if (!accountsReport.length) return [];
 
@@ -50,13 +50,19 @@ export function useHierarchicalAccountsLogic() {
 
     sortedAccounts.forEach(acc => {
       const safeId = String(acc.id).trim();
+      
+      // 🚀 تطهير الأرقام من فخ الكسور العائمة (Floating-Point Precision Fix)
+      const cleanDebit = Math.round(Number(acc.total_debit || 0) * 100) / 100;
+      const cleanCredit = Math.round(Number(acc.total_credit || 0) * 100) / 100;
+      const cleanBalance = Math.round(Number(acc.balance || 0) * 100) / 100;
+
       mapById[safeId] = { 
         ...acc, 
         children: [], 
         transactions: acc.transactions || [], 
-        totalDebit: Number(acc.total_debit || 0),
-        totalCredit: Number(acc.total_credit || 0),
-        balance: Number(acc.balance || 0)
+        totalDebit: cleanDebit,
+        totalCredit: cleanCredit,
+        balance: cleanBalance
       };
     });
 
@@ -120,28 +126,31 @@ export function useHierarchicalAccountsLogic() {
     }
   });
 
-  // 📊 5. تصدير ميزان المراجعة إلى Excel
+  // 📊 5. تصدير ميزان المراجعة إلى Excel بدقة متناهية
   const exportToExcel = () => {
     if (!accountsReport || accountsReport.length === 0) {
         showToast("لا توجد بيانات لتصديرها", "error");
         return;
     }
 
-    // تجهيز البيانات
-    const excelData = accountsReport.map((acc: any) => ({
-        "كود الحساب": acc.code || '',
-        "اسم الحساب": acc.name || '',
-        "إجمالي مدين": Number(acc.total_debit) || 0,
-        "إجمالي دائن": Number(acc.total_credit) || 0,
-        "رصيد مدين": Number(acc.balance) > 0 ? Number(acc.balance) : 0,
-        "رصيد دائن": Number(acc.balance) < 0 ? Math.abs(Number(acc.balance)) : 0,
-    }));
+    // تجهيز البيانات المطهرة
+    const excelData = accountsReport.map((acc: any) => {
+        const bal = Math.round(Number(acc.balance || 0) * 100) / 100;
+        return {
+            "كود الحساب": acc.code || '',
+            "اسم الحساب": acc.name || '',
+            "إجمالي مدين": Math.round(Number(acc.total_debit || 0) * 100) / 100,
+            "إجمالي دائن": Math.round(Number(acc.total_credit || 0) * 100) / 100,
+            "رصيد مدين": bal > 0 ? bal : 0,
+            "رصيد دائن": bal < 0 ? Math.abs(bal) : 0,
+        };
+    });
 
-    // حساب الإجماليات السفلية
-    const totalDebit = excelData.reduce((sum, row) => sum + row["إجمالي مدين"], 0);
-    const totalCredit = excelData.reduce((sum, row) => sum + row["إجمالي دائن"], 0);
-    const totalBalDebit = excelData.reduce((sum, row) => sum + row["رصيد مدين"], 0);
-    const totalBalCredit = excelData.reduce((sum, row) => sum + row["رصيد دائن"], 0);
+    // حساب الإجماليات السفلية مع التقريب لمنع الخلل العائم
+    const totalDebit = Math.round(excelData.reduce((sum, row) => sum + row["إجمالي مدين"], 0) * 100) / 100;
+    const totalCredit = Math.round(excelData.reduce((sum, row) => sum + row["إجمالي دائن"], 0) * 100) / 100;
+    const totalBalDebit = Math.round(excelData.reduce((sum, row) => sum + row["رصيد مدين"], 0) * 100) / 100;
+    const totalBalCredit = Math.round(excelData.reduce((sum, row) => sum + row["رصيد دائن"], 0) * 100) / 100;
 
     // إضافة سطر المجاميع
     excelData.push({
