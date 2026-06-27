@@ -3,6 +3,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo';
+// 🚀 استدعاء الكمبوننت الذكي الجديد الخاص ببنود المشروع
+import ProjectBoqCombo from '@/components/ProjectBoqCombo'; 
 import { formatCurrency } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context'; 
 
@@ -10,7 +12,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
     const { showToast } = useToast();
     const [mounted, setMounted] = useState(false);
     
-    // 📸 حالات ومراجع الكاميرا والمرفقات (تمت إضافتها لتطابق ثيم المصروفات)
+    // 📸 حالات ومراجع الكاميرا والمرفقات 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -123,7 +125,8 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                             onSelect={(v: any) => logic.setInvoiceData({ 
                                 ...logic.invoiceData, 
                                 project_id: v?.id,
-                                items: logic.invoiceData.items.map((i:any) => ({...i, boq_id: null})) 
+                                // 🚀 تصفير البنود لو المشروع اتغير عشان ميحصلش تضارب
+                                items: logic.invoiceData.items.map((i:any) => ({...i, boq_item_id: null, boq_item: ''})) 
                             })} 
                         />
                     </div>
@@ -167,7 +170,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                             <tbody>
                                 {logic.invoiceData.items.map((item: any, idx: number) => (
                                     <tr key={idx} className="item-row">
-                                        {/* 🚀 السحر هنا: استخدام SmartCombo لسحب الخامات من الكتالوج الموحد */}
+                                        {/* 🚀 السحب من الدليل الموحد (مظبوط) */}
                                         <td style={{ padding: '10px', zIndex: 70 - idx, position: 'relative' }}>
                                             <SmartCombo 
                                                 table="material_items" 
@@ -177,16 +180,13 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                                                 freeText={true} 
                                                 onSelect={(selectedItem: any) => {
                                                     const isObject = typeof selectedItem === 'object' && selectedItem !== null;
-                                                    
                                                     if (isObject) {
-                                                        // تم الاختيار من الدليل: سحب المعرف، الاسم، الوحدة والسعر
                                                         logic.handleItemChange(idx, 'item_id', selectedItem.id);
                                                         logic.handleItemChange(idx, 'item_name', selectedItem.item_name);
                                                         logic.handleItemChange(idx, 'work_item', selectedItem.item_name);
                                                         if (selectedItem.default_unit) logic.handleItemChange(idx, 'unit', selectedItem.default_unit);
                                                         if (selectedItem.default_unit_price) logic.handleItemChange(idx, 'unit_price', selectedItem.default_unit_price);
                                                     } else {
-                                                        // إدخال حر غير موجود في الدليل
                                                         logic.handleItemChange(idx, 'item_id', null);
                                                         logic.handleItemChange(idx, 'item_name', selectedItem);
                                                         logic.handleItemChange(idx, 'work_item', selectedItem);
@@ -195,14 +195,15 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                                             />
                                         </td>
                                         
-                                        {/* 🚀 خانة اختيار الـ BOQ (مربوطة بالمشروع) */}
+                                        {/* 🚀 السحر هنا: استخدام الكمبوننت المخصص للبند */}
                                         <td style={{ padding: '10px', zIndex: 60 - idx, position: 'relative' }}>
-                                            <SmartCombo 
-                                                table="boq_budget" 
-                                                displayCol="work_item" 
-                                                customFilter={logic.invoiceData.project_id ? `project_id=eq.${logic.invoiceData.project_id}` : 'id=is.null'}
-                                                value={item.boq_id}
-                                                onSelect={(v: any) => logic.handleItemChange(idx, 'boq_id', v?.id)} 
+                                            <ProjectBoqCombo 
+                                                projectId={logic.invoiceData.project_id} 
+                                                value={item.boq_item_id}
+                                                initialDisplay={item.boq_item}
+                                                onSelect={(selectedBoq: any) => {
+                                                    logic.handleItemChange(idx, 'boq_selection', selectedBoq);
+                                                }} 
                                             />
                                         </td>
 

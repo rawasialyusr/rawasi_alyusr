@@ -26,6 +26,70 @@ export function useMaterialsLogic() {
     const [isDispenseModalOpen, setIsDispenseModalOpen] = useState(false);
     const [selectedInvoiceItem, setSelectedInvoiceItem] = useState<any>(null);
 
+    // =========================================================================
+    // 🚀 الإضافات الجديدة الخاصة بالصرف المجمع (Bulk Dispense)
+    // =========================================================================
+    const [selectedLineItems, setSelectedLineItems] = useState<any[]>([]);
+    const [isBulkDispenseModalOpen, setIsBulkDispenseModalOpen] = useState(false);
+
+    const handleToggleLineSelection = (lineItem: any) => {
+        setSelectedLineItems(prev => {
+            const exists = prev.find(p => p.id === lineItem.id);
+            if (exists) return prev.filter(p => p.id !== lineItem.id);
+            return [...prev, lineItem];
+        });
+    };
+
+    const clearLineSelection = () => setSelectedLineItems([]);
+
+    const bulkDispenseMutation = useMutation({
+        mutationFn: async (payload: any) => {
+            // إنشاء رأس إذن الصرف
+            const issuePayload = {
+                issue_number: `ISS-${Date.now().toString().slice(-6)}`,
+                project_id: payload.project_id,
+                subcontractor_id: payload.issue_type === 'صرف لمقاول' ? payload.subcontractor_id : null,
+                issue_date: payload.issue_date,
+                issue_type: payload.issue_type,
+                total_amount: payload.items.reduce((sum: number, i: any) => sum + (i.dispense_qty * i.unit_price), 0),
+                notes: payload.issue_type === 'صرف لمقاول' ? `صرف مجمع محمل على المقاول مباشر من المشتريات` : `صرف مجمع واستهلاك مباشر للشركة`,
+                is_posted: false 
+            };
+
+            const { data: issueRecord, error: issueError } = await supabase
+                .from('material_issues')
+                .insert([issuePayload])
+                .select('id').single(); 
+
+            if (issueError) throw new Error(issueError.message);
+
+            // إنشاء سطور الخامات
+            const linesPayload = payload.items.map((item: any) => ({
+                issue_id: issueRecord.id,
+                item_id: item.item_id || null, 
+                item_name: item.work_item || item.item_name,
+                quantity: item.dispense_qty,
+                unit: item.unit,
+                unit_price: item.unit_price,
+                total_price: item.dispense_qty * item.unit_price,
+                boq_id: item.boq_item_id || null, // الحفاظ على الميزانية القديمة
+                boq_item_id: null 
+            }));
+
+            const { error: lineError } = await supabase.from('material_issue_lines').insert(linesPayload);
+            if (lineError) throw new Error(lineError.message);
+        },
+        onSuccess: () => {
+            showToast("تم حفظ إذن الصرف المجمع كمسودة بنجاح 📦", "success");
+            setIsBulkDispenseModalOpen(false);
+            setSelectedLineItems([]); // تفريغ التحديد بعد النجاح
+            queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
+            fetchInventoryBalances(); 
+        },
+        onError: (err: any) => showToast(`خطأ في الحفظ المجمع: ${err.message}`, "error")
+    });
+    // =========================================================================
+
     const initialInvoiceState = {
         id: null, 
         project_id: '', project_name: '',
@@ -117,7 +181,6 @@ export function useMaterialsLogic() {
                     unit: line.unit,
                     unit_price: line.unit_price,
                     total_price: line.total_price,
-                    // 🚀 نقرأ boq_item_id في مكانه السليم
                     boq_item_id: line.boq_item_id, 
                     boq_item: line.boq?.work_item,   
                     exp_date: line.receipt?.receipt_date,
@@ -192,7 +255,6 @@ export function useMaterialsLogic() {
         const newItems = [...invoiceData.items];
         
         if (field === 'boq_selection') {
-            // 🚀 بنربط الميزانية اللي اختارها بالـ ID الأساسي بتاعها في الفاتورة
             newItems[index].boq_item_id = value?.id || null;
             newItems[index].boq_item = value?.work_item || '';
         } else {
@@ -266,7 +328,7 @@ export function useMaterialsLogic() {
                 unit: item.unit || 'وحدة',
                 unit_price: Number(item.unit_price) || 0,
                 total_price: Number(item.total_price) || 0,
-                boq_item_id: item.boq_item_id || null // 🚀 حفظ في الفاتورة (عمود واحد)
+                boq_item_id: item.boq_item_id || null
             }));
 
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
@@ -332,8 +394,6 @@ export function useMaterialsLogic() {
                 unit: data.item.unit,
                 unit_price: data.item.unit_price,
                 total_price: data.quantity * data.item.unit_price,
-                // 🛑 الحل الجذري لمنع إيرور 409
-                // مش بنبعت الميزانية القديمة بتاعة الفاتورة خالص عشان متعملش تعارض
                 boq_id: data.boq_id || null, 
                 boq_item_id: null 
             };
@@ -450,6 +510,14 @@ export function useMaterialsLogic() {
         isDispenseModalOpen, setIsDispenseModalOpen,
         selectedInvoiceItem, setSelectedInvoiceItem,
         handleOpenDispense,
-        dispenseMaterialMutation
+        dispenseMaterialMutation,
+
+        // 🚀 تمرير دوال وحالات الصرف المجمع للصفحة
+        selectedLineItems, 
+        handleToggleLineSelection, 
+        clearLineSelection,
+        isBulkDispenseModalOpen, 
+        setIsBulkDispenseModalOpen,
+        bulkDispenseMutation
     };
 }

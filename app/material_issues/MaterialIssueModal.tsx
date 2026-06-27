@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo';
+// 🚀 استدعاء الكمبوننت الذكي المخصص لأوامر الشغل وبنود المشروع
+import ProjectBoqCombo from '@/components/ProjectBoqCombo'; 
 import { formatCurrency } from '@/lib/helpers';
 
 export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
@@ -166,15 +168,14 @@ export default function MaterialIssueModal({ isOpen, onClose, logic }: any) {
                                             </td>
                                             
                                             <td style={{ padding: '10px', zIndex: 50 - idx, position: 'relative' }}>
-                                                {/* 🚀 القراءة من جدول الميزانية الأساسي المباشر boq_budget_distinct */}
-                                                <SmartCombo 
-                                                    table="boq_budget_distinct" 
-                                                    displayCol="work_item" 
-                                                    searchCols="work_item"
-                                                    searchColumns={['work_item']} 
-                                                    customFilter={logic.issueData.project_id ? `project_id=eq.${logic.issueData.project_id}` : 'id=is.null'}
+                                                {/* 🚀 السحب باستخدام الكمبوننت الذكي المخصص للبند */}
+                                                <ProjectBoqCombo 
+                                                    projectId={logic.issueData?.project_id}
                                                     value={item.boq_id}
-                                                    onSelect={(v: any) => logic.handleItemChange(idx, 'boq_selection', v)} 
+                                                    initialDisplay={item.boq_item || item.boq_item_name}
+                                                    onSelect={(selectedBoq: any) => {
+                                                        logic.handleItemChange(idx, 'boq_selection', selectedBoq);
+                                                    }} 
                                                 />
                                             </td>
 

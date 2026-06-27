@@ -97,7 +97,8 @@ export function useInvoicesLogic() {
             const balance = total - paid;
             
             let paymentStatus = 'unpaid'; 
-            if (paid >= total && total > 0) paymentStatus = 'paid'; 
+            if (paid > total && total > 0) paymentStatus = 'overpaid'; 
+            else if (paid === total && total > 0) paymentStatus = 'paid'; 
             else if (paid > 0) paymentStatus = 'partial'; 
 
             return {
@@ -136,7 +137,7 @@ export function useInvoicesLogic() {
             id: undefined, 
             invoice_id: inv.id, 
             invoice_number: inv.invoice_number,
-            date: new Date().toISOString().split('T')[0], // 🚀 تاريخ اليوم افتراضياً
+            date: new Date().toISOString().split('T')[0], 
             partner_id: inv.partner_id, 
             partner_name: pName,
             selected_projects: selectedProjects, 
@@ -153,23 +154,28 @@ export function useInvoicesLogic() {
 
     const handlePayInvoice = (inv: any) => {
         const balance = Number(inv.total_amount || 0) - Number(inv.paid_amount || 0);
-        if (balance <= 0) {
-            showToast("هذه الفاتورة مسددة بالكامل ✅", "info"); 
-            return;
-        }
+        const defaultAmount = balance > 0 ? balance : 0;
+        
         const params = new URLSearchParams({
-            invoice_id: inv.id, amount: balance.toString(), client_name: inv.client_name || '', ref: inv.invoice_number || ''
+            invoice_id: inv.id, 
+            amount: defaultAmount.toString(), 
+            client_name: inv.client_name || '', 
+            ref: inv.invoice_number || ''
         });
         router.push(`/ReceiptVouchers?${params.toString()}`);
     };
 
     const handleAddNew = () => { 
-        // 🚀 ضبط تاريخ الفاتورة الجديدة لتكون بصيغة YYYY-MM-DD
         setCurrentRecord({ lines: [], date: new Date().toISOString().split('T')[0], project_ids: [], selected_projects: [] }); 
         setIsEditModalOpen(true); 
     };
 
     const handleEdit = (inv: any) => {
+        if (inv.is_posted || inv.status === 'مُعتمد' || inv.status === 'مرحل') {
+            showToast("⚠️ لا يمكن تعديل فاتورة مُرحلة! لتسجيل الدفعات استخدم زر (💰) الموجود بالجدول. ولتعديل بيانات الأصناف يجب فك الترحيل أولاً.", "error");
+            return;
+        }
+
         let pIds: string[] = [];
         if (Array.isArray(inv.project_ids)) {
             pIds = inv.project_ids.map((id: any) => String(id));
@@ -186,6 +192,14 @@ export function useInvoicesLogic() {
     const saveMutation = useMutation({
         mutationFn: async (record: any) => {
             const cleanId = (id: any) => (id && typeof id === 'string' && id.trim() !== '') ? id : null;
+            
+            if (record.id) {
+                const { data: currentInv } = await supabase.from('invoices').select('status').eq('id', record.id).single();
+                if (currentInv && (currentInv.status === 'مُعتمد' || currentInv.status === 'مرحل')) {
+                    throw new Error("لا يمكن حفظ التعديلات! الفاتورة مُرحلة بالفعل في النظام. يرجى فك الترحيل أولاً.");
+                }
+            }
+
             const invoiceHeader = {
                 invoice_number: record.invoice_number, 
                 date: record.date, 
@@ -255,7 +269,7 @@ export function useInvoicesLogic() {
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
         },
-        onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
+        onError: (err: any) => showToast(`${err.message}`, "error") 
     });
 
     const deleteMutation = useMutation({
@@ -265,7 +279,7 @@ export function useInvoicesLogic() {
             if (error) throw error;
         },
         onSuccess: () => {
-            showToast("تم الحذف النهائي وكافة القيود المرتبطة 🗑️", "success");
+            showToast("تم الحذف النهائي للفواتير المحددة 🗑️", "success");
             setSelectedIds([]);
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
         },
@@ -290,28 +304,21 @@ export function useInvoicesLogic() {
                 safe_bank_acc_id: cleanId(receiptData.safe_bank_acc_id),
                 partner_acc_id: cleanId(receiptData.partner_acc_id),
                 project_ids: receiptData.project_ids && receiptData.project_ids.length > 0 ? receiptData.project_ids : null,
-                status: 'مسودة'
+                status: 'مسودة' // 🚀 تم التعديل: السند سينشأ كمسودة لترحيله يدوياً لاحقاً
             };
 
             const { error: receiptErr } = await supabase.from('receipt_vouchers').insert([dataToSave]);
             if (receiptErr) throw receiptErr;
 
-            if (dataToSave.invoice_id) {
-                const { data: invData } = await supabase.from('invoices').select('paid_amount').eq('id', dataToSave.invoice_id).single();
-                const newPaid = Number(invData?.paid_amount || 0) + finalAmount;
-                
-                const { error: updateErr } = await supabase.from('invoices').update({ paid_amount: newPaid }).eq('id', dataToSave.invoice_id);
-                if (updateErr) throw updateErr;
-            }
         },
         onError: (err: any) => {
             if (err.message === "AMOUNT_ZERO") showToast("المبلغ المُسدد يجب أن يكون أكبر من صفر ⚠️", "warning");
-            else showToast("حدث خطأ أثناء إصدار سند السداد! ❌", "error");
+            else showToast(`حدث خطأ أثناء إصدار سند السداد: ${err.message}`, "error");
         },
         onSuccess: () => {
             setIsReceiptModalOpen(false);
             setSelectedInvoiceForPay(null);
-            showToast("تم السداد وتحديث الفاتورة بنجاح ✅", "success");
+            showToast("تم إنشاء سند القبض كمسودة بنجاح 📝", "success");
             queryClient.invalidateQueries({ queryKey: ['invoices'] });
             queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
         }

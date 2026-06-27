@@ -77,11 +77,13 @@ export function useLedgerLogic() {
     });
   }, [ledgerData, searchQuery, filterType, filterProject]);
 
-  // 🚀 بناء "الهرم المالي" مع الحفاظ على الـ Unique Key
+  // 🚀 بناء "الهرم المالي" الشامل لجميع أنواع التكاليف
   const pyramidData = useMemo(() => {
     let grandTotal = 0;
     let totalLabor = 0;
     let totalOverhead = 0;
+    let totalMaterials = 0; // 👈 إجمالي الخامات
+    let totalSubcontractors = 0; // 👈 إجمالي المقاولين
     const projectMap = new Map();
 
     filteredLedger.forEach((row: any) => {
@@ -89,10 +91,14 @@ export function useLedgerLogic() {
       const costType = row['نوع التكلفة'];
       const amount = Number(row['التكلفة المحملة (جنيه)'] || 0);
 
-      // 1. حساب الإجماليات لرأس الهرم
+      // 1. حساب الإجماليات لرأس الهرم ولوحة المؤشرات
       grandTotal += amount;
       if (costType === 'عمالة مباشرة') {
           totalLabor += amount;
+      } else if (costType === 'خامات ومواد') { // 👈 فصل الخامات
+          totalMaterials += amount;
+      } else if (costType === 'مصروفات مقاولين') { // 👈 فصل المقاولين
+          totalSubcontractors += amount;
       } else {
           totalOverhead += amount;
       }
@@ -124,6 +130,8 @@ export function useLedgerLogic() {
       grandTotal,
       totalLabor,
       totalOverhead,
+      totalMaterials, // 👈 تصدير الخامات
+      totalSubcontractors, // 👈 تصدير المقاولين
       projects: projectsArray
     };
   }, [filteredLedger]);

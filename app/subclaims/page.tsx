@@ -85,7 +85,7 @@ export default function SubContractorClaimsPage() {
         });
     }, [logic.contractors, searchTerm]);
 
-    // 🚀 استخراج الفلل والبنود المتاحة للفلترة
+    // 🚀 استخراج الفلل والبنود المتاحة للفلترة (تم التحديث ليتوافق مع الفيو)
     const availableVillas = useMemo(() => {
         if (!logic.assignments) return [];
         return Array.from(new Set(logic.assignments.map((a: any) => a.projects?.Property).filter(Boolean)));
@@ -93,10 +93,10 @@ export default function SubContractorClaimsPage() {
 
     const availableItems = useMemo(() => {
         if (!logic.assignments) return [];
-        return Array.from(new Set(logic.assignments.map((a: any) => a.boq_budget?.work_item || a.boq_items?.item_name || a.description).filter(Boolean)));
+        return Array.from(new Set(logic.assignments.map((a: any) => a.boq_item_name).filter(Boolean)));
     }, [logic.assignments]);
 
-    // 🎯 فلترة الأعمال الجارية بذكاء (النص + التشك بوكس)
+    // 🎯 فلترة الأعمال الجارية بذكاء (تم التحديث للبحث في أوامر التشغيل)
     const filteredAssignments = useMemo(() => {
         let list = logic.assignments || [];
         
@@ -105,15 +105,16 @@ export default function SubContractorClaimsPage() {
         }
 
         if (selectedItems.length > 0) {
-            list = list.filter((a: any) => selectedItems.includes(a.boq_budget?.work_item || a.boq_items?.item_name || a.description));
+            list = list.filter((a: any) => selectedItems.includes(a.boq_item_name));
         }
 
         const cleanSearch = assignmentSearch.trim().toLowerCase();
         if (cleanSearch) {
             list = list.filter((a: any) => {
                 const projName = (a.projects?.Property || '').toLowerCase();
-                const itemName = (a.boq_budget?.work_item || a.boq_items?.item_name || a.description || '').toLowerCase();
-                return projName.includes(cleanSearch) || itemName.includes(cleanSearch);
+                const itemName = (a.boq_item_name || '').toLowerCase();
+                const orderNum = (a.order_number || '').toLowerCase();
+                return projName.includes(cleanSearch) || itemName.includes(cleanSearch) || orderNum.includes(cleanSearch);
             });
         }
 
@@ -139,7 +140,7 @@ export default function SubContractorClaimsPage() {
                         }} 
                         className="btn-main-glass blue"
                     >
-                        ➕ إسناد بند عمل جديد
+                        ➕ إسناد أمر تشغيل للمقاول
                     </button>
 
                     <button 
@@ -170,14 +171,12 @@ export default function SubContractorClaimsPage() {
         </div>
     );
 
-    // 🚀 تحديث عواميد السجل لعرض حالة "السداد الجزئي" و "التدرج اللوني للاستحقاق"
+    // 🚀 عواميد السجل 
     const historyColumns = [
         { header: 'تاريخ المستخلص', render: (row: any) => row.date },
         { header: 'رقم المستخلص', render: (row: any) => <strong style={{color: THEME.primary}}>{row.claim_number}</strong> },
         { header: 'المشروع المرتبط', render: (row: any) => row.projects?.Property || 'مجمع (عدة عقارات)' },
         { header: 'الصافي للصرف', render: (row: any) => <strong style={{color: THEME.success, fontSize: '15px'}}>{formatCurrency(row.net_amount)}</strong> },
-        
-        // 🚀 العمود الجديد: تتبع الاستحقاق المتدرج الألوان
         {
             header: 'ميعاد الاستحقاق',
             render: (row: any) => {
@@ -243,7 +242,6 @@ export default function SubContractorClaimsPage() {
                 );
             }
         },
-
         { 
             header: 'حالة السداد', 
             render: (row: any) => {
@@ -292,7 +290,6 @@ export default function SubContractorClaimsPage() {
                 return (
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         
-                        {/* 🚀 زرار الصرف المباشر مع الحماية */}
                         {row.is_posted && !isFullyPaid && (
                             <button 
                                 disabled={logic.isSavingPayment}
@@ -305,7 +302,6 @@ export default function SubContractorClaimsPage() {
 
                         <button onClick={() => logic.handlePreparePrint(row)} style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px', transition: '0.2s' }}>طباعة 🖨️</button>
 
-                        {/* 🚀 تأمين وحماية أزرار الترحيل وفك الترحيل ضد النقرات المتعددة */}
                         {!row.is_posted ? (
                             <button 
                                 disabled={logic.actionMutation.isPending}
@@ -324,7 +320,6 @@ export default function SubContractorClaimsPage() {
                             </button>
                         )}
 
-                        {/* 🚀 تأمين حماية الحذف الفوري */}
                         <button 
                             disabled={logic.actionMutation.isPending}
                             onClick={() => { if(confirm('متأكد من مسح المستخلص نهائياً وإرجاع الأعمال لجاري التنفيذ؟ (سيتم إلغاء القيود المتعلقة به)')) logic.actionMutation.mutate({ action: 'delete', id: row.id }) }} 
@@ -452,7 +447,7 @@ export default function SubContractorClaimsPage() {
                                             type="text" 
                                             className="search-input-fancy" 
                                             style={{ background: '#f1f5f9', border: 'none', padding: '12px 40px 12px 10px' }}
-                                            placeholder="بحث سريع (فيلا أو بند)..." 
+                                            placeholder="بحث سريع (فيلا، بند، رقم أمر)..." 
                                             value={assignmentSearch}
                                             onChange={(e) => setAssignmentSearch(e.target.value)}
                                         />
@@ -466,7 +461,7 @@ export default function SubContractorClaimsPage() {
                                             if (logic.selectedAssignments.length === filteredAssignments.length) {
                                                 logic.setSelectedAssignments([]);
                                             } else {
-                                                logic.setSelectedAssignments(filteredAssignments.map((a:any) => a.id));
+                                                logic.setSelectedAssignments(filteredAssignments.map((a:any) => a.assignment_id));
                                             }
                                         }}
                                         style={{ background: THEME.primary, color: 'white', border: 'none', padding: '12px 20px', borderRadius: '14px', fontWeight: 900, cursor: 'pointer', transition: '0.2s', fontSize: '13px' }}
@@ -480,12 +475,13 @@ export default function SubContractorClaimsPage() {
                                         data={filteredAssignments} 
                                         isLoading={logic.isAssignLoading}
                                         columns={[
-                                            { header: 'المشروع العقاري', render: (row: any) => <span style={{fontWeight: 800}}>{row.projects?.Property || '---'}</span> },
-                                            { header: 'بند العمل المسند', render: (row: any) => <span style={{color: THEME.primary, fontWeight: 700}}>{row.boq_budget?.work_item || row.boq_items?.item_name || '---'}</span> },
-                                            { header: 'الكمية', render: (row: any) => `${row.assigned_qty} ${row.boq_budget?.unit || row.boq_items?.unit_of_measure || ''}` },
-                                            { header: 'سعر الوحدة', render: (row: any) => formatCurrency(row.unit_price) },
-                                            { header: 'الإجمالي', render: (row: any) => <strong style={{ color: THEME.success }}>{formatCurrency(row.assigned_qty * row.unit_price)}</strong> },
-                                            { header: 'الحالة', render: (row: any) => <span style={{ color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>{row.status}</span> },
+                                            { header: 'أمر التشغيل', render: (row: any) => <strong style={{color: THEME.accent}}>{row.order_number}</strong> },
+                                            { header: 'المشروع / البند', render: (row: any) => <div style={{lineHeight:'1.4'}}><span style={{fontWeight: 800}}>{row.projects?.Property}</span><br/><span style={{fontSize:'11px', color:'#64748b'}}>{row.boq_item_name}</span></div> },
+                                            { header: 'الكمية', render: (row: any) => `${row.executed_qty}` },
+                                            { header: 'قيمة الأعمال', render: (row: any) => <span style={{ color: THEME.success, fontWeight: 900 }}>{formatCurrency(row.gross_total_amount)}</span> },
+                                            { header: 'خصومات الخامات', render: (row: any) => <span style={{ color: THEME.danger, fontWeight: 800 }}>{formatCurrency(row.materials_deduction)}</span> },
+                                            { header: 'خصومات النثريات', render: (row: any) => <span style={{ color: THEME.danger, fontWeight: 800 }}>{formatCurrency(row.expenses_deduction)}</span> },
+                                            { header: 'الصافي التقريبي', render: (row: any) => <strong style={{ color: THEME.primary }}>{formatCurrency(row.net_before_financial_deductions)}</strong> },
                                             {
                                                 header: 'إجراءات',
                                                 render: (row: any) => (
@@ -499,7 +495,7 @@ export default function SubContractorClaimsPage() {
                                                         <button 
                                                             onClick={(e) => { 
                                                                 e.stopPropagation(); 
-                                                                if(confirm('متأكد من مسح هذا البند؟')) logic.deleteAssignment(row.id); 
+                                                                if(confirm('متأكد من مسح هذا البند وإرجاع أمر التشغيل لتنفيذ ذاتي؟')) logic.deleteAssignment(row.assignment_id); 
                                                             }} 
                                                             style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '11px' }}
                                                         >
@@ -523,7 +519,7 @@ export default function SubContractorClaimsPage() {
                                     data={logic.claimsHistory} 
                                     isLoading={logic.isHistoryLoading} 
                                     columns={historyColumns} 
-                                Dad        />
+                                />
                             </div>
                         )}
                     </div>

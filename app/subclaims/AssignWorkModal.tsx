@@ -9,9 +9,10 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
     
     useEffect(() => { setMounted(true); }, []);
 
+    // 🚀 1. بمجرد اختيار الفيلا، نسحب أوامر التشغيل المتاحة ليها
     useEffect(() => {
         if (record.project_id) {
-            logic.fetchProjectBoq(record.project_id);
+            logic.fetchProjectJobOrders(record.project_id);
         }
     }, [record.project_id]);
 
@@ -19,7 +20,7 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
 
     const handleSave = () => {
         if (!record.project_id) return alert("⚠️ يرجى اختيار المشروع العقاري أولاً.");
-        if (!record.boq_budget_id) return alert("⚠️ يرجى اختيار بند الأعمال.");
+        if (!record.job_order_id) return alert("⚠️ يرجى اختيار أمر التشغيل."); // التغيير هنا لأمر التشغيل
         if (Number(record.assigned_qty) <= 0 || Number(record.unit_price) <= 0) return alert("⚠️ يرجى إدخال كمية وسعر صحيحين أكبر من الصفر.");
         
         onSave(record);
@@ -32,7 +33,7 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
             <div className="cinematic-scroll" style={{ background: 'white', borderRadius: '30px', width: '100%', maxWidth: '650px', padding: '40px', position: 'relative', zIndex: 10, boxShadow: '0 50px 100px rgba(0,0,0,0.5)', border: `1px solid ${THEME.accent}40` }}>
                 
                 <h2 style={{ margin: '0 0 30px 0', fontWeight: 900, color: THEME.primary, borderBottom: '2px dashed #eee', paddingBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span>➕ إسناد بند عمل للمقاول:</span>
+                    <span>➕ إسناد أمر تشغيل للمقاول:</span>
                     <span style={{ color: THEME.accent, background: '#fef3c7', padding: '5px 15px', borderRadius: '12px', fontSize: '18px' }}>{contractorName}</span>
                 </h2>
 
@@ -46,33 +47,37 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
                             searchCols="Property,project_code" 
                             placeholder="🔍 ابحث عن الفيلا..."
                             onSelect={(val: any) => {
-                                setRecord({...record, project_id: val?.id, boq_budget_id: null, assigned_qty: 0}); 
+                                // 🚀 تصفير أمر التشغيل عند تغيير الفيلا
+                                setRecord({...record, project_id: val?.id, job_order_id: null, assigned_qty: 0}); 
                             }} 
                             strict={true}
                         />
                     </div>
 
                     <div style={{ zIndex: 50, position: 'relative' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 900, color: '#475569', display: 'block', marginBottom: '10px' }}>🏗️ بند الأعمال (من مقايسة الفيلا المحددة) *</label>
+                        <label style={{ fontSize: '13px', fontWeight: 900, color: '#475569', display: 'block', marginBottom: '10px' }}>📑 أوامر التشغيل المتاحة (للفيلا المحددة) *</label>
                         <select 
                             style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #e2e8f0', fontWeight: 800, outline: 'none', background: '#f8fafc' }}
-                            value={record.boq_budget_id || ''}
+                            value={record.job_order_id || ''}
                             onChange={(e) => {
-                                const selectedBoq = logic.projectBoqItems.find((b:any) => b.id === e.target.value);
+                                // 🚀 2. البحث في قائمة أوامر التشغيل وسحب السعر والكمية
+                                const selectedJobOrder = logic.projectJobOrders.find((jo:any) => jo.id === e.target.value);
                                 setRecord({
                                     ...record, 
-                                    boq_budget_id: selectedBoq?.id, 
-                                    // 🎯 تم إزالة التمرير الخاطئ لـ boq_id هنا
-                                    unit: selectedBoq?.unit,
-                                    assigned_qty: selectedBoq?.contract_quantity || 1, 
-                                    unit_price: selectedBoq?.unit_contract_price || 0 
+                                    job_order_id: selectedJobOrder?.id, 
+                                    boq_budget_id: selectedJobOrder?.boq_budget_id, // بنحفظ الـ ID بتاع الموازنة كمان كمرجع
+                                    unit: selectedJobOrder?.boq_budget?.unit,
+                                    assigned_qty: selectedJobOrder?.assigned_qty || 1, 
+                                    unit_price: selectedJobOrder?.unit_price || 0 
                                 });
                             }}
                             disabled={!record.project_id}
                         >
-                            <option value="">{record.project_id ? '-- يرجى اختيار البند --' : '-- اختر الفيلا أولاً لعرض مقايستها --'}</option>
-                            {logic.projectBoqItems.map((b: any) => (
-                                <option key={b.id} value={b.id}>{b.work_item} ({b.contract_quantity} {b.unit})</option>
+                            <option value="">{record.project_id ? '-- يرجى اختيار أمر التشغيل --' : '-- اختر الفيلا أولاً لعرض أوامر التشغيل --'}</option>
+                            {logic.projectJobOrders.map((jo: any) => (
+                                <option key={jo.id} value={jo.id}>
+                                    {jo.job_order_name || jo.order_number} ({jo.assigned_qty} {jo.boq_budget?.unit})
+                                </option>
                             ))}
                         </select>
                     </div>

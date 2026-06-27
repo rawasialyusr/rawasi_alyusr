@@ -11,6 +11,8 @@ import MaterialReceiptPrintModal from './MaterialReceiptPrintModal';
 // 🚀 تم تصحيح المسار ليقرأ المودال من فولدر material_issues
 import DispenseMaterialModal from '../material_issues/DispenseMaterialModal'; 
 import { useConfirm } from '@/components/ConfirmContext'; 
+// 🚀 استدعاء مودال الصرف المجمع الجديد
+import BulkDispenseModal from './BulkDispenseModal'; 
 
 // =========================================================================
 // 🧩 مكون القائمة المنسدلة متعددة الاختيارات مع بحث (Custom Dropdown)
@@ -261,6 +263,17 @@ export default function MaterialsPage() {
                                 🛒 إصدار فاتورة توريد جديدة
                             </button>
                             
+                            {/* 🚀 زر الصرف المجمع الجديد */}
+                            {logic.selectedLineItems?.length > 0 && (
+                                <button 
+                                    onClick={() => logic.setIsBulkDispenseModalOpen(true)} 
+                                    className="btn-main-glass" 
+                                    style={{ background: '#0284c7', color: 'white', border: '2px solid #38bdf8' }}
+                                >
+                                    📦 صرف مجمع للمحدد ({logic.selectedLineItems.length})
+                                </button>
+                            )}
+                            
                             {logic.selectedIds?.length === 1 && (
                                 <button 
                                     onClick={logic.handleEditSelected} 
@@ -327,7 +340,7 @@ export default function MaterialsPage() {
                             </div>
                         </div>
                     }
-                    watchDeps={[logic.globalSearch, logic.dateFrom, logic.dateTo, logic.selectedIds, logic.sortBy, currentPage, rowsPerPage, groupedData, selectedProjects, selectedSuppliers, selectedItems]}
+                    watchDeps={[logic.globalSearch, logic.dateFrom, logic.dateTo, logic.selectedIds, logic.sortBy, currentPage, rowsPerPage, groupedData, selectedProjects, selectedSuppliers, selectedItems, logic.selectedLineItems]}
                 />
 
                 <style>{`
@@ -617,18 +630,29 @@ export default function MaterialsPage() {
                                                         <div className="child-tree-container">
                                                             <table className="child-table">
                                                                 <thead>
-                                                                    <tr>
-                                                                        <th style={{ width: '25%', textAlign: 'right' }}>الخامة الموردة</th>
-                                                                        <th style={{ width: '20%' }}>توجيه الميزانية (BOQ)</th>
-                                                                        <th style={{ width: '15%' }}>الكمية الموردة (الفاتورة)</th>
-                                                                        <th style={{ width: '15%' }}>سعر الوحدة</th>
-                                                                        <th style={{ width: '15%' }}>إجمالي السطر</th>
-                                                                        <th className="no-print" style={{ width: '10%', textAlign: 'center' }}>إجراءات السطر</th>
-                                                                    </tr>
-                                                                </thead>
+    <tr>
+        {/* 🚀 خانة التحديد المجمعة */}
+        <th className="no-print" style={{ width: '5%', textAlign: 'center' }}>تحديد</th>
+        <th style={{ width: '25%', textAlign: 'right' }}>الخامة الموردة</th>
+        <th style={{ width: '20%' }}>توجيه الميزانية (BOQ)</th>
+        <th style={{ width: '15%' }}>الكمية الموردة (الفاتورة)</th>
+        <th style={{ width: '15%' }}>سعر الوحدة</th>
+        <th style={{ width: '15%' }}>إجمالي السطر</th>
+        <th className="no-print" style={{ width: '10%', textAlign: 'center' }}>إجراءات السطر</th>
+    </tr>
+</thead>
                                                                 <tbody>
                                                                     {group.items.map((item: any, idx: number) => (
-                                                                        <tr key={idx}>
+                                                                        <tr key={idx} style={{ background: logic.selectedLineItems?.find((i:any)=>i.id===item.id) ? '#e0f2fe' : 'transparent', transition: '0.2s' }}>
+                                                                            <td className="no-print" style={{ textAlign: 'center' }}>
+                                                                                <input 
+                                                                                    type="checkbox" 
+                                                                                    disabled={!group.is_posted || (item.available_qty <= 0)}
+                                                                                    checked={!!logic.selectedLineItems?.find((i:any)=>i.id===item.id)}
+                                                                                    onChange={() => logic.handleToggleLineSelection(item)}
+                                                                                    style={{ transform: 'scale(1.3)', cursor: (!group.is_posted || item.available_qty <= 0) ? 'not-allowed' : 'pointer', accentColor: '#0284c7' }}
+                                                                                />
+                                                                            </td>
                                                                             <td style={{ textAlign: 'right', fontWeight: 800, color: THEME.primary }}>
                                                                                 📦 {item.work_item || item.item_name}
                                                                             </td>
@@ -738,13 +762,21 @@ export default function MaterialsPage() {
                     receiptId={logic.printReceiptId}
                 />
 
-                {/* 🚀 إدراج المودال الجديد في الصفحة */}
                 <DispenseMaterialModal 
                     isOpen={logic.isDispenseModalOpen} 
                     onClose={() => logic.setIsDispenseModalOpen(false)} 
                     invoiceItem={logic.selectedInvoiceItem} 
                     onSave={(data: any) => logic.dispenseMaterialMutation.mutate(data)} 
                     isSaving={logic.dispenseMaterialMutation.isPending} 
+                />
+
+                {/* 🚀 إدراج المودال الجديد الخاص بالصرف المجمع */}
+                <BulkDispenseModal 
+                    isOpen={logic.isBulkDispenseModalOpen} 
+                    onClose={() => logic.setIsBulkDispenseModalOpen(false)} 
+                    selectedLines={logic.selectedLineItems} 
+                    onSave={(data: any) => logic.bulkDispenseMutation.mutate(data)} 
+                    isSaving={logic.bulkDispenseMutation.isPending} 
                 />
 
             </MasterPage>

@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo';
+// 🚀 استدعاء الكمبوننت الذكي المخصص لأوامر الشغل وبنود المشروع
+import ProjectBoqCombo from '@/components/ProjectBoqCombo'; 
 import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase'; // 🚀 تأكد من مسار الاستدعاء الصحيح للـ Supabase عندك
 
@@ -180,22 +182,22 @@ export default function DispenseMaterialModal({ isOpen, onClose, invoiceItem, on
                         />
                     </div>
                     <div style={{ zIndex: 90, position: 'relative' }}>
-                        <SmartCombo 
-                            label="📋 تحميل على بند (BOQ)" 
-                            icon="📋" 
-                            table="boq_budget_distinct" 
-                            displayCol="work_item" 
-                            searchCols="work_item"
-                            searchColumns={['work_item']} 
-                            customFilter={formData.project_id ? `project_id=eq.${formData.project_id}` : 'id=is.null'}
-                            value={formData.boq_id}
-                            initialDisplay={formData.boq_item_name} 
-                            onSelect={(v: any) => setFormData({ 
-                                ...formData, 
-                                boq_id: v?.id || null,
-                                boq_item_id: v?.boq_item_id || null, 
-                                boq_item_name: v?.work_item || '' 
-                            })} 
+                        {/* 🚀 السحب باستخدام الكمبوننت الذكي المخصص للبند */}
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>
+                            📋 تحميل على بند (BOQ)
+                        </label>
+                        <ProjectBoqCombo 
+                            projectId={formData.project_id}
+                            value={formData.boq_item_id || formData.boq_id}
+                            initialDisplay={formData.boq_item_name}
+                            onSelect={(selectedBoq: any) => {
+                                setFormData({ 
+                                    ...formData, 
+                                    boq_id: selectedBoq?.id || null,
+                                    boq_item_id: selectedBoq?.boq_item_id || null, 
+                                    boq_item_name: selectedBoq?.display_name || selectedBoq?.work_item || '' 
+                                })
+                            }} 
                         />
                     </div>
                 </div>

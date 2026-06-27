@@ -38,6 +38,30 @@ export default function HierarchicalLedgerPage() {
         ) : (
           <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
             
+            {/* 📊 لوحة المؤشرات العلوية (تم تقسيمها لعرض كل التكاليف) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginBottom: '25px' }}>
+              <div style={{ backgroundColor: THEME.coffeeDark, color: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                <span style={{ fontSize: '12px', opacity: 0.8, fontWeight: 800 }}>💰 إجمالي التكاليف</span>
+                <strong style={{ display: 'block', fontSize: '22px', fontWeight: 900, color: THEME.goldAccent }}>{formatCurrency(logic.pyramidData.grandTotal)}</strong>
+              </div>
+              <div style={{ backgroundColor: '#0369a1', color: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                <span style={{ fontSize: '12px', opacity: 0.8, fontWeight: 800 }}>👷 عمالة مباشرة</span>
+                <strong style={{ display: 'block', fontSize: '22px', fontWeight: 900 }}>{formatCurrency(logic.pyramidData.totalLabor)}</strong>
+              </div>
+              <div style={{ backgroundColor: '#ea580c', color: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                <span style={{ fontSize: '12px', opacity: 0.8, fontWeight: 800 }}>🧱 خامات ومواد</span>
+                <strong style={{ display: 'block', fontSize: '22px', fontWeight: 900 }}>{formatCurrency(logic.pyramidData.totalMaterials)}</strong>
+              </div>
+              <div style={{ backgroundColor: '#be123c', color: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                <span style={{ fontSize: '12px', opacity: 0.8, fontWeight: 800 }}>🏗️ مقاولي الباطن</span>
+                <strong style={{ display: 'block', fontSize: '22px', fontWeight: 900 }}>{formatCurrency(logic.pyramidData.totalSubcontractors)}</strong>
+              </div>
+              <div style={{ backgroundColor: '#6b21a8', color: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                <span style={{ fontSize: '12px', opacity: 0.8, fontWeight: 800 }}>🏢 مصروفات وأوفر هيد</span>
+                <strong style={{ display: 'block', fontSize: '22px', fontWeight: 900 }}>{formatCurrency(logic.pyramidData.totalOverhead)}</strong>
+              </div>
+            </div>
+
             {/* 🎛️ شريط الفلاتر */}
             <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.8)', marginBottom: '25px', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ flex: '1 1 250px' }}>
@@ -55,18 +79,12 @@ export default function HierarchicalLedgerPage() {
                 <span style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#64748b', marginBottom: '5px' }}>نوع التكلفة:</span>
                 <select value={logic.filterType} onChange={(e) => logic.setFilterType(e.target.value)} style={{ width: '100%', padding: '12px 15px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.1)', fontWeight: 800, outline: 'none', backgroundColor: 'white' }}>
                   <option value="الكل">كل التكاليف 📂</option>
-                  <option value="عمالة مباشرة">👷 عمالة مباشرة فقط</option>
-                  <option value="مصروفات تشغيل وأوفر هيد">🏢 أوفر هيد وتشغيل فقط</option>
+                  <option value="عمالة مباشرة">👷 عمالة مباشرة</option>
+                  <option value="خامات ومواد">🧱 خامات ومواد</option>
+                  <option value="مصروفات مقاولين">🏗️ مستخلصات مقاولين</option>
+                  <option value="مصروفات تشغيل وأوفر هيد">🏢 مصروفات وأوفر هيد</option>
                 </select>
               </div>
-            </div>
-
-            {/* 🔺 رأس الهرم (إجمالي الشركة) */}
-            <div style={{ backgroundColor: THEME.coffeeDark, color: 'white', padding: '30px', borderRadius: '24px', textAlign: 'center', marginBottom: '20px', boxShadow: '0 15px 35px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '16px', fontWeight: 800, opacity: 0.9, display: 'block', marginBottom: '10px' }}>🏆 الإجمالي العام للتكاليف (رأس الهرم)</span>
-              <strong style={{ fontSize: '42px', fontWeight: 900, color: THEME.goldAccent }}>
-                {formatCurrency(logic.pyramidData.grandTotal)}
-              </strong>
             </div>
 
             {/* 🏗️ جسم الهرم (المشاريع والتفاصيل) */}
@@ -80,7 +98,7 @@ export default function HierarchicalLedgerPage() {
                   return (
                     <div key={pIdx} style={{ backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
                       
-                      {/* مستوى 1: كارت المشروع */}
+                      {/* مستوى 1: كارت المشروع (رأس العمارة) */}
                       <div 
                         onClick={() => toggleProject(project.name)}
                         style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: isProjOpen ? '#f8fafc' : 'white', transition: '0.2s' }}
@@ -101,30 +119,35 @@ export default function HierarchicalLedgerPage() {
                           {project.types.map((typeNode: any, tIdx: number) => {
                             const typeKey = `${project.name}-${typeNode.name}`;
                             const isTypeOpen = expandedTypes[typeKey];
-                            const isLabor = typeNode.name === 'عمالة مباشرة';
+                            
+                            // 🎨 تحديد الألوان والأيقونات بناءً على نوع التكلفة
+                            let icon = '🏢', color = '#6b21a8', bgColor = '#faf5ff', borderColor = '#e9d5ff';
+                            if (typeNode.name === 'عمالة مباشرة') { icon = '👷'; color = '#0369a1'; bgColor = '#f0f9ff'; borderColor = '#bae6fd'; }
+                            else if (typeNode.name === 'خامات ومواد') { icon = '🧱'; color = '#ea580c'; bgColor = '#fff7ed'; borderColor = '#ffedd5'; }
+                            else if (typeNode.name === 'مصروفات مقاولين') { icon = '🏗️'; color = '#be123c'; bgColor = '#fff1f2'; borderColor = '#ffe4e6'; }
 
                             return (
-                              <div key={tIdx} style={{ border: `1px solid ${isLabor ? '#bae6fd' : '#e9d5ff'}`, borderRadius: '12px', overflow: 'hidden', backgroundColor: 'white' }}>
+                              <div key={tIdx} style={{ border: `1px solid ${borderColor}`, borderRadius: '12px', overflow: 'hidden', backgroundColor: 'white' }}>
                                 
                                 {/* رأس كارت نوع التكلفة */}
                                 <div 
                                   onClick={() => toggleType(typeKey)}
-                                  style={{ padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: isLabor ? '#f0f9ff' : '#faf5ff' }}
+                                  style={{ padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: bgColor }}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span>{isLabor ? '👷' : '🏢'}</span>
-                                    <strong style={{ fontSize: '15px', color: isLabor ? '#0369a1' : '#6b21a8', fontWeight: 900 }}>{typeNode.name}</strong>
+                                    <span>{icon}</span>
+                                    <strong style={{ fontSize: '15px', color: color, fontWeight: 900 }}>{typeNode.name}</strong>
                                     <span style={{ fontSize: '12px', backgroundColor: 'white', padding: '2px 8px', borderRadius: '20px', color: '#64748b', fontWeight: 800 }}>{typeNode.items.length} عملية</span>
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                    <strong style={{ fontSize: '16px', color: isLabor ? '#0369a1' : '#6b21a8', fontWeight: 900 }}>{formatCurrency(typeNode.total)}</strong>
+                                    <strong style={{ fontSize: '16px', color: color, fontWeight: 900 }}>{formatCurrency(typeNode.total)}</strong>
                                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{isTypeOpen ? '▲' : '▼'}</span>
                                   </div>
                                 </div>
 
-                                {/* مستوى 3: التفاصيل (قاعدة الهرم - الجدول) */}
+                                {/* مستوى 3: التفاصيل (الجدول) */}
                                 {isTypeOpen && (
-                                  <div style={{ padding: '15px', borderTop: `1px solid ${isLabor ? '#bae6fd' : '#e9d5ff'}` }}>
+                                  <div style={{ padding: '15px', borderTop: `1px solid ${borderColor}` }}>
                                     <RawasiSmartTable data={typeNode.items} columns={columns} />
                                   </div>
                                 )}

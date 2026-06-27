@@ -46,10 +46,7 @@ export default function InvoicesPage() {
   const isAllVisibleSelected = currentVisibleIds.length > 0 && currentVisibleIds.every((id: string) => logic.selectedIds.includes(id));
 
   // =========================================================================
-  // 💎 أعمدة الجدول (متوافقة مع RawasiSmartTable والسكيما الجديدة)
-  // =========================================================================
-  // =========================================================================
-  // 💎 أعمدة الجدول (شاملة كل تفاصيل السكيما الجديدة 100%)
+  // 💎 أعمدة الجدول
   // =========================================================================
   const invoiceColumns = useMemo(() => [
     {
@@ -170,7 +167,11 @@ export default function InvoicesPage() {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 800 }}>
              {paid > 0 && <span style={{ color: '#10b981' }}>مسدد: {formatCurrency(paid)}</span>}
+             
+             {/* 🚀 إظهار المتبقي لو كان لسه عليه فلوس، أو دائن لو دفع بزيادة */}
              {remaining > 0 && <span style={{ color: '#ef4444' }}>متبقي: {formatCurrency(remaining)}</span>}
+             {remaining < 0 && <span style={{ color: '#8b5cf6', background: '#f5f3ff', padding: '2px 4px', borderRadius: '4px' }}>دائن (بزيادة): {formatCurrency(Math.abs(remaining))}</span>}
+             
              {paid === 0 && remaining === 0 && <span style={{ color: '#94a3b8' }}>0.00</span>}
           </div>
         );
@@ -192,12 +193,16 @@ export default function InvoicesPage() {
     },
     {
       key: 'due_date',
-      label: 'مهلة السداد',
+      label: 'حالة الدفع',
       render: (row: any) => {
         if (!row) return null; 
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
-        if (paid >= total && total > 0) return <span className="deadline-badge paid">✅ مكتمل</span>;
+        
+        // 🚀 حالات الدفع (مكتمل أو بزيادة)
+        if (paid > total && total > 0) return <span className="deadline-badge paid" style={{background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe'}}>🌟 سداد بزيادة</span>;
+        if (paid === total && total > 0) return <span className="deadline-badge paid">✅ مكتمل</span>;
+        
         if (!row.due_date) return <span style={{color:'#94a3b8', fontWeight: 'bold'}}>---</span>;
         
         const today = new Date();
@@ -220,16 +225,21 @@ export default function InvoicesPage() {
         const total = Number(row.total_amount || 0);
         const paid = Number(row.paid_amount || 0);
         const balance = total - paid;
-        const needsPayment = balance > 0.01; 
+        
+        // 🚀 الشرط اللي بيخفي الزرار لو الفاتورة مسددة أو بزيادة
+        const needsPayment = balance > 0; 
+        const isApproved = row.status === 'مُعتمد' || row.status === 'مرحل' || row.is_posted === true;
         
         return (
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
-            <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print" title="طباعة الفاتورة">🖨️</button>
-            {needsPayment && logic.handleOpenPaymentModal && (
+            <button onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} className="btn-glass-print" title="طباعة الفاتورة" style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '18px', transition: '0.2s' }}>🖨️</button>
+            
+            {/* 🚀 السحر هنا: دمجنا needsPayment في الشرط عشان يخفي الزرار */}
+            {needsPayment && isApproved && logic.handleOpenPaymentModal && (
               <button onClick={(e) => {
                   e.stopPropagation(); 
                   logic.handleOpenPaymentModal(row); 
-                }} className="btn-glass-pay" title="تسجيل سند قبض">💰</button>
+                }} className="btn-glass-pay" title="تسجيل سند قبض / دفعة إضافية" style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '18px', transition: '0.2s' }}>💰</button>
             )}
           </div>
         );
