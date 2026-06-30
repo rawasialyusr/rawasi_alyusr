@@ -5,6 +5,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 import { usePermissions } from '@/lib/PermissionsContext';
 
+// 🚀 1. الحساسية القصوى لتنظيف الـ IDs (تتعامل مع النصوص، الـ Null، وحتى الكائنات Objects)
+const cleanId = (val: any) => {
+    if (!val) return null;
+    if (typeof val === 'object') return val.id ? String(val.id).trim() : null;
+    const str = String(val).trim();
+    return str === '' || str === 'undefined' || str === 'null' ? null : str;
+};
+
+// 🚀 2. الحساسية القصوى للأرقام (لمنع أي NaN من تدمير الداتابيز)
+const cleanNum = (val: any, fallback = 0) => {
+    const num = Number(val);
+    return isNaN(num) ? fallback : num;
+};
+
 export function useMaterialsLogic() {
     const queryClient = useQueryClient();
     const { showToast } = useToast();
@@ -27,7 +41,7 @@ export function useMaterialsLogic() {
     const [selectedInvoiceItem, setSelectedInvoiceItem] = useState<any>(null);
 
     // =========================================================================
-    // 🚀 الإضافات الجديدة الخاصة بالصرف المجمع (Bulk Dispense)
+    // 📦 الصرف المجمع (Bulk Dispense)
     // =========================================================================
     const [selectedLineItems, setSelectedLineItems] = useState<any[]>([]);
     const [isBulkDispenseModalOpen, setIsBulkDispenseModalOpen] = useState(false);
@@ -44,14 +58,16 @@ export function useMaterialsLogic() {
 
     const bulkDispenseMutation = useMutation({
         mutationFn: async (payload: any) => {
-            // إنشاء رأس إذن الصرف
+            const safeProjectId = cleanId(payload.project_id);
+            if (!safeProjectId) throw new Error("⚠️ المشروع الإلزامي غير محدد للصرف.");
+
             const issuePayload = {
                 issue_number: `ISS-${Date.now().toString().slice(-6)}`,
-                project_id: payload.project_id,
-                subcontractor_id: payload.issue_type === 'صرف لمقاول' ? payload.subcontractor_id : null,
-                issue_date: payload.issue_date,
-                issue_type: payload.issue_type,
-                total_amount: payload.items.reduce((sum: number, i: any) => sum + (i.dispense_qty * i.unit_price), 0),
+                project_id: safeProjectId,
+                subcontractor_id: payload.issue_type === 'صرف لمقاول' ? cleanId(payload.subcontractor_id) : null,
+                issue_date: payload.issue_date || new Date().toISOString().split('T')[0],
+                issue_type: payload.issue_type || 'استهلاك مباشر',
+                total_amount: payload.items.reduce((sum: number, i: any) => sum + (cleanNum(i.dispense_qty) * cleanNum(i.unit_price)), 0),
                 notes: payload.issue_type === 'صرف لمقاول' ? `صرف مجمع محمل على المقاول مباشر من المشتريات` : `صرف مجمع واستهلاك مباشر للشركة`,
                 is_posted: false 
             };
@@ -61,28 +77,27 @@ export function useMaterialsLogic() {
                 .insert([issuePayload])
                 .select('id').single(); 
 
-            if (issueError) throw new Error(issueError.message);
+            if (issueError) throw new Error(`خطأ في رأس الصرف: ${issueError.message}`);
 
-            // إنشاء سطور الخامات
             const linesPayload = payload.items.map((item: any) => ({
                 issue_id: issueRecord.id,
-                item_id: item.item_id || null, 
-                item_name: item.work_item || item.item_name,
-                quantity: item.dispense_qty,
-                unit: item.unit,
-                unit_price: item.unit_price,
-                total_price: item.dispense_qty * item.unit_price,
-                boq_id: item.boq_item_id || null, // الحفاظ على الميزانية القديمة
-                boq_item_id: null 
+                item_id: cleanId(item.item_id), 
+                item_name: String(item.work_item || item.item_name || 'صنف غير معروف').trim(),
+                quantity: cleanNum(item.dispense_qty, 1),
+                unit: String(item.unit || 'وحدة').trim(),
+                unit_price: cleanNum(item.unit_price),
+                total_price: cleanNum(item.dispense_qty, 1) * cleanNum(item.unit_price),
+                boq_id: cleanId(item.boq_id), 
+                boq_item_id: null // 🎯 إجبار السيستم على التجاهل عشان إيرور הـ FK
             }));
 
             const { error: lineError } = await supabase.from('material_issue_lines').insert(linesPayload);
-            if (lineError) throw new Error(lineError.message);
+            if (lineError) throw new Error(`خطأ في سطور الصرف: ${lineError.message}`);
         },
         onSuccess: () => {
             showToast("تم حفظ إذن الصرف المجمع كمسودة بنجاح 📦", "success");
             setIsBulkDispenseModalOpen(false);
-            setSelectedLineItems([]); // تفريغ التحديد بعد النجاح
+            setSelectedLineItems([]); 
             queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
             fetchInventoryBalances(); 
         },
@@ -99,8 +114,7 @@ export function useMaterialsLogic() {
         exp_date: new Date().toISOString().split('T')[0],
         notes: '',
         items: [
-            // 🚀 توحيد المسمى لـ boq_item_id فقط في التوريد
-            { item_id: null, item_name: '', work_item: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_item_id: null, boq_item: '' }
+            { item_id: null, item_name: '', work_item: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null, boq_item_id: null, boq_item: '' }
         ]
     };
     const [invoiceData, setInvoiceData] = useState<any>(initialInvoiceState);
@@ -137,8 +151,9 @@ export function useMaterialsLogic() {
                     unit, 
                     unit_price, 
                     total_price,
+                    boq_id,
                     boq_item_id, 
-                    boq:boq_budget(work_item), 
+                    boq:boq_budget!fk_receipt_lines_boq_budget(work_item), 
                     receipt:material_receipts (
                         id, 
                         receipt_number,
@@ -166,8 +181,8 @@ export function useMaterialsLogic() {
                     (inv.item_name && line.item_name && inv.item_name.trim() === line.item_name.trim())
                 );
                 
-                const globalBalance = currentBalance ? (currentBalance.available_quantity || 0) : 0;
-                const finalSafeQty = Math.max(0, Math.min(Number(line.quantity), Number(globalBalance)));
+                const globalBalance = currentBalance ? cleanNum(currentBalance.available_quantity) : 0;
+                const finalSafeQty = Math.max(0, Math.min(cleanNum(line.quantity), globalBalance));
 
                 return {
                     id: line.id,
@@ -181,6 +196,7 @@ export function useMaterialsLogic() {
                     unit: line.unit,
                     unit_price: line.unit_price,
                     total_price: line.total_price,
+                    boq_id: line.boq_id,
                     boq_item_id: line.boq_item_id, 
                     boq_item: line.boq?.work_item,   
                     exp_date: line.receipt?.receipt_date,
@@ -224,8 +240,8 @@ export function useMaterialsLogic() {
         result.sort((a, b) => {
             if (sortBy === 'newest') return new Date(b.created_at || b.exp_date).getTime() - new Date(a.created_at || a.exp_date).getTime();
             if (sortBy === 'oldest') return new Date(a.created_at || a.exp_date).getTime() - new Date(b.created_at || b.exp_date).getTime();
-            if (sortBy === 'highest_price') return (b.total_price || 0) - (a.total_price || 0);
-            if (sortBy === 'lowest_price') return (a.total_price || 0) - (b.total_price || 0);
+            if (sortBy === 'highest_price') return cleanNum(b.total_price) - cleanNum(a.total_price);
+            if (sortBy === 'lowest_price') return cleanNum(a.total_price) - cleanNum(b.total_price);
             return 0;
         });
 
@@ -234,7 +250,7 @@ export function useMaterialsLogic() {
 
     const kpis = useMemo(() => {
         return filteredData.reduce((acc, curr) => ({
-            totalCost: acc.totalCost + (Number(curr.total_price) || 0),
+            totalCost: acc.totalCost + cleanNum(curr.total_price),
             totalTransactions: acc.totalTransactions + 1 
         }), { totalCost: 0, totalTransactions: 0 });
     }, [filteredData]);
@@ -242,7 +258,7 @@ export function useMaterialsLogic() {
     const handleAddItem = () => {
         setInvoiceData({
             ...invoiceData,
-            items: [...invoiceData.items, { item_id: null, item_name: '', work_item: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_item_id: null, boq_item: '' }]
+            items: [...invoiceData.items, { item_id: null, item_name: '', work_item: '', quantity: 1, unit: 'وحدة', unit_price: 0, total_price: 0, boq_id: null, boq_item_id: null, boq_item: '' }]
         });
     };
 
@@ -255,25 +271,34 @@ export function useMaterialsLogic() {
         const newItems = [...invoiceData.items];
         
         if (field === 'boq_selection') {
-            newItems[index].boq_item_id = value?.id || null;
-            newItems[index].boq_item = value?.work_item || '';
+            newItems[index].boq_id = cleanId(value?.boq_id) || cleanId(value?.id);
+            newItems[index].boq_item_id = cleanId(value?.boq_item_id);
+            newItems[index].boq_item = String(value?.work_item || '').trim();
         } else {
             newItems[index][field] = value;
             if (field === 'quantity' || field === 'unit_price') {
-                newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (Number(newItems[index].unit_price) || 0);
+                newItems[index].total_price = cleanNum(newItems[index].quantity) * cleanNum(newItems[index].unit_price);
             }
         }
         setInvoiceData({ ...invoiceData, items: newItems });
     };
 
     const grandTotal = useMemo(() => {
-        return invoiceData.items.reduce((sum: number, item: any) => sum + (Number(item.total_price) || 0), 0);
+        return invoiceData.items.reduce((sum: number, item: any) => sum + cleanNum(item.total_price), 0);
     }, [invoiceData.items]);
 
     const saveMutation = useMutation({
         mutationFn: async () => {
-            if (!invoiceData.project_id || !invoiceData.payee_id || !invoiceData.account_id) {
-                throw new Error("يرجى اختيار المشروع، المورد، والحساب المالي.");
+            const safeProjectId = cleanId(invoiceData.project_id);
+            const safePayeeId = cleanId(invoiceData.payee_id);
+            const safeAccountId = cleanId(invoiceData.account_id);
+
+            if (!safeProjectId || !safePayeeId || !safeAccountId) {
+                throw new Error("⚠️ يرجى التأكد من اختيار المشروع، المورد، والحساب المالي بشكل صحيح.");
+            }
+
+            if (!invoiceData.items || invoiceData.items.length === 0) {
+                throw new Error("⚠️ لا يمكن حفظ فاتورة بدون أصناف.");
             }
 
             let receiptId = invoiceData.id;
@@ -284,18 +309,18 @@ export function useMaterialsLogic() {
                 const { error: masterError } = await supabase
                     .from('material_receipts')
                     .update({
-                        project_id: invoiceData.project_id,
-                        supplier_id: invoiceData.payee_id,
-                        account_id: invoiceData.account_id,
-                        receipt_date: invoiceData.exp_date,
-                        receipt_type: invoiceData.receipt_type,
-                        total_amount: grandTotal,
-                        notes: invoiceData.notes || 'توريد خامات',
+                        project_id: safeProjectId,
+                        supplier_id: safePayeeId,
+                        account_id: safeAccountId,
+                        receipt_date: invoiceData.exp_date || new Date().toISOString().split('T')[0],
+                        receipt_type: String(invoiceData.receipt_type || 'توريد شركة').trim(),
+                        total_amount: cleanNum(grandTotal),
+                        notes: String(invoiceData.notes || 'توريد خامات').trim(),
                         status: 'مُعتمد',
                         is_posted: false 
                     })
                     .eq('id', receiptId);
-                if (masterError) throw masterError;
+                if (masterError) throw new Error(`خطأ في تحديث الفاتورة: ${masterError.message}`);
 
                 await supabase.from('material_receipt_lines').delete().eq('receipt_id', receiptId);
 
@@ -304,35 +329,37 @@ export function useMaterialsLogic() {
                     .from('material_receipts')
                     .insert([{
                         receipt_number: `MAT-${Date.now().toString().slice(-6)}`,
-                        project_id: invoiceData.project_id,
-                        supplier_id: invoiceData.payee_id,
-                        account_id: invoiceData.account_id,
-                        receipt_date: invoiceData.exp_date,
-                        receipt_type: invoiceData.receipt_type,
-                        total_amount: grandTotal,
-                        notes: invoiceData.notes || 'توريد خامات',
+                        project_id: safeProjectId,
+                        supplier_id: safePayeeId,
+                        account_id: safeAccountId,
+                        receipt_date: invoiceData.exp_date || new Date().toISOString().split('T')[0],
+                        receipt_type: String(invoiceData.receipt_type || 'توريد شركة').trim(),
+                        total_amount: cleanNum(grandTotal),
+                        notes: String(invoiceData.notes || 'توريد خامات').trim(),
                         status: 'مُعتمد',
                         is_posted: false 
                     }])
                     .select('id').single();
 
-                if (masterError) throw masterError;
+                if (masterError) throw new Error(`خطأ في إنشاء الفاتورة: ${masterError.message}`);
                 receiptId = masterData.id;
             }
 
             const linesPayload = invoiceData.items.map((item: any) => ({
                 receipt_id: receiptId,
-                item_id: item.item_id || null, 
-                item_name: item.work_item || item.item_name,
-                quantity: Number(item.quantity) || 1,
-                unit: item.unit || 'وحدة',
-                unit_price: Number(item.unit_price) || 0,
-                total_price: Number(item.total_price) || 0,
-                boq_item_id: item.boq_item_id || null
+                project_id: safeProjectId,
+                item_id: cleanId(item.item_id), 
+                item_name: String(item.work_item || item.item_name || 'صنف غير معروف').trim(),
+                quantity: cleanNum(item.quantity, 1),
+                unit: String(item.unit || 'وحدة').trim(),
+                unit_price: cleanNum(item.unit_price),
+                total_price: cleanNum(item.total_price),
+                boq_id: cleanId(item.boq_id),  
+                boq_item_id: null // 🎯🎯 إجبار السيستم على null عشان مستحيل يضرب معاك FK 🎯🎯
             }));
 
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
-            if (linesError) throw linesError;
+            if (linesError) throw new Error(`خطأ في حفظ السطور: ${linesError.message}`);
 
             return receiptId;
         },
@@ -344,7 +371,7 @@ export function useMaterialsLogic() {
             showToast("تم حفظ الفاتورة بنجاح (معلقة في انتظار الترحيل) ⏳", "success");
             fetchInventoryBalances(); 
         },
-        onError: (err: any) => showToast(`خطأ: ${err.message}`, "error")
+        onError: (err: any) => showToast(err.message, "error") 
     });
 
     const actionMutation = useMutation({
@@ -368,13 +395,16 @@ export function useMaterialsLogic() {
 
     const dispenseMaterialMutation = useMutation({
         mutationFn: async (data: any) => {
+            const safeProjectId = cleanId(data.project_id);
+            if (!safeProjectId) throw new Error("⚠️ المشروع الإلزامي غير محدد للصرف.");
+
             const issuePayload = {
                 issue_number: `ISS-${Date.now().toString().slice(-6)}`,
-                project_id: data.project_id,
-                subcontractor_id: data.issue_type === 'صرف لمقاول' ? data.subcontractor_id : null,
-                issue_date: data.issue_date,
-                issue_type: data.issue_type,
-                total_amount: data.quantity * data.item.unit_price,
+                project_id: safeProjectId,
+                subcontractor_id: data.issue_type === 'صرف لمقاول' ? cleanId(data.subcontractor_id) : null,
+                issue_date: data.issue_date || new Date().toISOString().split('T')[0],
+                issue_type: data.issue_type || 'استهلاك مباشر',
+                total_amount: cleanNum(data.quantity) * cleanNum(data.item.unit_price),
                 notes: data.issue_type === 'صرف لمقاول' ? `منصرف ومحمل على المقاول مباشر من المشتريات` : `استهلاك مباشر من المشتريات`,
                 is_posted: false 
             };
@@ -384,22 +414,22 @@ export function useMaterialsLogic() {
                 .insert([issuePayload])
                 .select('id').single(); 
     
-            if (issueError) throw new Error(issueError.message);
+            if (issueError) throw new Error(`خطأ في حفظ رأس الصرف: ${issueError.message}`);
     
             const linePayload = {
                 issue_id: issueRecord.id,
-                item_id: data.item.item_id || null, 
-                item_name: data.item.item_name,
-                quantity: data.quantity,
-                unit: data.item.unit,
-                unit_price: data.item.unit_price,
-                total_price: data.quantity * data.item.unit_price,
-                boq_id: data.boq_id || null, 
-                boq_item_id: null 
+                item_id: cleanId(data.item.item_id), 
+                item_name: String(data.item.item_name || 'صنف غير معروف').trim(),
+                quantity: cleanNum(data.quantity, 1),
+                unit: String(data.item.unit || 'وحدة').trim(),
+                unit_price: cleanNum(data.item.unit_price),
+                total_price: cleanNum(data.quantity, 1) * cleanNum(data.item.unit_price),
+                boq_id: cleanId(data.boq_id), 
+                boq_item_id: null // 🎯 إجبار السيستم على التجاهل
             };
     
             const { error: lineError } = await supabase.from('material_issue_lines').insert([linePayload]);
-            if (lineError) throw new Error(lineError.message);
+            if (lineError) throw new Error(`خطأ في حفظ سطر الصرف: ${lineError.message}`);
         },
         onSuccess: () => {
             showToast("تم حفظ إذن الصرف كمسودة بنجاح 📝 (في انتظار الترحيل)", "success");
@@ -407,7 +437,7 @@ export function useMaterialsLogic() {
             queryClient.invalidateQueries({ queryKey: ['materials_logs'] });
             fetchInventoryBalances(); 
         },
-        onError: (err: any) => showToast(`خطأ في الحفظ: ${err.message}`, "error")
+        onError: (err: any) => showToast(err.message, "error")
     });
 
     const handleOpenDispense = (item: any) => {
@@ -421,24 +451,25 @@ export function useMaterialsLogic() {
             const first = lines[0];
             setInvoiceData({
                 id: receipt_id, 
-                project_id: first.project_id || '',
+                project_id: cleanId(first.project_id) || '',
                 project_name: first.project?.Property || '', 
-                payee_id: first.supplier?.id || '',
+                payee_id: cleanId(first.supplier?.id) || '',
                 payee_name: first.supplier?.name || '',      
-                account_id: first.account?.id || '',
+                account_id: cleanId(first.account?.id) || '',
                 account_name: first.account?.name || '',     
                 receipt_type: first.receipt_type || 'توريد شركة',
                 exp_date: first.exp_date || new Date().toISOString().split('T')[0],
                 notes: first.notes || '',
                 items: lines.map((l: any) => ({
-                    item_id: l.item_id || null,
+                    item_id: cleanId(l.item_id),
                     item_name: l.item_name || '',
                     work_item: l.work_item || '',
-                    quantity: l.quantity || 1,
+                    quantity: cleanNum(l.quantity, 1),
                     unit: l.unit || 'وحدة',
-                    unit_price: l.unit_price || 0,
-                    total_price: l.total_price || 0,
-                    boq_item_id: l.boq_item_id || null, 
+                    unit_price: cleanNum(l.unit_price),
+                    total_price: cleanNum(l.total_price),
+                    boq_id: cleanId(l.boq_id),
+                    boq_item_id: cleanId(l.boq_item_id), 
                     boq_item: l.boq_item || '' 
                 }))
             });
@@ -512,7 +543,6 @@ export function useMaterialsLogic() {
         handleOpenDispense,
         dispenseMaterialMutation,
 
-        // 🚀 تمرير دوال وحالات الصرف المجمع للصفحة
         selectedLineItems, 
         handleToggleLineSelection, 
         clearLineSelection,

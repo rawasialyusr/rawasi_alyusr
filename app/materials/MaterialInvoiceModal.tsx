@@ -126,7 +126,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                                 ...logic.invoiceData, 
                                 project_id: v?.id,
                                 // 🚀 تصفير البنود لو المشروع اتغير عشان ميحصلش تضارب
-                                items: logic.invoiceData.items.map((i:any) => ({...i, boq_item_id: null, boq_item: ''})) 
+                                items: logic.invoiceData.items.map((i:any) => ({...i, boq_item_id: null, boq_id: null, boq_item: ''})) 
                             })} 
                         />
                     </div>
@@ -170,7 +170,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                             <tbody>
                                 {logic.invoiceData.items.map((item: any, idx: number) => (
                                     <tr key={idx} className="item-row">
-                                        {/* 🚀 السحب من الدليل الموحد (مظبوط) */}
+                                        {/* 🚀 السحب من الدليل الموحد */}
                                         <td style={{ padding: '10px', zIndex: 70 - idx, position: 'relative' }}>
                                             <SmartCombo 
                                                 table="material_items" 
@@ -195,11 +195,11 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                                             />
                                         </td>
                                         
-                                        {/* 🚀 السحر هنا: استخدام الكمبوننت المخصص للبند */}
+                                        {/* 🚀 تم التعديل: القراءة من boq_id لضمان الربط السليم */}
                                         <td style={{ padding: '10px', zIndex: 60 - idx, position: 'relative' }}>
                                             <ProjectBoqCombo 
                                                 projectId={logic.invoiceData.project_id} 
-                                                value={item.boq_item_id}
+                                                value={item.boq_id} /* 🎯 تم التعديل ليقرأ boq_id بدلاً من boq_item_id */
                                                 initialDisplay={item.boq_item}
                                                 onSelect={(selectedBoq: any) => {
                                                     logic.handleItemChange(idx, 'boq_selection', selectedBoq);
