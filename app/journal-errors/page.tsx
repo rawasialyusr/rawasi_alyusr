@@ -11,7 +11,6 @@ import SecureAction from '@/components/SecureAction';
 
 // 🎨 معايير الواجهة 
 import GlassContainer from '@/components/GlassContainer'; 
-import MobileTopNav from '@/components/MobileTopNav';
 import UserCard from '@/components/UserCard'; 
 
 // 🏗️ معايير إعادة الاستخدام 
@@ -62,6 +61,7 @@ export default function JournalMaintenancePage() {
     );
 
     return (
+        <MasterPage icon="🛡️" title="رادار الأخطاء والتنبيهات" subtitle="مراقبة وتصحيح المشاكل المحاسبية والقيود المفقودة">
         <AuthGuard requiredRoles={['super_admin', 'admin', 'auditor']}>
             
             {/* 🚀 1. استخدام مدير السايد بار لنقل الزراير أوتوماتيكياً */}
@@ -74,7 +74,7 @@ export default function JournalMaintenancePage() {
             <div className="sovereign-glass-wrapper clean-page" style={{ padding: '15px', md: { padding: '30px' }, direction: 'rtl', fontFamily: 'Cairo, sans-serif', minHeight: '100vh', position: 'relative' }}>
                 
                 {/* 📱 نافيجيشن الموبايل (اليوزر كارد أقصى اليسار) */}
-                <MobileTopNav title="رادار الحسابات" leftContent={<UserCard />} />
+
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <GlassContainer>
@@ -145,6 +145,7 @@ export default function JournalMaintenancePage() {
                 `}</style>
             </div>
         </AuthGuard>
+        </MasterPage>
     );
 }
 

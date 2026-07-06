@@ -2,10 +2,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { menuGroups } from '@/lib/menuData';
 import { supabase } from '@/lib/supabase';
 import RawasiFilterSidebar from '@/components/rawasifiltersidebar';
 import { useSidebar } from '@/lib/SidebarContext'; 
 import { usePermissions } from '@/lib/PermissionsContext'; 
+import { useUnreadCounts } from '@/hooks/useUnreadCounts';
+import { usePresence } from '@/hooks/usePresence';
 
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -24,6 +27,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   const { actions, summary, customFilters } = useSidebar(); 
   const { role, can, loading } = usePermissions();
+  const { unread_messages, unread_notifications } = useUnreadCounts();
+  const { onlineUsers, onlineCount } = usePresence();
 
   useEffect(() => {
     setMounted(true);
@@ -48,81 +53,11 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     verifyRealUser();
   }, [pathname, router]);
 
-  const menuGroups = [
-    { 
-        group: "الداشبورد والملخصات", 
-        items: [
-            { id: 'global_summary', title: 'الملخص العام', icon: '📊', path: '/GlobalSummary' }, 
-            { id: 'dashboard', title: 'لوحة القيادة', icon: '🖥️', path: '/Dashboard' },
-            { id: 'financial_center', title: 'المركز المالي', icon: '🏦', path: '/financial-center' },
-            { id: 'performance', title: 'مؤشرات الأداء', icon: '🚀', path: '/performance' }
-        ] 
-    },
-    { 
-        group: "الحسابات والمالية", 
-        items: [
-            { id: 'accounts', title: 'دليل الحسابات', icon: '🗂️', path: '/accounts' },
-            { id: 'journal', title: 'قيود اليومية', icon: '📝', path: '/journal' }, 
-            { id: 'ledger', title: 'دفتر الأستاذ', icon: '📒', path: '/ledger' }, 
-            { id: 'journal_errors', title: 'رادار الأخطاء', icon: '🛡️', path: '/journal-errors' }, 
-            { id: 'cashflows', title: 'التدفقات النقدية', icon: '🔄', path: '/cashflows' }, 
-            { id: 'payments', title: 'سندات الصرف', icon: '🔴', path: '/PaymentVouchers' }, 
-            { id: 'receipts', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' }, 
-            { id: 'revenue', title: 'الإيرادات', icon: '📈', path: '/revenue' }, 
-            { id: 'expenses', title: 'المصروفات', icon: '📉', path: '/expenses' }, 
-            { id: 'invoices', title: 'الفواتير ومطالبات العملاء', icon: '🧾', path: '/invoices' },
-            { id: 'audit', title: 'المراجعة والتدقيق', icon: '🔍', path: '/audit' },
-            { id: 'financialplan', title: 'الخطة المالية', icon: '📅', path: '/financialplan' },
-            { id: 'trialbalance', title: 'ميزان المراجعة', icon: '⚖️', path: '/trialbalance' },
-            { id: 'statement', title: 'كشف حساب', icon: '📄', path: '/statement' },
-            { id: 'financial_statements', title: 'القوائم المالية', icon: '📑', path: '/financial-statements' }
-        ] 
-    },
-    { 
-        group: "المشاريع والشركاء", 
-        items: [
-            { id: 'fieldops', title: 'رادار الميدان الحي', icon: '📡', path: '/fieldops' },
-            { id: 'projects', title: 'غرفة المشاريع', icon: '🏗️', path: '/projects' }, 
-            { id: 'materials', title: 'توريد الخامات', icon: '🧱', path: '/materials' },
-            { id: 'materialitems', title: 'أصناف الخامات', icon: '📦', path: '/materialitems' },
-            { id: 'material_issues', title: 'صرف الخامات', icon: '📤', path: '/material_issues' },
-            { id: 'subclaims', title: 'مستخلصات مقاولي الباطن', icon: '📑', path: '/subclaims' },
-            { id: 'subcontractor_costs', title: 'تكاليف مقاولي الباطن', icon: '💸', path: '/subcontractor-costs' },
-            { id: 'joborders', title: 'أوامر الشغل', icon: '🛠️', path: '/joborders' },
-            { id: 'laborcost', title: 'تكاليف العمالة', icon: '👷‍♂️', path: '/laborcost' },
-            { id: 'boqcatalog', title: 'الدليل الموحد (BOQ)', icon: '📚', path: '/boqcatalog' },
-            { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' },
-            { id: 'partner_balances', title: 'أرصدة الشركاء', icon: '⚖️', path: '/PartnerBalances' },
-            { id: 'project_overhead', title: 'الأوفر هيد (Overhead)', icon: '🦅', path: '/overhead' },
-            { id: 'boq_budget', title: 'ميزانية المقايسات', icon: '💼', path: '/boqbudget' },
-            { id: 'cost_allocation', title: 'توزيع التكاليف', icon: '🧮', path: '/costallocation' },
-            { id: 'project_ledger', title: 'دفتر التكاليف', icon: '📋', path: '/project-ledger' }
-        ] 
-    },
-    { 
-        group: "العمالة والموارد البشرية", 
-        items: [
-            { id: 'employees', title: 'سجل الموظفين', icon: '👔', path: '/employees' }, 
-            { id: 'team', title: 'إدارة فرق العمل', icon: '👥', path: '/team' },
-            { id: 'labor_logs', title: 'يوميات الميدان', icon: '👷', path: '/labor_logs' }, 
-            { id: 'payroll', title: 'مسيرات الرواتب', icon: '💵', path: '/payroll' }, 
-            { id: 'violations', title: 'المخالفات والجزاءات', icon: '⚠️', path: '/violations' }
-        ] 
-    },
-    { 
-        group: "النظام والتقارير", 
-        items: [
-            { id: 'reports', title: 'التقارير الشاملة', icon: '📊', path: '/reports' }, 
-            { id: 'import', title: 'استيراد البيانات', icon: '📥', path: '/import' },
-            { id: 'settings', title: 'إعدادات النظام', icon: '⚙️', path: '/settings' }, 
-            { id: 'profile', title: 'الملف الشخصي', icon: '👤', path: '/profile' }
-        ] 
-    }
-  ];
+  
 
   const canView = (menuId: string) => {
     if (role === 'super_admin' || role === 'admin') return true;
-    if (menuId === 'profile') return true;
+    if (['home', 'profile', 'messages', 'notifications'].includes(menuId)) return true;
     return can(menuId, 'view');
   };
 
@@ -167,15 +102,16 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         .fab-logo { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
         .overlay-screen { position: fixed; inset: 0; z-index: 9000; background: rgba(252, 250, 248, 0.75); backdrop-filter: blur(45px) saturate(150%); opacity: ${isOpen ? 1 : 0}; pointer-events: ${isOpen ? 'auto' : 'none'}; transform: ${isOpen ? 'scale(1)' : 'scale(1.03)'}; transition: all 0.5s cubic-bezier(0.165, 0.84, 0.44, 1); display: flex; flex-direction: column; padding: 60px 5%; overflow-y: auto; align-items: center; justify-content: flex-start; }
         .overlay-backdrop { display: none; }
-        .command-center { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 40px; margin-top: 40px; }
-        .group-header { color: #8c6a3f; font-weight: 900; font-size: 18px; border-bottom: 2px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; text-align: right; display: block; position: relative; text-shadow: 0 2px 5px rgba(255,255,255,0.8); }
-        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-top: 20px; }
-        .nav-card { background: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255, 255, 255, 0.8); padding: 25px 15px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #1e293b; cursor: pointer; transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); opacity: 0; animation: popIn 0.6s forwards; position: relative; text-decoration: none; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.03); backdrop-filter: blur(10px); }
-        @keyframes popIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
-        .nav-card:hover { background: rgba(255, 255, 255, 0.9); border-color: #C5A059; transform: translateY(-8px); box-shadow: 0 15px 35px rgba(197, 160, 89, 0.15); }
-        .nav-card.active { background: #ffffff; border-color: #C5A059; box-shadow: 0 0 25px rgba(197, 160, 89, 0.2); }
-        .icon-wrapper { width: 55px; height: 55px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 28px; background: rgba(197, 160, 89, 0.1); color: #C5A059; flex-shrink: 0; transition: transform 0.3s; }
-        .nav-card:hover .icon-wrapper { transform: scale(1.1); background: rgba(197, 160, 89, 0.2); }
+        .command-center { width: 100%; max-width: 1400px; display: flex; flex-direction: column; gap: 50px; margin-top: 40px; }
+        .group-header { color: #8c6a3f; font-weight: 900; font-size: 22px; border-bottom: 2px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; text-align: right; display: block; position: relative; text-shadow: 0 2px 5px rgba(255,255,255,0.8); }
+        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); grid-auto-rows: 150px; gap: 20px; margin-top: 20px; grid-auto-flow: dense; }
+        .nav-card { background: rgba(255, 255, 255, 0.4); border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #1e293b; cursor: pointer; transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1); opacity: 0; animation: popIn 0.5s forwards; position: relative; text-decoration: none; text-align: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 5px 15px rgba(0,0,0,0.02); backdrop-filter: blur(20px); overflow: hidden; }
+        .nav-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%); pointer-events: none; }
+        @keyframes popIn { 0% { opacity: 0; transform: translateY(30px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        .nav-card:hover { background: rgba(255, 255, 255, 0.95); border-color: #C5A059; transform: translateY(-5px) scale(1.02); box-shadow: 0 15px 30px rgba(197, 160, 89, 0.15); z-index: 10; }
+        .nav-card.active { background: #ffffff; border-color: #C5A059; box-shadow: 0 0 20px rgba(197, 160, 89, 0.2); }
+        .icon-wrapper { width: 55px; height: 55px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 26px; background: rgba(197, 160, 89, 0.1); color: #C5A059; flex-shrink: 0; transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1); }
+        .nav-card:hover .icon-wrapper { transform: scale(1.1) rotate(5deg); background: rgba(197, 160, 89, 0.2); }
         
         @media (max-width: 768px) {
           main { margin-right: 0px !important; padding-right: 10px !important; padding-left: 10px !important; }
@@ -206,8 +142,16 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
          if (e.target === e.currentTarget) setIsOpen(false); // Close when clicking outside content
       }}>
           <div className="command-center" onClick={(e) => e.stopPropagation()}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.65)', border: '1px solid rgba(255, 255, 255, 0.9)', padding: '15px 30px', borderRadius: '20px', fontSize: '18px', textAlign: 'center', color: '#43342e', marginBottom: '10px', fontWeight: 900, backdropFilter: 'blur(15px)', alignSelf: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.04)' }}>
-               بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 مسؤول نظام'}
+            <div style={{ background: 'rgba(255, 255, 255, 0.65)', border: '1px solid rgba(255, 255, 255, 0.9)', padding: '15px 30px', borderRadius: '20px', fontSize: '18px', textAlign: 'center', color: '#43342e', marginBottom: '10px', fontWeight: 900, backdropFilter: 'blur(15px)', alignSelf: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+               <span>بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 مسؤول نظام'}</span>
+               <div style={{ display: 'flex', gap: '15px', borderRight: '2px solid rgba(0,0,0,0.1)', paddingRight: '15px', alignItems: 'center' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#dcfce7', color: '#166534', padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 800 }}>
+                       <span style={{ width: '8px', height: '8px', background: '#16a34a', borderRadius: '50%', boxShadow: '0 0 8px #16a34a' }}></span>
+                       {onlineCount} متصل
+                   </div>
+                   
+                   
+               </div>
             </div>
 
             {menuGroups.map((group, gIdx) => {
@@ -223,9 +167,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                       const isActive = pathname === item.path;
                       return (
                         <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
-                            <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
+                              <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
                                 <div className="icon-wrapper">{item.icon}</div>
-                                <span style={{ fontWeight: 800, fontSize: '15px', color: '#1e293b', lineHeight: '1.4' }}>{item.title}</span>
+                                <span className="nav-title" style={{ fontWeight: 800, fontSize: '15px', color: '#1e293b', lineHeight: '1.4' }}>{item.title}</span>
                                 {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)' }}></div>}
                             </div>
                         </Link>
@@ -235,6 +179,26 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                 </div>
               );
             })}
+
+            {/* المتصلين حاليا */}
+            {onlineUsers.length > 0 && (
+              <div className="group-section" style={{ marginTop: '20px' }}>
+                <span className="group-header" style={{ borderColor: 'rgba(22, 163, 74, 0.2)', color: '#166534' }}>🟢 المتصلين الآن ({onlineCount})</span>
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginTop: '20px' }}>
+                  {onlineUsers.map((user, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.8)', padding: '10px 15px', borderRadius: '15px', border: '1px solid rgba(22, 163, 74, 0.2)', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                        <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: '#16a34a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '14px' }}>
+                            {user.full_name?.charAt(0) || 'م'}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a' }}>{user.full_name}</span>
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>{user.role === 'super_admin' ? 'مدير' : 'موظف'}</span>
+                        </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
       </nav>
 

@@ -1,0 +1,207 @@
+"use client";
+import React, { useState } from 'react';
+import { useMessagesLogic } from './MessagesLogic';
+import { THEME } from '@/lib/theme';
+import LayoutClient from '@/components/layout/LayoutClient';
+import MasterPage from '@/components/MasterPage';
+
+export default function MessagesPage() {
+    const { 
+        users, messages, activeUserId, setActiveUserId, currentUserId, 
+        isLoadingUsers, isLoadingMessages, newMessage, setNewMessage, 
+        sendMessage, messagesEndRef, onlineUsers, unreadCounts
+    } = useMessagesLogic();
+
+    const [msgDetailsOpen, setMsgDetailsOpen] = useState<string | null>(null);
+
+    const activeUser = users.find(u => u.id === activeUserId);
+    const isUserOnline = (id: string) => onlineUsers.some(ou => ou.id === id);
+
+    // Sort users: Online first, then by name
+    const sortedUsers = [...users].sort((a, b) => {
+        const aOnline = isUserOnline(a.id);
+        const bOnline = isUserOnline(b.id);
+        if (aOnline && !bOnline) return -1;
+        if (!aOnline && bOnline) return 1;
+        return (
+        a.full_name || '').localeCompare(b.full_name || '');
+    });
+
+    return (
+        <MasterPage title="التواصل الداخلي" subtitle="الرسائل والمحادثات بين فرق العمل" icon="💬">
+        <div style={{ height: 'calc(100vh - 120px)', display: 'flex', gap: '20px', padding: '20px', animation: 'fadeUp 0.5s ease-out' }}>
+                
+                {/* Users Sidebar */}
+                <div style={{ width: '320px', background: 'white', borderRadius: '20px', border: `1px solid ${THEME.border}`, display: 'flex', flexDirection: 'column', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', flexShrink: 0 }}>
+                    <div style={{ padding: '20px', borderBottom: `1px solid ${THEME.border}`, background: '#f8fafc' }}>
+                        <h2 style={{ margin: 0, fontWeight: 900, color: THEME.primary, fontSize: '18px' }}>💬 المحادثات الداخلية</h2>
+                        <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#64748b' }}>اختر موظفاً لبدء المحادثة</p>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto' }} className="cinematic-scroll">
+                        {isLoadingUsers ? (
+                            <div style={{ textAlign: 'center', padding: '30px', color: THEME.primary }}>⏳ جاري تحميل الموظفين...</div>
+                        ) : (
+                            sortedUsers.map((user) => {
+                                const online = isUserOnline(user.id);
+                                return (
+                                <div 
+                                    key={user.id}
+                                    onClick={() => setActiveUserId(user.id)}
+                                    style={{
+                                        padding: '15px 20px',
+                                        borderBottom: `1px solid ${THEME.border}`,
+                                        cursor: 'pointer',
+                                        background: activeUserId === user.id ? '#f0f9ff' : 'white',
+                                        borderLeft: activeUserId === user.id ? `4px solid ${THEME.primary}` : '4px solid transparent',
+                                        transition: '0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        position: 'relative'
+                                    }}
+                                >
+                                    <div style={{ position: 'relative' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: THEME.primary, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '16px', flexShrink: 0 }}>
+                                            {user.full_name?.charAt(0) || 'م'}
+                                        </div>
+                                        {online && <div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', background: '#10b981', borderRadius: '50%', border: '2px solid white' }}></div>}
+                                    </div>
+                                    <div style={{ overflow: 'hidden', flex: 1 }}>
+                                        <div style={{ fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.full_name || 'بدون اسم'}</div>
+                                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{user.role === 'super_admin' ? 'مدير نظام' : 'موظف'}</div>
+                                    </div>
+                                    {unreadCounts && unreadCounts[user.id] > 0 && (
+                                        <div style={{ background: THEME.ruby, color: 'white', fontSize: '11px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px', minWidth: '20px', textAlign: 'center', flexShrink: 0, boxShadow: '0 2px 5px rgba(225, 29, 72, 0.3)' }}>
+                                            {unreadCounts[user.id]}
+                                        </div>
+                                    )}
+                                </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+
+                {/* Chat Area */}
+                <div style={{ flex: 1, background: 'white', borderRadius: '20px', border: `1px solid ${THEME.border}`, display: 'flex', flexDirection: 'column', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', overflow: 'hidden', position: 'relative' }}>
+                    {/* Background Pattern */}
+                    <div style={{ position: 'absolute', inset: 0, opacity: 0.03, pointerEvents: 'none', backgroundImage: 'radial-gradient(#43342e 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                    
+                    {activeUserId ? (
+                        <>
+                            {/* Chat Header */}
+                            <div style={{ padding: '20px', borderBottom: `1px solid ${THEME.border}`, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 1 }}>
+                                <div style={{ position: 'relative' }}>
+                                    <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: THEME.primary, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '18px' }}>
+                                        {activeUser?.full_name?.charAt(0) || 'م'}
+                                    </div>
+                                    {isUserOnline(activeUserId) && <div style={{ position: 'absolute', bottom: '2px', right: '2px', width: '12px', height: '12px', background: '#10b981', borderRadius: '50%', border: '2px solid white' }}></div>}
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontWeight: 900, color: '#0f172a', fontSize: '16px' }}>{activeUser?.full_name}</h3>
+                                    <span style={{ fontSize: '12px', color: isUserOnline(activeUserId) ? '#10b981' : '#94a3b8', fontWeight: 700 }}>
+                                        {isUserOnline(activeUserId) ? '● متصل الآن' : 'غير متصل'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Messages Container */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px', zIndex: 1 }} className="cinematic-scroll">
+                                {isLoadingMessages ? (
+                                    <div style={{ textAlign: 'center', padding: '30px', color: THEME.primary }}>⏳ جاري تحميل الرسائل...</div>
+                                ) : messages.length === 0 ? (
+                                    <div style={{ textAlign: 'center', margin: 'auto', color: '#94a3b8', fontWeight: 800 }}>
+                                        <div style={{ fontSize: '40px', marginBottom: '10px', opacity: 0.5 }}>👋</div>
+                                        ابدأ المحادثة الآن...
+                                    </div>
+                                ) : (
+                                    messages.map((msg) => {
+                                        const isMine = msg.sender_id === currentUserId;
+                                        return (
+                                            <div key={msg.id} style={{ alignSelf: isMine ? 'flex-start' : 'flex-end', maxWidth: '70%' }}>
+                                                <div style={{
+                                                    background: isMine ? THEME.primary : '#f1f5f9',
+                                                    color: isMine ? 'white' : '#1e293b',
+                                                    padding: '12px 18px',
+                                                    borderRadius: '16px',
+                                                    borderTopRightRadius: isMine ? '0' : '16px',
+                                                    borderTopLeftRadius: isMine ? '16px' : '0',
+                                                    boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+                                                    fontSize: '14px',
+                                                    lineHeight: '1.5',
+                                                    fontWeight: 700
+                                                }}>
+                                                    {msg.content}
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px', justifyContent: isMine ? 'flex-start' : 'flex-end', padding: '0 5px', position: 'relative' }}>
+                                                    <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600 }}>
+                                                        {new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                    {isMine && (
+                                                        <span style={{ fontSize: '10px', color: msg.is_read ? '#3b82f6' : '#94a3b8' }}>
+                                                            {msg.is_read ? '✓✓' : '✓'}
+                                                        </span>
+                                                    )}
+                                                    
+                                                    {/* Info Circle */}
+                                                    <div 
+                                                        onClick={() => setMsgDetailsOpen(msgDetailsOpen === msg.id ? null : msg.id)}
+                                                        style={{ width: '14px', height: '14px', borderRadius: '50%', border: '1px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', cursor: 'pointer', fontWeight: 900 }}
+                                                    >
+                                                        i
+                                                    </div>
+
+                                                    {/* Details Popover */}
+                                                    {msgDetailsOpen === msg.id && (
+                                                        <div style={{ position: 'absolute', top: '100%', right: isMine ? '0' : 'auto', left: isMine ? 'auto' : '0', marginTop: '5px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', zIndex: 10, minWidth: '180px', fontSize: '11px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ fontWeight: 800 }}>وقت الإرسال:</span>
+                                                                <span>{new Date(msg.created_at).toLocaleString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', color: msg.is_read ? '#10b981' : '#94a3b8' }}>
+                                                                <span style={{ fontWeight: 800 }}>وقت القراءة:</span>
+                                                                <span>{msg.read_at ? new Date(msg.read_at).toLocaleString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'لم تُقرأ بعد'}</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Chat Input */}
+                            <form onSubmit={sendMessage} style={{ padding: '20px', borderTop: `1px solid ${THEME.border}`, background: 'rgba(255,255,255,0.9)', zIndex: 1, display: 'flex', gap: '10px' }}>
+                                <input 
+                                    type="text" 
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    placeholder="اكتب رسالتك هنا..." 
+                                    style={{ flex: 1, padding: '15px 20px', borderRadius: '30px', border: `1px solid ${THEME.border}`, outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: 700 }}
+                                />
+                                <button type="submit" disabled={!newMessage.trim()} style={{ background: THEME.primary, color: 'white', border: 'none', width: '50px', height: '50px', borderRadius: '50%', cursor: newMessage.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: newMessage.trim() ? 1 : 0.5, transition: '0.2s', fontSize: '20px' }}>
+                                    ➤
+                                </button>
+                            </form>
+                        </>
+                    ) : (
+                        <div style={{ margin: 'auto', textAlign: 'center', color: '#94a3b8', zIndex: 1 }}>
+                            <div style={{ fontSize: '60px', marginBottom: '15px', opacity: 0.3 }}>💬</div>
+                            <h3 style={{ margin: 0, fontWeight: 900 }}>الرسائل الداخلية</h3>
+                            <p style={{ marginTop: '5px', fontSize: '14px' }}>قم باختيار محادثة من القائمة للبدء</p>
+                        </div>
+                    )}
+                </div>
+
+            </div>
+            <style dangerouslySetInnerHTML={{__html: `
+                .cinematic-scroll::-webkit-scrollbar { width: 6px; }
+                .cinematic-scroll::-webkit-scrollbar-track { background: transparent; }
+                .cinematic-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+                .cinematic-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            `}} />
+                        </MasterPage>
+    );
+}

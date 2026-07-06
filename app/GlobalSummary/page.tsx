@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchAllSupabaseData, formatCurrency } from '@/lib/helpers';
 import GlassContainer from '@/components/GlassContainer';
 import { THEME } from '@/lib/theme';
+import MasterPage from '@/components/MasterPage';
 
 export default function MasterDashboard() {
     const [loading, setLoading] = useState(true);
@@ -67,6 +68,8 @@ export default function MasterDashboard() {
     if (loading) return <LoadingScreen message="جاري استدعاء الإحصائيات المركزية..." subMessage="نقوم بتجميع بيانات الأقسام بدقة لحظية" />;
 
     return (
+        <MasterPage title="الملخص العام (Global Summary)" subtitle="نظرة شاملة وموحدة لجميع قطاعات النظام" icon="📊">
+        
         <div style={{ padding: '25px', direction: 'rtl', maxWidth: '1600px', margin: '0 auto' }}>
             
             {/* 👑 الهيدر العلوي: شريط المعلومات السريع */}
@@ -151,6 +154,7 @@ export default function MasterDashboard() {
                 </div>
             </div>
         </div>
+        </MasterPage>
     );
 }
 
@@ -188,5 +192,5 @@ function QuickAction({ icon, label }: any) {
             <span style={{ fontSize: '20px' }}>{icon}</span>
             <span style={{ fontSize: '12px' }}>{label}</span>
         </div>
-    );
+                );
 }

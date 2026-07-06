@@ -85,16 +85,16 @@ export default function JobOrdersPage() {
         summary={
           <div className="summary-glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>جاري التنفيذ ⏳</span>
-                <span style={{fontSize:'14px', fontWeight:900, color: '#3b82f6'}}>{logic.kpis.running}</span>
+                <span style={{fontSize:'14px', fontWeight:900, color:'#94a3b8'}}>جاري التنفيذ ⏳</span>
+                <span style={{fontSize:'15px', fontWeight:900, color: '#3b82f6'}}>{logic.kpis.running}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>موقوف ⏸️</span>
-                <span style={{fontSize:'14px', fontWeight:900, color: '#dc2626'}}>{logic.kpis.suspended}</span>
+                <span style={{fontSize:'14px', fontWeight:900, color:'#94a3b8'}}>موقوف ⏸️</span>
+                <span style={{fontSize:'15px', fontWeight:900, color: '#ef4444'}}>{logic.kpis.suspended}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>مكتمل ✅</span>
-                <span style={{fontSize:'14px', fontWeight:900, color: '#10b981'}}>{logic.kpis.completed}</span>
+                <span style={{fontSize:'14px', fontWeight:900, color:'#94a3b8'}}>مكتمل ✅</span>
+                <span style={{fontSize:'15px', fontWeight:900, color: '#10b981'}}>{logic.kpis.completed}</span>
             </div>
           </div>
         }
@@ -110,11 +110,52 @@ export default function JobOrdersPage() {
                     enableClear={true}
                     onSelect={(item:any) => logic.setGlobalSearch(item?.project_name || '')}
                 />
+
+                <SmartCombo 
+                    label="تصفية بالبند (العمل)"
+                    icon="🛠️"
+                    table="boq_budget"
+                    displayCol="work_item"
+                    placeholder="ابحث عن بند..."
+                    enableClear={true}
+                    onSelect={(item:any) => logic.setWorkitemFilter(item?.work_item || '')}
+                />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 800, color: '#43342e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        📊 حالة الأمر
+                    </label>
+                    <select 
+                        value={logic.statusFilter}
+                        onChange={(e) => logic.setStatusFilter(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(197, 160, 89, 0.3)', background: 'rgba(255, 255, 255, 0.8)', color: '#1e293b', outline: 'none', fontWeight: 800, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                    >
+                        <option value="">جميع الحالات</option>
+                        <option value="جاري التنفيذ">⏳ جاري التنفيذ</option>
+                        <option value="مكتمل">✅ مكتمل</option>
+                        <option value="موقوف">⏸️ موقوف</option>
+                    </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 800, color: '#43342e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        👷‍♂️ جهة التنفيذ
+                    </label>
+                    <select 
+                        value={logic.executorFilter}
+                        onChange={(e) => logic.setExecutorFilter(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(197, 160, 89, 0.3)', background: 'rgba(255, 255, 255, 0.8)', color: '#1e293b', outline: 'none', fontWeight: 800, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+                    >
+                        <option value="">جميع الجهات</option>
+                        <option value="مقاول باطن">🤝 مقاول باطن</option>
+                        <option value="تنفيذ ذاتي">👷‍♂️ تنفيذ ذاتي (عمالة الشركة)</option>
+                    </select>
+                </div>
             </div>
         }
         onSearch={logic.setGlobalSearch}
         onDateFilter={(start, end) => { logic.setDateFrom(start); logic.setDateTo(end); }}
-        watchDeps={[logic.selectedIds, logic.allFiltered.length]}
+        watchDeps={[logic.selectedIds, logic.allFiltered.length, logic.statusFilter, logic.executorFilter, logic.workitemFilter]}
       />
 
       <style>{`
@@ -144,6 +185,9 @@ export default function JobOrdersPage() {
               const finalCost = row.executor_type === 'مقاول باطن' ? materialsAndExpenses + subcontractorPaid : materialsAndExpenses;
               const calculatedProfit = targetBudget - finalCost;
               
+              let usagePercent = targetBudget > 0 ? (finalCost / targetBudget) * 100 : 0;
+              let progressColor = usagePercent > 95 ? '#ef4444' : (usagePercent > 80 ? '#f59e0b' : '#10b981');
+
               let profitColor = '#10b981'; 
               let profitBg = 'rgba(16, 185, 129, 0.1)';
               let profitLabel = 'الربح الصافي:';
@@ -189,23 +233,24 @@ export default function JobOrdersPage() {
                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.08)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isSelected ? '0 10px 30px rgba(217, 119, 6, 0.15)' : '0 10px 30px rgba(0, 0, 0, 0.03)'; }}
                 >
-                  <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10 }}>
-                    <input 
-                      type="checkbox" 
-                      className="custom-checkbox" 
-                      checked={isSelected} 
-                      onChange={(e) => {
-                          e.stopPropagation();
-                          if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
-                          else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
-                      }} 
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
-                    <div>
-                      <b style={{ color: '#8b5cf6', fontSize: '15px', fontWeight: 900 }}>#{row.order_number}</b>
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>📅 {row.start_date ? new Date(row.start_date).toLocaleDateString('ar-EG') : '---'}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div className="jo-checkbox-wrap" style={{ marginTop: '2px' }} onClick={(e) => e.stopPropagation()}>
+                        <input 
+                          type="checkbox" 
+                          className="custom-checkbox" 
+                          checked={isSelected} 
+                          onChange={(e) => {
+                              e.stopPropagation();
+                              if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
+                              else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
+                          }} 
+                        />
+                      </div>
+                      <div>
+                        <b style={{ color: '#8b5cf6', fontSize: '15px', fontWeight: 900 }}>#{row.order_number}</b>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>📅 {row.start_date ? new Date(row.start_date).toLocaleDateString('ar-EG') : '---'}</div>
+                      </div>
                     </div>
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: '6px',
@@ -216,16 +261,15 @@ export default function JobOrdersPage() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span style={{fontWeight: 900, color: '#1e293b', fontSize: '14px'}}>
+                  <div className="jo-project-name" style={{ fontSize: '18px', fontWeight: 900, color: '#43342e', background: 'linear-gradient(90deg, rgba(197, 160, 89, 0.15) 0%, transparent 100%)', padding: '8px 12px', borderRight: '4px solid #C5A059', borderRadius: '4px' }}>
                         {row.projects?.Property || row.projects?.project_name || 'العقار غير محدد'}
-                    </span>
-                    {row.boq_budget?.work_item && (
+                  </div>
+                  
+                  {row.boq_budget?.work_item && (
                        <span style={{ fontSize: '11px', color: '#475569', background: '#f1f5f9', padding: '4px 10px', borderRadius: '8px', width: 'fit-content', border: '1px solid #e2e8f0', fontWeight: 800 }}>
                          🛠️ {row.boq_budget.work_item}
                        </span>
-                    )}
-                  </div>
+                  )}
 
                   <div>
                     <span style={{ 
@@ -269,6 +313,16 @@ export default function JobOrdersPage() {
                          padding: '6px 10px', borderRadius: '8px', border: `1px solid ${profitColor}40`, marginTop: '4px', display: 'flex', justifyContent: 'space-between', fontSize: '13px'
                      }}>
                        <span>{profitLabel}</span> <span>{Math.abs(calculatedProfit).toLocaleString()} ر.س</span>
+                     </div>
+
+                     <div style={{ marginTop: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>
+                          <span>استهلاك الميزانية (عمالة + خامات)</span>
+                          <span style={{ color: progressColor, fontWeight: 900 }}>{usagePercent.toFixed(1)}%</span>
+                        </div>
+                        <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.min(usagePercent, 100)}%`, height: '100%', background: progressColor, transition: 'width 0.5s ease-out' }}></div>
+                        </div>
                      </div>
                   </div>
 

@@ -8,7 +8,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       networkMode: 'offlineFirst',
-      staleTime: 1000 * 60 * 60, // ساعة واحدة
+      staleTime: 1000 * 60 * 5, // 5 دقائق
       gcTime: 1000 * 60 * 60 * 24, // 24 ساعة
     },
     mutations: {

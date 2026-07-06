@@ -5,6 +5,7 @@ import { useBackupLogic } from './backup_logic';
 import { useRestoreLogic } from './restore_logic'; 
 import PermissionsMatrix from './PermissionsMatrix';
 import SystemHealthRadar from './SystemHealthRadar';
+import AuditLogs from './AuditLogs';
 
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
 import MasterPage from '@/components/MasterPage';
@@ -184,11 +185,16 @@ export default function SettingsPage() {
           <button className={`tab-btn ${activeTab === 'health' ? 'active' : ''}`} onClick={() => setActiveTab('health')}>
             🛡️ سلامة النظام (الرادار)
           </button>
+          <button className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
+            🕵️‍♂️ سجل المراقبة
+          </button>
         </div>
 
         {activeTab === 'permissions' && <PermissionsMatrix />}
         
         {activeTab === 'health' && <SystemHealthRadar />}
+
+        {activeTab === 'audit' && <AuditLogs />}
 
         {activeTab === 'backup' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 2fr) minmax(250px, 1fr)', gap: '30px', alignItems: 'start' }}>

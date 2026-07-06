@@ -119,9 +119,12 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
         totalWorkValue = assignmentQty * assignmentPrice;
     }
     
-    // 2. الخصومات (خامات + مصروفات) الخاصة بهذه الفيلا فقط
+    // 2. تفصيل الخصومات (خامات + مصروفات + عمالة) الخاصة بهذه الفيلا
     const materialsTotal = ledgerData.filter(d => d.trans_type === 'خامات مصروفة').reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const expensesTotal = ledgerData.filter(d => d.trans_type === 'مصروفات نثرية').reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const laborTotal = ledgerData.filter(d => d.trans_type === 'يوميات عمالة').reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const directExpensesTotal = ledgerData.filter(d => d.trans_type === 'مصروفات نثرية' && !String(d.trans_desc).includes('[تحميل مالي]')).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const allocatedExpensesTotal = ledgerData.filter(d => d.trans_type === 'مصروفات نثرية' && String(d.trans_desc).includes('[تحميل مالي]')).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     
     // 3. الصافي التقديري للفيلا (أساس النسبة)
     const estimatedNet = totalWorkValue - materialsTotal - expensesTotal;
@@ -196,73 +199,93 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
     const modalContent = (
         <div className="modal-overlay" onClick={onClose}>
             <style>{`
-                .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 999999; }
-                .modal-content { width: 1100px; max-height: 90vh; background: #ffffff; border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 20px 50px rgba(0,0,0,0.4); direction: rtl; }
-                @keyframes slideUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-                .tab-btn { padding: 15px 20px; border: none; background: transparent; font-weight: 900; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; transition: 0.3s; font-size: 14px; flex: 1; }
-                .tab-btn.active { border-bottom-color: ${THEME.accent}; color: ${THEME.primary}; background: #f8fafc; }
-                .tab-btn:hover:not(.active) { color: ${THEME.primary}; background: rgba(0,0,0,0.02); }
+                .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(15px); display: flex; align-items: center; justify-content: center; z-index: 999999; }
+                .modal-content { width: 1100px; max-height: 90vh; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; animation: slideUp 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); box-shadow: 0 30px 60px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.5); direction: rtl; }
+                @keyframes slideUp { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+                .tab-btn { padding: 18px 25px; border: none; background: transparent; font-weight: 900; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; transition: all 0.3s ease; font-size: 15px; flex: 1; position: relative; }
+                .tab-btn::after { content: ''; position: absolute; bottom: -1px; left: 50%; width: 0; height: 3px; background: #C5A059; transition: all 0.3s ease; transform: translateX(-50%); }
+                .tab-btn.active { color: #1e293b; background: linear-gradient(0deg, rgba(197, 160, 89, 0.05) 0%, transparent 100%); }
+                .tab-btn.active::after { width: 100%; }
+                .tab-btn:hover:not(.active) { color: #1e293b; background: rgba(0,0,0,0.02); }
             `}</style>
 
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div style={{ background: 'linear-gradient(135deg, #1e293b, #0f172a)', padding: '30px', color: 'white' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98))', padding: '30px 40px', color: 'white', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #C5A059, #fcd34d, #C5A059)' }}></div>
+                    <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(197, 160, 89, 0.15) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }}></div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <h2 style={{ margin: 0, fontSize: '26px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px' }}>
                                 {isSubcontractor ? '🤝 كشف حساب مقاول الباطن' : '📊 دفتر أستاذ التشغيل'}
-                                <span style={{ fontSize: '13px', background: 'rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)' }}>
-                                    أمر رقم: <span style={{ color: THEME.accentLight }}>{jobOrder?.order_number}</span>
+                                <span style={{ fontSize: '14px', background: 'rgba(255,255,255,0.1)', padding: '6px 15px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', backdropFilter: 'blur(5px)', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                                    أمر رقم: <span style={{ color: '#C5A059' }}>{jobOrder?.order_number}</span>
                                 </span>
                             </h2>
-                            <p style={{ margin: '10px 0 0 0', color: '#94a3b8', fontSize: '14px', fontWeight: 800 }}>
-                                📍 {jobOrder?.projects?.Property} | 🛠️ {jobOrder?.boq_budget?.work_item || jobOrder?.job_order_name}
-                                {isSubcontractor && <span style={{ color: '#fcd34d' }}> | 👷 المقاول: {jobOrder?.partners?.name || 'غير محدد'}</span>}
+                            <p style={{ margin: '15px 0 0 0', color: '#cbd5e1', fontSize: '15px', fontWeight: 800 }}>
+                                📍 <span style={{ color: '#fff' }}>{jobOrder?.projects?.Property}</span> &nbsp;|&nbsp; 🛠️ <span style={{ color: '#fff' }}>{jobOrder?.boq_budget?.work_item || jobOrder?.job_order_name}</span>
+                                {isSubcontractor && <span style={{ color: '#C5A059' }}> &nbsp;|&nbsp; 👷 المقاول: {jobOrder?.partners?.name || 'غير محدد'}</span>}
                             </p>
                         </div>
-                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '10px 20px', borderRadius: '12px', cursor: 'pointer', fontWeight: 900, transition: '0.2s', fontSize: '14px' }} onMouseOver={e => e.currentTarget.style.background='rgba(239, 68, 68, 0.8)'} onMouseOut={e => e.currentTarget.style.background='rgba(255,255,255,0.05)'}>إغلاق ✖</button>
+                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '12px 25px', borderRadius: '14px', cursor: 'pointer', fontWeight: 900, transition: 'all 0.3s', fontSize: '15px', backdropFilter: 'blur(10px)' }} onMouseOver={e => { e.currentTarget.style.background='rgba(239, 68, 68, 0.9)'; e.currentTarget.style.borderColor='rgba(239, 68, 68, 1)'; e.currentTarget.style.boxShadow='0 5px 15px rgba(239, 68, 68, 0.4)'; }} onMouseOut={e => { e.currentTarget.style.background='rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.2)'; e.currentTarget.style.boxShadow='none'; }}>إغلاق ✖</button>
                     </div>
 
-                    {isSubcontractor ? (
-                        // لوحة التحكم المخصصة لمقاول الباطن
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginTop: '30px' }}>
-                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي قيمة الإسناد (للفيلا)</div>
-                                <div style={{ fontSize: '22px', fontWeight: 900, color: '#60a5fa', marginTop: '5px' }}>{formatCurrency(totalWorkValue)}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '35px', position: 'relative', zIndex: 1 }}>
+                        {/* الصف الأول: التفاصيل والمصروفات */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>خامات منصرفة</div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(materialsTotal)}</div>
                             </div>
-                            <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px dashed rgba(245, 158, 11, 0.3)', padding: '20px', borderRadius: '16px' }}>
-                                <div style={{ fontSize: '11px', color: '#fcd34d', fontWeight: 800 }}>الصافي بعد الخامات والمصاريف</div>
-                                <div style={{ fontSize: '22px', fontWeight: 900, color: '#f59e0b', marginTop: '5px' }}>{formatCurrency(estimatedNet)}</div>
+                            
+                            {isSubcontractor ? (
+                                <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>مستخلصات المقاول</div>
+                                    <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(paymentsTotal + advanceTotal + retentionTotal)}</div>
+                                </div>
+                            ) : (
+                                <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>يوميات عمالة</div>
+                                    <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(laborTotal)}</div>
+                                </div>
+                            )}
+
+                            <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>مصروفات مباشرة</div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(directExpensesTotal)}</div>
                             </div>
-                            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px dashed rgba(16, 185, 129, 0.3)', padding: '20px', borderRadius: '16px' }}>
-                                <div style={{ fontSize: '11px', color: '#6ee7b7', fontWeight: 800 }}>المسدد ومحجوز الضمان (حصة الفيلا)</div>
-                                <div style={{ fontSize: '22px', fontWeight: 900, color: '#10b981', marginTop: '5px' }}>{formatCurrency(paymentsTotal + advanceTotal + retentionTotal)}</div>
-                            </div>
-                            <div style={{ background: `linear-gradient(135deg, ${THEME.accent}40, transparent)`, padding: '20px', borderRadius: '16px', border: `1px solid ${THEME.accent}80`, boxShadow: `0 0 25px ${THEME.accent}30` }}>
-                                <div style={{ fontSize: '13px', color: THEME.accentLight, fontWeight: 900 }}>المتبقي المستحق للفيلا</div>
-                                <div style={{ fontSize: '28px', fontWeight: 900, color: '#ffffff', marginTop: '5px', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>{formatCurrency(remainingBalance)}</div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginTop: '25px' }}>
-                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>الميزانية المعتمدة</div>
-                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '5px' }}>{formatCurrency(jobOrder?.boq_total_budget || 0)}</div>
-                            </div>
-                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي التكلفة الفعالة</div>
-                                <div style={{ fontSize: '20px', fontWeight: 900, color: '#f87171', marginTop: '5px' }}>{formatCurrency(jobOrder?.effective_cost || 0)}</div>
-                            </div>
-                            <div style={{ background: `${THEME.accent}30`, padding: '15px', borderRadius: '15px', border: `1px solid ${THEME.accent}60` }}>
-                                <div style={{ fontSize: '11px', color: '#cbd5e1', fontWeight: 800 }}>صافي الربح</div>
-                                <div style={{ fontSize: '20px', fontWeight: 900, color: '#34d399', marginTop: '5px' }}>{formatCurrency(jobOrder?.total_profit_or_loss || 0)}</div>
+
+                            <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>مصروفات محملة</div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(allocatedExpensesTotal)}</div>
                             </div>
                         </div>
-                    )}
+
+                        {/* الصف الثاني: المؤشرات الرئيسية */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.04)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>{isSubcontractor ? 'قيمة الإسناد المقدرة' : 'الميزانية المعتمدة'}</div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#C5A059' }}>{formatCurrency(isSubcontractor ? totalWorkValue : (jobOrder?.boq_total_budget || 0))}</div>
+                            </div>
+
+                            <div style={{ background: 'rgba(244, 63, 94, 0.1)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(244, 63, 94, 0.3)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(244, 63, 94, 0.1)' }}>
+                                <div style={{ fontSize: '11px', color: '#fda4af', fontWeight: 800 }}>إجمالي التكلفة الحقيقية</div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f43f5e' }}>
+                                    {formatCurrency(materialsTotal + directExpensesTotal + allocatedExpensesTotal + (isSubcontractor ? (paymentsTotal + advanceTotal + retentionTotal) : laborTotal))}
+                                </div>
+                            </div>
+
+                            <div style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(16, 185, 129, 0.4)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(16, 185, 129, 0.1)' }}>
+                                <div style={{ fontSize: '11px', color: '#a7f3d0', fontWeight: 800 }}>{isSubcontractor ? 'المتبقي للفيلا' : 'صافي الربح / (الخسارة)'}</div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#10b981' }}>{formatCurrency(isSubcontractor ? remainingBalance : (jobOrder?.total_profit_or_loss || 0))}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', background: '#f8fafc', padding: '0 10px', borderBottom: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                <div style={{ display: 'flex', background: 'rgba(248, 250, 252, 0.8)', padding: '0 20px', borderBottom: '1px solid #e2e8f0', overflowX: 'auto', backdropFilter: 'blur(10px)' }}>
                     {tabs.map(tab => (
                         <button key={tab.id} className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
                             {tab.label}
@@ -273,25 +296,25 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                 {/* Table Data */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
                     {activeTab === 'مؤشرات الأداء' ? (
-                        <div style={{ height: '400px', width: '100%', padding: '20px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                            <h3 style={{ textAlign: 'center', marginBottom: '20px', color: THEME.primary, fontWeight: 900 }}>تحليل ميزانية أمر التشغيل</h3>
+                        <div style={{ height: '450px', width: '100%', padding: '30px', background: 'rgba(255, 255, 255, 0.7)', borderRadius: '24px', border: '1px solid rgba(255, 255, 255, 0.8)', boxShadow: '0 10px 30px rgba(0,0,0,0.03)', backdropFilter: 'blur(20px)' }}>
+                            <h3 style={{ textAlign: 'center', marginBottom: '30px', color: '#1e293b', fontWeight: 900, fontSize: '20px' }}>تحليل ميزانية أمر التشغيل</h3>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={[
                                     { 
-                                        name: 'تحليل الميزانية', 
+                                        name: 'التحليل المالي', 
                                         'الميزانية المعتمدة': isSubcontractor ? totalWorkValue : (jobOrder?.boq_total_budget || 0), 
                                         'التكلفة الفعلية': isSubcontractor ? (paymentsTotal + advanceTotal + retentionTotal) : (jobOrder?.effective_cost || 0),
                                         'صافي الربح / (الخسارة)': isSubcontractor ? estimatedNet : (jobOrder?.total_profit_or_loss || 0)
                                     }
                                 ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontWeight: 800 }} />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontWeight: 800, fontSize: 14 }} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontWeight: 800 }} tickFormatter={(val) => val.toLocaleString()} />
-                                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }} itemStyle={{ fontWeight: 800 }} />
-                                    <Legend wrapperStyle={{ paddingTop: '20px', fontWeight: 800 }} />
-                                    <Bar dataKey="الميزانية المعتمدة" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={50} />
-                                    <Bar dataKey="التكلفة الفعلية" fill="#f43f5e" radius={[6, 6, 0, 0]} barSize={50} />
-                                    <Bar dataKey="صافي الربح / (الخسارة)" fill="#10b981" radius={[6, 6, 0, 0]} barSize={50} />
+                                    <Tooltip cursor={{ fill: 'rgba(197, 160, 89, 0.05)' }} contentStyle={{ borderRadius: '16px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 15px 35px rgba(0,0,0,0.1)', backdropFilter: 'blur(10px)', background: 'rgba(255,255,255,0.9)' }} itemStyle={{ fontWeight: 900, fontSize: '15px' }} />
+                                    <Legend wrapperStyle={{ paddingTop: '20px', fontWeight: 900, fontSize: '14px' }} iconType="circle" />
+                                    <Bar dataKey="الميزانية المعتمدة" fill="#C5A059" radius={[8, 8, 0, 0]} barSize={70} />
+                                    <Bar dataKey="التكلفة الفعلية" fill="#f43f5e" radius={[8, 8, 0, 0]} barSize={70} />
+                                    <Bar dataKey="صافي الربح / (الخسارة)" fill="#10b981" radius={[8, 8, 0, 0]} barSize={70} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -299,35 +322,31 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                         <LoadingScreen message="جاري استخراج السجل المالي بدقة..." fullScreen={false} />
                     ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead style={{ background: '#f1f5f9', color: '#475569', fontSize: '12px', textAlign: 'right' }}>
+                            <thead style={{ background: '#f1f5f9', color: '#475569', fontSize: '12px', textAlign: 'right', position: 'sticky', top: '-20px', zIndex: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
                                 <tr>
-                                    <th style={{ padding: '14px 20px', borderRadius: '0 12px 12px 0' }}>التاريخ</th>
-                                    <th style={{ padding: '14px 20px' }}>البيان التحليلي</th>
-                                    <th style={{ padding: '14px 20px' }}>الكمية</th>
-                                    <th style={{ padding: '14px 20px', borderRadius: '12px 0 0 0' }}>القيمة (ر.س)</th>
+                                    <th style={{ padding: '14px 20px', borderRadius: '0 12px 12px 0', background: '#f1f5f9' }}>التاريخ</th>
+                                    <th style={{ padding: '14px 20px', background: '#f1f5f9' }}>البيان التحليلي</th>
+                                    <th style={{ padding: '14px 20px', background: '#f1f5f9' }}>الكمية</th>
+                                    <th style={{ padding: '14px 20px', borderRadius: '12px 0 0 0', background: '#f1f5f9' }}>القيمة (ر.س)</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style={{ background: 'rgba(255,255,255,0.5)' }}>
                                 {tableRows.length > 0 ? tableRows.map((row: any, i: number) => (
-                                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '13px', fontWeight: 800, color: '#1e293b', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.background='#f8fafc'} onMouseOut={e => e.currentTarget.style.background='transparent'}>
-                                        <td style={{ padding: '15px 20px' }}>{new Date(row.trans_date).toLocaleDateString('ar-EG')}</td>
-                                        <td style={{ padding: '15px 20px' }}>{row.trans_desc}</td>
-                                        <td style={{ padding: '15px 20px' }}>{row.qty || '-'}</td>
-                                        <td style={{ padding: '15px 20px', color: THEME.primary, fontWeight: 900 }}>{formatCurrency(row.amount)}</td>
+                                    <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)', fontSize: '14px', fontWeight: 800, color: '#1e293b', transition: 'all 0.3s' }} onMouseOver={e => { e.currentTarget.style.background='rgba(197, 160, 89, 0.05)'; e.currentTarget.style.transform='scale(1.005)'; }} onMouseOut={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.transform='scale(1)'; }}>
+                                        <td style={{ padding: '18px 20px' }}>{new Date(row.trans_date).toLocaleDateString('ar-EG')}</td>
+                                        <td style={{ padding: '18px 20px' }}>{row.trans_desc}</td>
+                                        <td style={{ padding: '18px 20px' }}>{row.qty || '-'}</td>
+                                        <td style={{ padding: '18px 20px', color: '#1e293b', fontWeight: 900 }}>{formatCurrency(row.amount)}</td>
                                     </tr>
                                 )) : (
-                                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '60px', color: '#94a3b8', fontSize: '15px', fontWeight: 800 }}>لا توجد حركات أو مستخلصات مسجلة في هذا البند حتى الآن.</td></tr>
+                                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '80px', color: '#94a3b8', fontSize: '16px', fontWeight: 800 }}>لا توجد حركات مسجلة في هذا البند حتى الآن.</td></tr>
                                 )}
                             </tbody>
-                            <tfoot style={{ background: '#f8fafc' }}>
-                                <tr>
-                                    <td colSpan={3} style={{ padding: '15px 20px', textAlign: 'left', fontWeight: 900, color: '#475569', fontSize: '14px' }}>الإجمالي المسحوب على الفيلا</td>
-                                    <td style={{ padding: '15px 20px', color: THEME.primary, fontWeight: 900, fontSize: '18px' }}>{formatCurrency(tabTotal)}</td>
-                                </tr>
-                            </tfoot>
                         </table>
                     )}
                 </div>
+
+                {/* تمت إزالة السامري السفلي ليكون مدمجاً في الأعلى بناء على طلب العميل */}
             </div>
         </div>
     );

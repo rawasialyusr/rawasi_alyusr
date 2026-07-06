@@ -262,8 +262,22 @@ export function useReceiptVouchersLogic() {
             }
             saveMutation.mutate(record);
         }, 
-        handlePostSelected: () => { if(permissions.canPost) postMutation.mutate(); }, 
-        handleUnpostSelected: () => { if(permissions.canUnpost) unpostMutation.mutate(); }, 
+        handlePostSelected: () => { 
+            if(permissions.canPost) {
+                postMutation.mutate(); 
+            } else {
+                import('@/lib/audit').then(({ logCustomAuditEvent }) => logCustomAuditEvent('receipt_vouchers', 'FAILED_POST', null, null, { error: "ليس لديك صلاحية الترحيل" }));
+                showToast("ليس لديك صلاحية الترحيل", "error");
+            }
+        }, 
+        handleUnpostSelected: () => { 
+            if(permissions.canUnpost) {
+                unpostMutation.mutate(); 
+            } else {
+                import('@/lib/audit').then(({ logCustomAuditEvent }) => logCustomAuditEvent('receipt_vouchers', 'FAILED_UNPOST', null, null, { error: "ليس لديك صلاحية فك الترحيل" }));
+                showToast("ليس لديك صلاحية فك الترحيل", "error");
+            }
+        },
         handleDeleteSelected: () => { 
             const posted = receipts.filter((r:any) => selectedIds.includes(String(r.id)) && (r.status === 'مرحل' || r.status === 'معتمد' || r.is_posted));
             if (posted.length > 0) {

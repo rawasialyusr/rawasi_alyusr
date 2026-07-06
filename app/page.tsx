@@ -5,6 +5,8 @@ import { THEME } from '@/lib/theme';
 import { usePermissions } from '@/lib/PermissionsContext';
 import SecureAction from '@/components/SecureAction';
 import LoadingScreen from '@/components/LoadingScreen';
+import MasterPage from '@/components/MasterPage';
+import { menuGroups } from '@/lib/menuData';
 
 const MOTIVATIONAL_MESSAGES = [
     "يوم جديد لنجاحات مبهرة، توكل على الله وانطلق! 🚀",
@@ -19,10 +21,15 @@ const MOTIVATIONAL_MESSAGES = [
     "بثقتنا بالله وبجهودكم، نحن نبني المستقبل! 🏛️"
 ];
 
+const DEFAULT_FAVORITES = ['global_summary', 'dashboard', 'journal', 'accounts', 'projects'];
+
 export default function WelcomeHomePage() {
     const { role, can, loading: permsLoading, profile } = usePermissions();
     const [greeting, setGreeting] = useState('');
     const [quote, setQuote] = useState('');
+    const [favorites, setFavorites] = useState<string[]>([]);
+    const [isFavModalOpen, setIsFavModalOpen] = useState(false);
+    const [tempFavorites, setTempFavorites] = useState<string[]>([]);
 
     useEffect(() => {
         const hour = new Date().getHours();
@@ -33,6 +40,34 @@ export default function WelcomeHomePage() {
         setQuote(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]);
     }, []);
 
+    useEffect(() => {
+        const saved = localStorage.getItem('rawasi_fav_pages');
+        if (saved) {
+            setFavorites(JSON.parse(saved));
+        } else {
+            setFavorites(DEFAULT_FAVORITES);
+        }
+    }, [profile?.id]);
+
+    const saveFavorites = () => {
+        setFavorites(tempFavorites);
+        localStorage.setItem('rawasi_fav_pages', JSON.stringify(tempFavorites));
+        setIsFavModalOpen(false);
+    };
+
+    const openFavModal = () => {
+        setTempFavorites(favorites);
+        setIsFavModalOpen(true);
+    };
+
+    const toggleFav = (id: string) => {
+        if (tempFavorites.includes(id)) {
+            setTempFavorites(tempFavorites.filter(f => f !== id));
+        } else {
+            setTempFavorites([...tempFavorites, id]);
+        }
+    };
+
     if (permsLoading) {
         return <LoadingScreen message="جاري تحضير مساحة العمل..." fullScreen={false} />;
     }
@@ -40,13 +75,25 @@ export default function WelcomeHomePage() {
     const userName = profile?.full_name || 'زميلنا العزيز';
     const firstNameOnly = userName.split(' ')[0];
     const roleTitle = role === 'super_admin' ? 'المدير العام 👑' : role === 'admin' ? 'مدير النظام 🛡️' : 'مستخدم النظام';
-    const avatarUrl = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=C5A059&color=fff&bold=true&size=128`;
+
+    // مسطح لعناصر القائمة لسهولة البحث
+    const allItems = menuGroups.flatMap(g => g.items);
+    
+    // العناصر المسموح للمستخدم رؤيتها
+    const allowedItems = allItems.filter(item => {
+        if (role === 'super_admin' || role === 'admin') return true;
+        if (['home', 'profile', 'messages', 'notifications'].includes(item.id)) return true;
+        return can(item.id, 'view');
+    });
+
+    const favItems = favorites.map(id => allowedItems.find(i => i.id === id)).filter(Boolean);
 
     return (
+        <MasterPage title="الصفحة الرئيسية" subtitle="بوابة الإدارة المركزية لرواسي اليسر" icon="🏠">
         <div className="welcome-page-wrapper">
             <style>{`
                 .welcome-page-wrapper {
-                    padding: 40px;
+                    padding: 30px;
                     direction: rtl;
                     min-height: calc(100vh - 80px);
                     display: flex;
@@ -56,95 +103,39 @@ export default function WelcomeHomePage() {
                                 radial-gradient(circle at bottom left, rgba(67, 52, 46, 0.03), transparent 400px);
                 }
 
-                @media (max-width: 768px) {
-                    .welcome-page-wrapper { padding: 20px; gap: 20px; }
+                @keyframes fadeUp {
+                    from { opacity: 0; transform: translateY(30px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
 
-                /* ===== كارت المستخدم (أعلى الصفحة) ===== */
-                .user-card {
-                    background: rgba(255,255,255,0.7);
-                    backdrop-filter: blur(20px);
-                    border: 1px solid rgba(255,255,255,0.9);
-                    border-radius: 24px;
-                    padding: 22px 35px;
-                    display: flex;
-                    align-items: center;
-                    gap: 20px;
-                    box-shadow: 0 10px 40px rgba(0,0,0,0.04);
-                    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-                    position: relative;
-                    overflow: hidden;
-                }
-                .user-card::before {
-                    content: '';
-                    position: absolute;
-                    top: 0; right: 0; left: 0; height: 3px;
-                    background: linear-gradient(90deg, ${THEME.goldAccent}, ${THEME.coffeeDark});
-                }
-                .user-avatar {
-                    width: 60px; height: 60px;
-                    border-radius: 50%;
-                    border: 3px solid ${THEME.goldAccent}60;
-                    object-fit: cover;
-                    flex-shrink: 0;
-                }
-                .user-card-info { flex: 1; }
-                .user-card-greeting {
-                    font-size: 12px; font-weight: 700;
-                    color: #94a3b8; margin: 0 0 3px 0;
-                }
-                .user-card-name {
-                    font-size: 22px; font-weight: 900;
-                    color: ${THEME.coffeeDark}; margin: 0 0 5px 0;
-                    letter-spacing: -0.5px;
-                }
-                .user-card-role {
-                    display: inline-block;
-                    padding: 3px 12px;
-                    background: ${THEME.goldAccent}18;
-                    border: 1px solid ${THEME.goldAccent}40;
-                    border-radius: 20px;
-                    font-size: 12px; font-weight: 900;
-                    color: ${THEME.coffeeDark};
-                }
-
-                @media (max-width: 768px) {
-                    .user-card { padding: 18px 20px; gap: 15px; }
-                    .user-card-name { font-size: 18px; }
-                }
-
-                /* ===== البطاقة الرئيسية (وسط الصفحة) ===== */
                 .hero-glass-card {
-                    background: rgba(255, 255, 255, 0.7);
-                    backdrop-filter: blur(20px);
-                    -webkit-backdrop-filter: blur(20px);
-                    border: 1px solid rgba(255, 255, 255, 0.9);
-                    border-radius: 30px;
-                    padding: 60px 50px;
+                    background: rgba(255,255,255,0.7);
+                    backdrop-filter: blur(25px);
+                    border: 1px solid rgba(255,255,255,1);
+                    border-radius: 32px;
+                    padding: 50px 40px;
                     text-align: center;
-                    box-shadow: 0 20px 50px rgba(0,0,0,0.03);
-                    animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    box-shadow: 0 15px 50px rgba(0,0,0,0.03), inset 0 0 0 1px rgba(255,255,255,0.5);
+                    animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
                     position: relative;
                     overflow: hidden;
                 }
                 .hero-glass-card::before {
-                    content: '';
-                    position: absolute;
-                    top: 0; left: 0; right: 0; height: 4px;
+                    content: ''; position: absolute; top: 0; right: 0; left: 0; height: 5px;
                     background: linear-gradient(90deg, ${THEME.goldAccent}, ${THEME.coffeeDark});
                 }
 
                 .welcome-title {
-                    font-size: 48px;
+                    font-size: 38px;
                     font-weight: 900;
                     color: ${THEME.coffeeDark};
                     margin: 0 0 15px 0;
                     letter-spacing: -1px;
                 }
-
+                
                 .welcome-subtitle {
-                    font-size: 18px;
                     color: #64748b;
+                    font-size: 18px;
                     font-weight: 700;
                     max-width: 600px;
                     margin: 0 auto 40px auto;
@@ -154,9 +145,9 @@ export default function WelcomeHomePage() {
 
                 .modules-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
                     gap: 20px;
-                    max-width: 1000px;
+                    max-width: 1100px;
                     margin: 0 auto;
                 }
 
@@ -173,12 +164,21 @@ export default function WelcomeHomePage() {
                     flex-direction: column;
                     align-items: center;
                     gap: 15px;
+                    position: relative;
+                    overflow: hidden;
+                }
+                .module-card::after {
+                    content: ''; position: absolute; inset: 0;
+                    background: linear-gradient(135deg, rgba(197, 160, 89, 0.1), transparent);
+                    opacity: 0; transition: 0.3s;
                 }
                 .module-card:hover {
                     transform: translateY(-10px) scale(1.02);
                     box-shadow: 0 20px 40px rgba(197, 160, 89, 0.1);
                     border-color: ${THEME.goldAccent};
                 }
+                .module-card:hover::after { opacity: 1; }
+                
                 .module-icon {
                     width: 70px; height: 70px;
                     background: #f8fafc;
@@ -186,38 +186,82 @@ export default function WelcomeHomePage() {
                     display: flex; align-items: center; justify-content: center;
                     font-size: 32px;
                     transition: 0.3s;
+                    position: relative; z-index: 1;
                 }
                 .module-card:hover .module-icon {
                     background: ${THEME.goldAccent}20;
-                    transform: rotate(5deg) scale(1.1);
+                    transform: rotate(10deg) scale(1.15);
                 }
-                .module-title { color: ${THEME.coffeeDark}; font-weight: 900; font-size: 18px; margin: 0; }
-                .module-desc { color: #94a3b8; font-size: 12px; font-weight: 700; margin: 0; }
+                .module-title { color: ${THEME.coffeeDark}; font-weight: 900; font-size: 16px; margin: 0; position: relative; z-index: 1; }
+
+                .add-fav-card {
+                    background: transparent;
+                    border: 2px dashed #cbd5e1;
+                    border-radius: 20px;
+                    padding: 30px 20px;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px;
+                    cursor: pointer; transition: 0.3s;
+                }
+                .add-fav-card:hover {
+                    border-color: ${THEME.goldAccent};
+                    background: rgba(197, 160, 89, 0.05);
+                    transform: translateY(-5px);
+                }
+                .add-fav-icon { font-size: 30px; color: #cbd5e1; transition: 0.3s; }
+                .add-fav-card:hover .add-fav-icon { color: ${THEME.goldAccent}; transform: scale(1.2); }
+                .add-fav-title { font-weight: 800; color: #94a3b8; font-size: 16px; transition: 0.3s; }
+                .add-fav-card:hover .add-fav-title { color: ${THEME.goldAccent}; }
+
+                /* Fav Modal Styles */
+                .fav-modal-overlay {
+                    position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px);
+                    z-index: 99999; display: flex; align-items: center; justify-content: center;
+                    animation: fadeIn 0.3s ease;
+                }
+                .fav-modal {
+                    background: white; border-radius: 24px; width: 90%; max-width: 700px; max-height: 85vh;
+                    display: flex; flex-direction: column; overflow: hidden;
+                    box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+                    animation: scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                }
+                .fav-modal-header {
+                    padding: 20px 25px; border-bottom: 1px solid #f1f5f9;
+                    display: flex; justify-content: space-between; align-items: center;
+                    background: #f8fafc;
+                }
+                .fav-modal-content {
+                    padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
+                }
+                .fav-modal-footer {
+                    padding: 20px 25px; border-top: 1px solid #f1f5f9;
+                    display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc;
+                }
+                
+                .fav-group-title { font-weight: 900; color: ${THEME.coffeeDark}; margin-bottom: 10px; font-size: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; }
+                .fav-items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+                
+                .fav-item-check {
+                    display: flex; align-items: center; gap: 10px; padding: 12px 15px;
+                    border: 1px solid #e2e8f0; border-radius: 12px; cursor: pointer; transition: 0.2s;
+                }
+                .fav-item-check:hover { background: #f8fafc; border-color: #cbd5e1; }
+                .fav-item-check.selected { border-color: ${THEME.goldAccent}; background: rgba(197, 160, 89, 0.05); }
+
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes scaleUp { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
                 @media (max-width: 768px) {
-                    .hero-glass-card { padding: 30px 20px; }
-                    .welcome-title { font-size: 30px; }
-                    .welcome-subtitle { font-size: 15px; }
+                    .hero-glass-card { padding: 30px 20px; border-radius: 20px; }
+                    .welcome-title { font-size: 26px; }
+                    .welcome-subtitle { font-size: 14px; }
                     .modules-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-                    .module-card { padding: 20px 12px; }
-                    .module-icon { width: 52px; height: 52px; font-size: 24px; }
-                    .module-title { font-size: 15px; }
+                    .module-card { padding: 20px 10px; }
+                    .module-icon { width: 50px; height: 50px; font-size: 24px; }
+                    .module-title { font-size: 14px; }
                 }
             `}</style>
 
-            {/* ===== كارت المستخدم (أعلى الصفحة لوحده) ===== */}
-            <div className="user-card">
-                <img src={avatarUrl} alt={userName} className="user-avatar" />
-                <div className="user-card-info">
-                    <p className="user-card-greeting">{greeting}،</p>
-                    <h2 className="user-card-name">{firstNameOnly} 👋</h2>
-                    <span className="user-card-role">{roleTitle}</span>
-                </div>
-            </div>
-
-            {/* ===== البطاقة الرئيسية — الرسالة + الوحدات ===== */}
             <div className="hero-glass-card">
-
                 <div style={{ display: 'inline-block', padding: '8px 20px', background: `${THEME.goldAccent}20`, color: THEME.coffeeDark, borderRadius: '20px', fontWeight: 900, fontSize: '14px', marginBottom: '20px' }}>
                     {roleTitle}
                 </div>
@@ -225,64 +269,75 @@ export default function WelcomeHomePage() {
                 <h1 className="welcome-title">{greeting}، {firstNameOnly}</h1>
                 <p className="welcome-subtitle">✨ {quote}</p>
 
+                <div style={{ textAlign: 'right', marginBottom: '15px' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: 900, color: THEME.coffeeDark }}>⭐ الصفحات المفضلة</h2>
+                </div>
+
                 <div className="modules-grid">
-
-                    <SecureAction module="dashboard" action="view">
-                        <Link href="/Dashboard" className="module-card">
-                            <div className="module-icon">📊</div>
-                            <div><h3 className="module-title">لوحة القيادة</h3><p className="module-desc">ملخص المؤشرات والإحصائيات</p></div>
+                    {favItems.map((item, idx) => (
+                        <Link key={idx} href={item.path} className="module-card">
+                            <div className="module-icon">{item.icon}</div>
+                            <h3 className="module-title">{item.title}</h3>
                         </Link>
-                    </SecureAction>
+                    ))}
 
-                    <SecureAction module="accounts" action="view">
-                        <Link href="/accounts" className="module-card">
-                            <div className="module-icon">🏦</div>
-                            <div><h3 className="module-title">دليل الحسابات</h3><p className="module-desc">إدارة شجرة الحسابات المالية</p></div>
-                        </Link>
-                    </SecureAction>
-
-                    <SecureAction module="projects" action="view">
-                        <Link href="/projects" className="module-card">
-                            <div className="module-icon">🏗️</div>
-                            <div><h3 className="module-title">المشاريع</h3><p className="module-desc">متابعة المشاريع والتكاليف</p></div>
-                        </Link>
-                    </SecureAction>
-
-                    <SecureAction module="journal" action="view">
-                        <Link href="/journal" className="module-card">
-                            <div className="module-icon">📓</div>
-                            <div><h3 className="module-title">دفتر اليومية</h3><p className="module-desc">القيود المحاسبية الشاملة</p></div>
-                        </Link>
-                    </SecureAction>
-
-                    <SecureAction module="partners" action="view">
-                        <Link href="/partners" className="module-card">
-                            <div className="module-icon">🤝</div>
-                            <div><h3 className="module-title">الشركاء</h3><p className="module-desc">إدارة المقاولين والموردين</p></div>
-                        </Link>
-                    </SecureAction>
-
-                    <SecureAction module="team" action="view">
-                        <Link href="/team" className="module-card">
-                            <div className="module-icon">👥</div>
-                            <div><h3 className="module-title">إدارة الفريق</h3><p className="module-desc">الصلاحيات والمستخدمين</p></div>
-                        </Link>
-                    </SecureAction>
-
-                    <SecureAction module="settings" action="view">
-                        <Link href="/settings" className="module-card">
-                            <div className="module-icon">⚙️</div>
-                            <div><h3 className="module-title">إعدادات النظام</h3><p className="module-desc">النسخ الاحتياطي والصيانة</p></div>
-                        </Link>
-                    </SecureAction>
-
+                    <div className="add-fav-card" onClick={openFavModal}>
+                        <div className="add-fav-icon">➕</div>
+                        <div className="add-fav-title">تخصيص المفضلة</div>
+                    </div>
                 </div>
             </div>
+
+            {/* Fav Modal */}
+            {isFavModalOpen && (
+                <div className="fav-modal-overlay" onClick={() => setIsFavModalOpen(false)}>
+                    <div className="fav-modal" onClick={e => e.stopPropagation()}>
+                        <div className="fav-modal-header">
+                            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: THEME.coffeeDark }}>تخصيص الصفحات المفضلة</h2>
+                            <button onClick={() => setIsFavModalOpen(false)} style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                        </div>
+                        <div className="fav-modal-content">
+                            {menuGroups.map((group, gIdx) => {
+                                const groupAllowedItems = group.items.filter(item => allowedItems.some(ai => ai.id === item.id));
+                                if (groupAllowedItems.length === 0) return null;
+                                return (
+                                    <div key={gIdx}>
+                                        <div className="fav-group-title">{group.group}</div>
+                                        <div className="fav-items-grid">
+                                            {groupAllowedItems.map((item, iIdx) => {
+                                                const isSelected = tempFavorites.includes(item.id);
+                                                return (
+                                                    <div 
+                                                        key={iIdx} 
+                                                        className={`fav-item-check ${isSelected ? 'selected' : ''}`}
+                                                        onClick={() => toggleFav(item.id)}
+                                                    >
+                                                        <div style={{ fontSize: '20px' }}>{item.icon}</div>
+                                                        <div style={{ fontWeight: 800, color: '#1e293b', flex: 1 }}>{item.title}</div>
+                                                        <div style={{ width: '20px', height: '20px', borderRadius: '5px', border: `2px solid ${isSelected ? THEME.goldAccent : '#cbd5e1'}`, background: isSelected ? THEME.goldAccent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                            {isSelected && <span style={{ color: 'white', fontSize: '14px' }}>✔</span>}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                        <div className="fav-modal-footer">
+                            <button onClick={() => setIsFavModalOpen(false)} style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', background: '#e2e8f0', color: '#475569', fontWeight: 800, cursor: 'pointer' }}>إلغاء</button>
+                            <button onClick={saveFavorites} style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', background: THEME.goldAccent, color: 'white', fontWeight: 800, cursor: 'pointer', boxShadow: `0 4px 10px ${THEME.goldAccent}60` }}>حفظ التغييرات</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Footer */}
             <div style={{ textAlign: 'center', color: '#94a3b8', fontWeight: 700, fontSize: '13px', paddingBottom: '10px' }}>
                 تم تأمين الجلسة الخاصة بك 🔒 | رواسي اليسر © {new Date().getFullYear()}
             </div>
         </div>
+        </MasterPage>
     );
 }

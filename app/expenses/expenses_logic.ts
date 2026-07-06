@@ -475,6 +475,7 @@ export function useExpensesLogic() {
                 showToast('تم الترحيل بنجاح ✅', 'success');
             } catch (error: any) {
                 queryClient.setQueryData(['expenses'], previousData);
+                import('@/lib/audit').then(({ logCustomAuditEvent }) => logCustomAuditEvent('expenses', 'FAILED_POST', idsToProcess[0], null, { error: error.message }));
                 showToast(`خطأ: ${error.message}`, 'error');
             }
         },

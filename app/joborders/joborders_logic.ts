@@ -14,6 +14,9 @@ export function useJobOrdersLogic() {
     const deferredSearch = useDeferredValue(globalSearch); 
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [executorFilter, setExecutorFilter] = useState('');
+    const [workitemFilter, setWorkitemFilter] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
@@ -60,6 +63,14 @@ export function useJobOrdersLogic() {
         }
     });
 
+    // 3. جلب مصروفات الشركة العامة الموزعة على أوامر الشغل
+    const { data: generalAllocations = [], isLoading: isAllocLoading } = useQuery({
+        queryKey: ['advanced_cost_allocation'],
+        queryFn: async () => {
+            return await fetchAllSupabaseData(supabase, 'advanced_cost_allocation_view', '*') || [];
+        }
+    });
+
     // ================= Data Merging & Filtering =================
     
     const mergedJobOrders = useMemo(() => {
@@ -67,7 +78,13 @@ export function useJobOrdersLogic() {
         
         return baseJobOrders.map(jo => {
             const perf = joPerformance.find((p: any) => p.job_order_id === jo.id) || {};
-            const effectiveCost = Number(perf.effective_cost || 0); // التكلفة المسحوبة (خامات، مصروفات، عمالة)
+            let effectiveCost = Number(perf.effective_cost || 0); // التكلفة المسحوبة من عرض الأداء
+
+            // إضافة المصروفات العامة (العمالة والإعاشة اليومية/الشهرية) من view التوزيع
+            const joAllocations = generalAllocations.filter((a: any) => a.job_order_id === jo.id);
+            const totalAllocatedOverhead = joAllocations.reduce((sum: number, curr: any) => sum + Number(curr['المبلغ المحمل (ر.س)'] || 0), 0);
+            
+            effectiveCost += totalAllocatedOverhead;
             
             let subPaidTotal = 0;
             
@@ -119,10 +136,11 @@ export function useJobOrdersLogic() {
                 ...jo, 
                 ...perf,
                 subcontractor_paid: subPaidTotal, // المبالغ النقدية للمقاول بعد التوزيع الدقيق للفيلا
-                final_effective_cost: effectiveCost + subPaidTotal // إجمالي المنصرف الحقيقي
+                total_allocated_overhead: totalAllocatedOverhead, // المصروفات العامة المحملة على أمر الشغل
+                final_effective_cost: effectiveCost + subPaidTotal // إجمالي المنصرف الحقيقي متضمناً العمالة والمقاول
             }; 
         });
-    }, [baseJobOrders, joPerformance]);
+    }, [baseJobOrders, joPerformance, generalAllocations]);
 
     const allFiltered = useMemo(() => {
         if (!mergedJobOrders) return [];
@@ -148,9 +166,19 @@ export function useJobOrdersLogic() {
                 if (dateFrom) matchesDate = matchesDate && joDate >= new Date(dateFrom);
                 if (dateTo) matchesDate = matchesDate && joDate <= new Date(dateTo);
             }
-            return matchesSearch && matchesDate;
+            
+            let matchesStatus = true;
+            if (statusFilter && jo.status !== statusFilter) matchesStatus = false;
+            
+            let matchesExecutor = true;
+            if (executorFilter && jo.executor_type !== executorFilter) matchesExecutor = false;
+
+            let matchesWorkitem = true;
+            if (workitemFilter && jo.boq_budget?.work_item !== workitemFilter) matchesWorkitem = false;
+
+            return matchesSearch && matchesDate && matchesStatus && matchesExecutor && matchesWorkitem;
         });
-    }, [mergedJobOrders, deferredSearch, dateFrom, dateTo]);
+    }, [mergedJobOrders, deferredSearch, dateFrom, dateTo, statusFilter, executorFilter, workitemFilter]);
 
     const paginatedJobOrders = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -265,6 +293,9 @@ export function useJobOrdersLogic() {
         globalSearch, setGlobalSearch: (v: string) => { setGlobalSearch(v); setCurrentPage(1); },
         dateFrom, setDateFrom: (v: string) => { setDateFrom(v); setCurrentPage(1); },
         dateTo, setDateTo: (v: string) => { setDateTo(v); setCurrentPage(1); },
+        statusFilter, setStatusFilter: (v: string) => { setStatusFilter(v); setCurrentPage(1); },
+        executorFilter, setExecutorFilter: (v: string) => { setExecutorFilter(v); setCurrentPage(1); },
+        workitemFilter, setWorkitemFilter: (v: string) => { setWorkitemFilter(v); setCurrentPage(1); },
         selectedIds, setSelectedIds,
         currentPage, setCurrentPage,
         rowsPerPage, setRowsPerPage: (v: number) => { setRowsPerPage(v); setCurrentPage(1); },

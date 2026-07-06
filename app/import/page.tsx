@@ -54,6 +54,8 @@ export default function AddDailyReportPage() {
   };
 
   return (
+        <MasterPage title="استيراد البيانات الذكي" subtitle="نقل بيانات القيود، السندات، والأصناف بسهولة" icon="📥">
+        
     <div style={{ 
       direction: 'rtl', minHeight: '100vh', 
       backgroundImage: bgUrl ? `linear-gradient(rgba(248, 250, 252, 0.8), rgba(248, 250, 252, 0.8)), url(${bgUrl})` : 'none',

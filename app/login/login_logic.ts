@@ -81,8 +81,15 @@ export function useLoginLogic() {
         
       } else {
         // 🔑 تسجيل الدخول
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error, data } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw new Error('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
+        
+        // تسجيل حركة الدخول في سجل المراقبة
+        if (data.session) {
+          import('@/lib/audit').then(({ logCustomAuditEvent }) => {
+            logCustomAuditEvent('profiles', 'LOGIN', data.session.user.id, null, { login_time: new Date().toISOString() }, data.session.user.id);
+          });
+        }
         
         showToast('تم تسجيل الدخول بنجاح! 🚀', 'success');
         router.refresh(); 
@@ -90,7 +97,7 @@ export function useLoginLogic() {
         // 👈 توجيه ذكي بعد الدخول بنجاح
         setTimeout(() => {
           const redirectParam = searchParams?.get('redirect');
-        router.replace(redirectParam || '/'); 
+          router.replace(redirectParam || '/'); 
         }, 500);
       }
     } catch (error: any) {

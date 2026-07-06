@@ -74,14 +74,17 @@ export default function RawasiFilterSidebar({
         }
 
         .filter-sidebar-v3 {
-          position: fixed; top: 0; right: ${isOpen ? '0' : '-100%'}; bottom: 0; height: 100vh;
+          position: fixed;
+          top: 20px;
+          right: ${isOpen ? '20px' : '-320px'};
+          bottom: 20px;
           width: 280px;
-          background: rgba(15, 12, 10, 0.95);
-          border-radius: 0;
-          box-shadow: -5px 10px 30px rgba(0,0,0,0.4);
-          z-index: 1000; transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
-          backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08);
-          border-right: none; overflow: hidden;
+          background: rgba(25, 20, 15, 0.4);
+          border-radius: 24px;
+          box-shadow: -10px 15px 40px rgba(0,0,0,0.3);
+          z-index: 1000; transition: right 0.5s cubic-bezier(0.165, 0.84, 0.44, 1);
+          backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.15);
+          border-right: 1px solid rgba(255,255,255,0.05); overflow: hidden;
           color: ${textColor};
           display: flex;
           flex-direction: column;
@@ -246,14 +249,8 @@ export default function RawasiFilterSidebar({
             </div>
 
             {(extraFilters || customFilters) && (
-              <div className="animate-fade-in" style={{ 
-                marginTop: '20px', padding: '15px', background: 'rgba(0,0,0,0.2)', 
-                borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' 
-              }}>
-                  <div className="filter-section-title" style={{ marginBottom: '10px', color: '#94a3b8', fontSize: '9px' }}>فلاتر إضافية</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {customFilters || extraFilters}
-                  </div>
+              <div className="animate-fade-in" style={{ marginTop: '20px' }}>
+                {extraFilters || customFilters}
               </div>
             )}
           </div>

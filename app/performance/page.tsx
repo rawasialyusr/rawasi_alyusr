@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useProfileLogic } from '@/app/profile/profile_logic';
 import { THEME } from '@/lib/theme';
 import LoadingScreen from '@/components/LoadingScreen';
+import MasterPage from '@/components/MasterPage';
 
 export default function PerformancePage() {
     const router = useRouter();
@@ -18,7 +19,8 @@ export default function PerformancePage() {
     if (isLoading) return <LoadingScreen message="جاري تحميل ملف الأداء..." fullScreen={true} />;
 
     return (
-        <div style={{ padding: '20px', minHeight: '100vh', background: THEME.background || '#f8fafc', direction: 'rtl', fontFamily: 'inherit' }}>
+        <MasterPage title="مؤشرات الأداء التشغيلي والمالي" subtitle="تحليل شامل ومتقدم لأداء الشركة" icon="🚀">
+                <div style={{ padding: '20px', minHeight: '100vh', background: THEME.background || '#f8fafc', direction: 'rtl', fontFamily: 'inherit' }}>
             <div className="animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
                     <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '15px', background: 'white', border: `1px solid ${THEME.accent}50`, color: THEME.primary, fontWeight: 900, cursor: 'pointer', transition: '0.3s', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
@@ -114,5 +116,6 @@ export default function PerformancePage() {
                 </div>
             </div>
         </div>
+                    </MasterPage>
     );
 }

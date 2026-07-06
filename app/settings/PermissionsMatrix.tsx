@@ -16,6 +16,7 @@ export default function PermissionsMatrix() {
         { key: 'projects', name: 'المشاريع' },
         { key: 'partners', name: 'الشركاء' },
         { key: 'employees', name: 'الموظفين' },
+        { key: 'project_ledger', name: 'دفتر التكاليف' },
         { key: 'reports', name: 'التقارير' },
         { key: 'settings', name: 'الإعدادات' },
     ];

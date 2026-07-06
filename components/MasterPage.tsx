@@ -3,12 +3,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom'; 
 import { THEME } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
+import NotificationsModal from './NotificationsModal';
+import Link from 'next/link';
+import { useUnreadCounts } from '@/hooks/useUnreadCounts';
 import { useRouter, usePathname } from 'next/navigation';
 
 export default function MasterPage({ title, subtitle, children, headerContent, icon }: any) {
   const router = useRouter();
   const pathname = usePathname();
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const { unread_messages, unread_notifications } = useUnreadCounts();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +61,7 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
   return (
     <div className="clean-page">
       <style>{`
+
         /* 🚀 🛠️ الحل الجذري: منع السكرول العرضي وإلغاء أي مساحات وهمية على اليمين */
         html, body { 
             overflow-x: hidden !important; 
@@ -84,27 +90,27 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
         }
         @keyframes elegantFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
-        .imperial-trigger {
-            display: flex; align-items: center; gap: 15px;
-            background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px);
-            padding: 8px 20px 8px 8px; border-radius: 40px;
-            border: 1px solid rgba(255,255,255,1); cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+        .imperial-trigger { 
+            display: flex; align-items: center; gap: 15px; 
+            padding: 10px 18px; border-radius: 22px; 
+            background: rgba(255, 255, 255, 0.6); cursor: pointer; transition: 0.3s; 
+            border: 1px solid rgba(197, 160, 89, 0.2); 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.02);
         }
         .imperial-trigger:hover { 
             background: white; 
-            transform: translateY(-2px); 
-            border-color: ${THEME.goldAccent}; 
-            box-shadow: 0 12px 35px rgba(197, 160, 89, 0.15); 
+            transform: translateY(-3px) scale(1.02); 
+            border-color: #C5A059; 
+            box-shadow: 0 15px 40px rgba(197, 160, 89, 0.18); 
         }
 
-        .u-info-text { display: flex; flex-direction: column; text-align: right; }
-        .u-name { font-size: 16px; font-weight: 900; color: #1e293b; letter-spacing: -0.3px; line-height: 1.2; }
-        .u-role { font-size: 10px; font-weight: 800; color: ${THEME.goldAccent}; margin-top: 2px; }
+        .u-info-text { display: flex; flex-direction: column; text-align: right; margin-right: 5px; }
+        .u-name { font-size: 19px; font-weight: 900; color: #1e293b; letter-spacing: -0.3px; line-height: 1.2; }
+        .u-role { font-size: 13px; font-weight: 800; color: #C5A059; margin-top: 4px; }
 
-        .avatar-frame { position: relative; width: 52px; height: 52px; }
-        .avatar-frame img { width: 100%; height: 100%; border-radius: 50%; border: 2px solid white; object-fit: cover; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .active-dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .avatar-frame { position: relative; width: 62px; height: 62px; }
+        .avatar-frame img { width: 100%; height: 100%; border-radius: 50%; border: 3px solid white; object-fit: cover; box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
+        .active-dot { position: absolute; bottom: 3px; right: 3px; width: 14px; height: 14px; background: #10b981; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
 
         .supreme-dropdown {
             position: fixed; width: 220px; background: white; border-radius: 20px;
@@ -116,14 +122,13 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
         @keyframes supremeShow { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
         .drop-item { display: flex; align-items: center; gap: 10px; padding: 10px 15px; border-radius: 12px; font-size: 13px; font-weight: 800; color: #475569; cursor: pointer; transition: 0.2s; direction: rtl; }
-        .drop-item:hover { background: #f8fafc; color: ${THEME.goldAccent}; }
+        .drop-item:hover { background: #f8fafc; color: #C5A059; }
         .drop-item.logout { color: #ef4444; border-top: 1px solid #f1f5f9; margin-top: 5px; border-radius: 0 0 12px 12px; }
         .drop-item.logout:hover { background: #fef2f2; }
 
         .title-area h1 { font-weight: 900; fontSize: 28px; color: #0f172a; margin: 0; letterSpacing: -0.5px; }
         .title-area p { color: #64748b; fontSize: 14px; fontWeight: 600; marginTop: 4px; }
 
-        
         .nav-btn-glass {
             width: 40px; height: 40px; border-radius: 12px;
             background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
@@ -228,7 +233,22 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           {headerContent}
           
+          
+          
+          <div style={{ display: 'flex', gap: '12px', paddingRight: '20px', paddingLeft: '20px', alignItems: 'center', borderRight: '2px solid rgba(0,0,0,0.05)', marginRight: '10px' }}>
+             <button onClick={() => setIsNotificationsOpen(true)} style={{ background: 'white', border: '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', textDecoration: 'none', fontSize: '24px', transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)', opacity: 1, width: '45px', height: '45px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }} onMouseOver={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 8px 15px rgba(0,0,0,0.08)'; }} onMouseOut={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='0 4px 10px rgba(0,0,0,0.03)'; }}>
+                 🔔
+                 {unread_notifications > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', fontSize: '12px', minWidth: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(239, 68, 68, 0.5)', fontWeight: 900, border: '2px solid white' }}>{unread_notifications}</span>}
+             </button>
+             <Link href="/messages" style={{ background: 'white', border: '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', textDecoration: 'none', fontSize: '24px', transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)', opacity: 1, width: '45px', height: '45px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }} onMouseOver={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 8px 15px rgba(0,0,0,0.08)'; }} onMouseOut={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='0 4px 10px rgba(0,0,0,0.03)'; }}>
+                 ✉️
+                 {unread_messages > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#3b82f6', color: 'white', fontSize: '12px', minWidth: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(59, 130, 246, 0.5)', fontWeight: 900, border: '2px solid white' }}>{unread_messages}</span>}
+             </Link>
+          </div>
+
           <div className="imperial-trigger" ref={triggerRef} onClick={toggleMenu}>
+
+
             <div className="u-info-text">
               <span className="u-name">{userProfile?.full_name || 'جاري التحميل...'}</span>
               <span className="u-role">
@@ -245,6 +265,7 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
 
       {mounted && isMenuOpen && typeof document !== 'undefined' && createPortal(
         <div className="supreme-dropdown" style={{ top: coords.top, left: coords.left }} onClick={(e) => e.stopPropagation()}>
+
             <div className="drop-item" onClick={() => router.push('/profile')}><span>👤</span> بروفيلي</div>
             <div className="drop-item" onClick={() => router.push('/settings')}><span>⚙️</span> الإعدادات</div>
             <div className="drop-item logout" onClick={handleLogout}><span>🚪</span> خروج</div>
@@ -253,6 +274,7 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
       )}
 
       <main className="glass-container">
+        <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
         {children}
       </main>
     </div>
