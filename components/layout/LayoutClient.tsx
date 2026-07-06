@@ -165,16 +165,17 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         @keyframes floatPulse { 0%, 100% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.2); transform: scale(1); } 50% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4), 0 0 25px 5px rgba(197, 160, 89, 0.3); transform: scale(1.05); } }
         .fab-main { position: fixed; bottom: ${position.y}px; left: ${position.x}px; width: 85px; height: 85px; z-index: 10000; background: linear-gradient(145deg, rgba(67, 52, 46, 0.85), rgba(26, 21, 19, 0.95)); backdrop-filter: blur(15px); border-radius: 50%; cursor: ${isDragging ? 'grabbing' : 'grab'}; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); transition: all 0.4s; animation: floatPulse 4s infinite ease-in-out; padding: 5px; }
         .fab-logo { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
-        .overlay-screen { position: fixed; top: 0; bottom: 0; right: ${isOpen ? '0' : '-350px'}; width: 320px; max-width: 85vw; z-index: 9000; background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(30px) saturate(200%); transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); display: flex; flex-direction: column; padding: 40px 20px; overflow-y: auto; box-shadow: -10px 0 40px rgba(0,0,0,0.7); border-left: 1px solid rgba(255,255,255,0.05); }
-        .overlay-backdrop { position: fixed; inset: 0; z-index: 8999; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); opacity: ${isOpen ? 1 : 0}; pointer-events: ${isOpen ? 'auto' : 'none'}; transition: opacity 0.4s ease; }
-        .command-center { width: 100%; display: flex; flex-direction: column; gap: 30px; margin-top: 10px; }
-        .group-header { color: #C5A059; font-weight: 900; font-size: 14px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 8px; text-align: right; display: block; position: relative; }
-        .items-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 15px; }
-        .nav-card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 15px 10px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #fff; cursor: pointer; transition: all 0.3s; opacity: 0; animation: popIn 0.5s forwards; position: relative; text-decoration: none; text-align: center; }
-        @keyframes popIn { 0% { opacity: 0; transform: translateX(30px); } 100% { opacity: 1; transform: translateX(0); } }
-        .nav-card:hover { background: rgba(197, 160, 89, 0.2); border-color: rgba(197, 160, 89, 0.5); transform: translateX(-5px); }
-        .nav-card.active { background: rgba(197, 160, 89, 0.3); border-color: #C5A059; }
-        .icon-wrapper { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: rgba(255,255,255,0.1); flex-shrink: 0; }
+        .overlay-screen { position: fixed; inset: 0; z-index: 9000; background: rgba(252, 250, 248, 0.75); backdrop-filter: blur(45px) saturate(150%); opacity: ${isOpen ? 1 : 0}; pointer-events: ${isOpen ? 'auto' : 'none'}; transform: ${isOpen ? 'scale(1)' : 'scale(1.03)'}; transition: all 0.5s cubic-bezier(0.165, 0.84, 0.44, 1); display: flex; flex-direction: column; padding: 60px 5%; overflow-y: auto; align-items: center; justify-content: flex-start; }
+        .overlay-backdrop { display: none; }
+        .command-center { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 40px; margin-top: 40px; }
+        .group-header { color: #8c6a3f; font-weight: 900; font-size: 18px; border-bottom: 2px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; text-align: right; display: block; position: relative; text-shadow: 0 2px 5px rgba(255,255,255,0.8); }
+        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-top: 20px; }
+        .nav-card { background: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255, 255, 255, 0.8); padding: 25px 15px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #1e293b; cursor: pointer; transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); opacity: 0; animation: popIn 0.6s forwards; position: relative; text-decoration: none; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.03); backdrop-filter: blur(10px); }
+        @keyframes popIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
+        .nav-card:hover { background: rgba(255, 255, 255, 0.9); border-color: #C5A059; transform: translateY(-8px); box-shadow: 0 15px 35px rgba(197, 160, 89, 0.15); }
+        .nav-card.active { background: #ffffff; border-color: #C5A059; box-shadow: 0 0 25px rgba(197, 160, 89, 0.2); }
+        .icon-wrapper { width: 55px; height: 55px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 28px; background: rgba(197, 160, 89, 0.1); color: #C5A059; flex-shrink: 0; transition: transform 0.3s; }
+        .nav-card:hover .icon-wrapper { transform: scale(1.1); background: rgba(197, 160, 89, 0.2); }
         
         @media (max-width: 768px) {
           main { margin-right: 0px !important; padding-right: 10px !important; padding-left: 10px !important; }
@@ -200,10 +201,12 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         <img src="/RYC_Logo.png" alt="رواسي" className="fab-logo" />
       </div>
 
-      <div className="overlay-backdrop no-print" onClick={() => setIsOpen(false)}></div>
-      <nav className="overlay-screen no-print" onClick={(e) => e.stopPropagation()}>
-          <div className="command-center">
-            <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '10px 20px', borderRadius: '15px', fontSize: '14px', textAlign: 'center', color: '#fff', marginBottom: '20px', fontWeight: 900 }}>
+      <div className="overlay-backdrop no-print"></div>
+      <nav className="overlay-screen no-print" onClick={(e) => {
+         if (e.target === e.currentTarget) setIsOpen(false); // Close when clicking outside content
+      }}>
+          <div className="command-center" onClick={(e) => e.stopPropagation()}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.65)', border: '1px solid rgba(255, 255, 255, 0.9)', padding: '15px 30px', borderRadius: '20px', fontSize: '18px', textAlign: 'center', color: '#43342e', marginBottom: '10px', fontWeight: 900, backdropFilter: 'blur(15px)', alignSelf: 'center', boxShadow: '0 8px 30px rgba(0,0,0,0.04)' }}>
                بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 مسؤول نظام'}
             </div>
 
@@ -221,9 +224,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                       return (
                         <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
                             <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
-                                <div className="icon-wrapper" style={{ fontSize: '24px' }}>{item.icon}</div>
-                                <span style={{ fontWeight: 800, fontSize: '13px', color: 'white', lineHeight: '1.4' }}>{item.title}</span>
-                                {isActive && <div style={{ position: 'absolute', top: '10px', right: '10px', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
+                                <div className="icon-wrapper">{item.icon}</div>
+                                <span style={{ fontWeight: 800, fontSize: '15px', color: '#1e293b', lineHeight: '1.4' }}>{item.title}</span>
+                                {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)' }}></div>}
                             </div>
                         </Link>
                       );

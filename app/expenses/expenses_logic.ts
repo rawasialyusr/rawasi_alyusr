@@ -444,6 +444,7 @@ export function useExpensesLogic() {
         
         handleSaveExpense: (data: any) => {
             if (!data) return showToast("لم يتم استلام البيانات!", "error");
+            if (data.is_posted) return showToast("⚠️ لا يمكن تعديل سجل مرحل. يرجى فك الترحيل أولاً.", "error");
             saveMutation.mutate(data);
         },
         handleSavePayment: (data: any) => paymentMutation.mutate(data), // 👈 استخدام الـ Mutation
@@ -454,7 +455,11 @@ export function useExpensesLogic() {
             setCurrentExpense({...exp}); setEditingId(exp.id); setIsEditModalOpen(true);
         }, 
         exportToExcel: () => {},
-        handleDeleteSelected: () => deleteMutation.mutate(),
+        handleDeleteSelected: () => {
+            const posted = expenses.filter((e:any) => selectedIds.includes(e.id) && e.is_posted);
+            if (posted.length > 0) return showToast("⚠️ لا يمكن حذف سجلات مرحلة. يرجى فك الترحيل أولاً.", "error");
+            deleteMutation.mutate();
+        },
         
         handlePostSelected: async () => {
             if (selectedIds.length === 0) return;

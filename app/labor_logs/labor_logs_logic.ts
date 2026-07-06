@@ -120,6 +120,10 @@ export function useLaborLogsLogic() {
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
             if (editingId) {
+                const { data: existing } = await supabase.from('labor_daily_logs').select('is_posted, status').eq('id', editingId).single();
+                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    throw new Error("لا يمكن تعديل سجل عمالة مرحل. يرجى فك الترحيل أولاً.");
+                }
                 const { data, error } = await supabase.from('labor_daily_logs').update(payload).eq('id', editingId).select().single();
                 if (error) throw error;
                 return { type: 'update', data };
@@ -190,6 +194,12 @@ export function useLaborLogsLogic() {
 
     const deleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
+            for (const logId of ids) {
+                const { data: existing } = await supabase.from('labor_logs').select('is_posted, status').eq('id', logId).single();
+                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    throw new Error("لا يمكن حذف سجلات مرحلة. يرجى فك الترحيل أولاً.");
+                }
+            }
             const previousData = queryClient.getQueryData(['labor_logs']);
             const stringDeletedIds = ids.map(String);
             queryClient.setQueryData(['labor_logs'], (oldData: any[]) => {

@@ -192,12 +192,30 @@ export default function DispenseMaterialModal({ isOpen, onClose, invoiceItem, on
                             strict={true} 
                             filterColumn="project_id" 
                             filterValue={formData.project_id}
+                            customQuery={(q: any) => q.select('*, boq_budget:boq_budget_id(work_item)')}
+                            displayFormat={(item: any) => `${item.order_number} - ${item.boq_budget?.work_item || 'بدون بند'}`}
                             key={formData.project_id || 'empty-jo'} 
                             initialDisplay={formData.job_order_id ? `أمر شغل مرتبط` : ''} 
-                            onSelect={(v:any) => setFormData({
-                                ...formData, 
-                                job_order_id: v?.id || null
-                            })} 
+                            onSelect={async (v:any) => {
+                                let updates: any = { job_order_id: v?.id || null };
+                                
+                                // 🚀 سحب البند مباشرة زي يوميات العمالة
+                                if (v?.boq_budget_id) {
+                                    const { data } = await supabase
+                                        .from('boq_budget_distinct')
+                                        .select('*')
+                                        .eq('id', v.boq_budget_id)
+                                        .single();
+                                        
+                                    if (data) {
+                                        updates.boq_id = data.id;
+                                        updates.boq_item_id = data.boq_item_id;
+                                        updates.boq_item_name = data.work_item;
+                                    }
+                                }
+                                
+                                setFormData({ ...formData, ...updates });
+                            }} 
                         />
                     </div>
                     <div style={{ zIndex: 85, position: 'relative' }}>

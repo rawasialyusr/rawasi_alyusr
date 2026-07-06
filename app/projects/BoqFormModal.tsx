@@ -83,7 +83,7 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                                     unit: isObj ? b.unit_of_measure : record.unit || 'مقطوعية',
                                     unit_contract_price: isObj && b.default_unit_price ? b.default_unit_price : record.unit_contract_price,
                                     estimated_labor_cost: isObj && b.default_labor_price ? b.default_labor_price : record.estimated_labor_cost,
-                                    estimated_operational_cost: isObj && b.default_material_price ? b.default_material_price : record.estimated_operational_cost,
+                                    estimated_material_cost: isObj && b.default_material_price ? b.default_material_price : record.estimated_material_cost,
                                     daily_target: fetchedTarget
                                 });
                             }} 
@@ -172,7 +172,7 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                         <div>
                             <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.goldAccent, display: 'block', marginBottom: '8px' }}>🧱 ميزانية المواد والخامات</label>
                             <input type="number" style={{ width: '100%', padding: '12px', borderRadius: '12px', border: `2px solid ${THEME.goldAccent}40`, outline: 'none', fontWeight: 900, textAlign: 'center', color: THEME.goldAccent }} 
-                                   value={record.estimated_operational_cost || ''} onChange={e => setRecord({...record, estimated_operational_cost: e.target.value})} placeholder="0.00" />
+                                   value={record.estimated_material_cost || ''} onChange={e => setRecord({...record, estimated_material_cost: e.target.value})} placeholder="0.00" />
                         </div>
                         <div>
                             <label style={{ fontSize: '12px', fontWeight: 900, color: '#ea580c', display: 'block', marginBottom: '8px' }}>💸 ميزانية النثريات والمصاريف</label>

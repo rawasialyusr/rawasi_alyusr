@@ -54,7 +54,7 @@ export default function ProfileEditorModal({ isOpen, onClose, record, onSave }: 
         labor_logs: { view: false, create: false, edit: false, delete: false, post: false },
         laborcost: { view: false },
         payroll: { view: false, create: false, edit: false, delete: false, post: false },
-        violations: { view: false, create: false, edit: false, delete: false },
+        violations: { view: false, create: false, edit: false, delete: false, post: false },
         reports: { view: false, financial: false, operational: false },
         audit_logs: { view: false },
         import: { view: false, create: false },

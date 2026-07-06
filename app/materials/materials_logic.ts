@@ -290,6 +290,12 @@ export function useMaterialsLogic() {
 
     const saveMutation = useMutation({
         mutationFn: async () => {
+            if (invoiceData.id) {
+                const { data: existing } = await supabase.from('material_receipts').select('status, is_posted').eq('id', invoiceData.id).single();
+                if (existing && (existing.status === 'مرحل' || existing.status === 'معتمد' || existing.is_posted)) {
+                    throw new Error("لا يمكن تعديل فاتورة استلام معتمدة. يرجى فك الترحيل أولاً.");
+                }
+            }
             const safeProjectId = cleanId(invoiceData.project_id);
             const safePayeeId = cleanId(invoiceData.payee_id);
             const safeAccountId = cleanId(invoiceData.account_id);
@@ -377,6 +383,12 @@ export function useMaterialsLogic() {
 
     const actionMutation = useMutation({
         mutationFn: async ({ action, id }: { action: string, id: string }) => {
+            if (action === 'delete') {
+                const { data: existing } = await supabase.from('material_receipts').select('status, is_posted').eq('id', id).single();
+                if (existing && (existing.status === 'مرحل' || existing.status === 'معتمد' || existing.is_posted)) {
+                    throw new Error("لا يمكن حذف فاتورة استلام معتمدة. يرجى فك الترحيل أولاً.");
+                }
+            }
             let rpcName = '';
             if (action === 'post') rpcName = 'rpc_post_material';
             if (action === 'unpost') rpcName = 'rpc_unpost_material';
@@ -514,6 +526,15 @@ export function useMaterialsLogic() {
         handleBulkAction: async (action: 'post' | 'unpost' | 'delete') => {
             try {
                 if (selectedIds.length === 0) return;
+                
+                if (action === 'delete') {
+                    for (const rId of selectedIds) {
+                        const { data: existing } = await supabase.from('material_receipts').select('status, is_posted').eq('id', rId).single();
+                        if (existing && (existing.status === 'مرحل' || existing.status === 'معتمد' || existing.is_posted)) {
+                            throw new Error("لا يمكن حذف سجلات معتمدة. يرجى فك الترحيل أولاً.");
+                        }
+                    }
+                }
 
                 const rpcMap: any = { 
                     post: 'rpc_post_material', 

@@ -139,6 +139,12 @@ export function usePaymentVouchersLogic() {
     // 📝 8. عمليات الحفظ 
     const saveMutation = useMutation({
         mutationFn: async (voucherData: any) => {
+            if (voucherData.id) {
+                const { data: existing } = await supabase.from('payment_vouchers').select('is_posted, status').eq('id', voucherData.id).single();
+                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    throw new Error("لا يمكن تعديل سند مرحل. يرجى فك الترحيل أولاً.");
+                }
+            }
             // 🎯 تم إلغاء شروط التحقق من الحسابات (المدين والدائن) لتكون اختيارية
             if (!voucherData.amount || Number(voucherData.amount) <= 0) {
                 throw new Error("⚠️ تنبيه: يرجى إدخال المبلغ المراد صرفه.");

@@ -421,12 +421,7 @@ export function useProjectsLogic() {
       totalActualLabor += Number(item.actual_labor_cost || 0);
       totalActualMaterial += Number(item.actual_material_cost || 0);
       totalABCAllocated += Number(item.allocated_expenses || 0);
-      
-      const target = normalizeArabic(item.work_item);
-      const directExp = projectDetails.expenses
-        .filter((e: any) => e.row_type === 'direct' && (normalizeArabic(e.boq_work_item) === target || normalizeArabic(e.description).includes(target) || e.boq_id === item.id))
-        .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-      totalDirectExpenses += directExp;
+      totalDirectExpenses += Number(item.actual_expenses_cost || 0);
     });
 
     const actualCost = totalActualLabor + totalActualMaterial + totalDirectExpenses + totalABCAllocated;

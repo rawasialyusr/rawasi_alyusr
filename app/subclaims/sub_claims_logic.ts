@@ -153,6 +153,13 @@ export function useSubClaimsLogic() {
 
     const saveClaimMutation = useMutation({
         mutationFn: async (claimData: any) => {
+            if (claimData.id) {
+                const { data: existing } = await supabase.from('sub_claims').select('status, is_posted').eq('id', claimData.id).single();
+                if (existing && (existing.status === 'مرحل' || existing.status === 'معتمد' || existing.is_posted)) {
+                    throw new Error("لا يمكن تعديل مستخلص معتمد. يرجى فك الترحيل أولاً.");
+                }
+            }
+            if (!selectedContractor) throw new Error("اختر مقاول الباطن أولاً!");
             if (!claimData.project_ids || claimData.project_ids.length === 0) {
                 throw new Error("يرجى تحديد العقار / المشروع أولاً.");
             }
@@ -280,6 +287,12 @@ export function useSubClaimsLogic() {
 
     const actionMutation = useMutation({
         mutationFn: async ({ action, id, claimNumber }: { action: string, id: string, claimNumber?: string }) => {
+            if (action === 'delete') {
+                const { data: existing } = await supabase.from('sub_claims').select('status, is_posted').eq('id', id).single();
+                if (existing && (existing.status === 'مرحل' || existing.status === 'معتمد' || existing.is_posted)) {
+                    throw new Error("لا يمكن حذف مستخلص معتمد. يرجى فك الترحيل أولاً.");
+                }
+            }
             let rpcName = '';
             if (action === 'post') rpcName = 'post_sub_claim';
             if (action === 'unpost') rpcName = 'rpc_unpost_claim';

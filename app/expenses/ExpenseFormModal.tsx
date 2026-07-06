@@ -316,7 +316,30 @@ export default function ExpenseFormModal({
                         <select 
                             className="glass-input-field"
                             value={record?.job_order_id || ''}
-                            onChange={e => setRecord({ ...record, job_order_id: e.target.value || null })}
+                            onChange={e => {
+                                const selectedJobOrder = jobOrders.find((jo: any) => jo.id === e.target.value);
+                                
+                                // بناء أول سطر في المصروفات (Line Item) تلقائياً
+                                let newLines = [...(record?.lines_data || [])];
+                                if (selectedJobOrder && newLines.length === 0) {
+                                    const boq = Array.isArray(selectedJobOrder.boq_budget) ? selectedJobOrder.boq_budget[0] : (selectedJobOrder.boq_budget || {});
+                                    const itemName = boq?.item_name || boq?.description || boq?.work_item || selectedJobOrder.notes || 'بند مصروف';
+                                    
+                                    newLines.push({
+                                        item_name: itemName,
+                                        quantity: selectedJobOrder.assigned_qty || 1,
+                                        unit_price: selectedJobOrder.execution_type === 'تنفيذ ذاتي' ? (selectedJobOrder.unit_price || 0) : '',
+                                        total_price: selectedJobOrder.execution_type === 'تنفيذ ذاتي' ? ((selectedJobOrder.assigned_qty || 1) * (selectedJobOrder.unit_price || 0)) : 0,
+                                        boq_id: selectedJobOrder.boq_budget_id
+                                    });
+                                }
+                                
+                                setRecord({ 
+                                    ...record, 
+                                    job_order_id: e.target.value || null,
+                                    lines_data: newLines.length > 0 ? newLines : record?.lines_data
+                                });
+                            }}
                             style={{ 
                                 cursor: (record?.project_id && record?.payee_id) ? 'pointer' : 'not-allowed', 
                                 height: '47px',

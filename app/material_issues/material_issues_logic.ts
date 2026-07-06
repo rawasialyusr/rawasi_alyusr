@@ -163,6 +163,12 @@ export function useMaterialIssuesLogic() {
 
     const saveIssueMutation = useMutation({
         mutationFn: async () => {
+            if (editingIssueId) {
+                const { data: existing } = await supabase.from('material_issues').select('is_posted, status').eq('id', editingIssueId).single();
+                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    throw new Error("لا يمكن تعديل إذن صرف مرحل. يرجى فك الترحيل أولاً.");
+                }
+            }
             if (!issueData.project_id) throw new Error("يرجى اختيار المشروع الصارف");
             if (issueData.issue_type === 'صرف لمقاول' && !issueData.subcontractor_id) throw new Error("يرجى اختيار المقاول المستلم");
 
@@ -245,6 +251,15 @@ export function useMaterialIssuesLogic() {
             ));
 
             if (uniqueIssueIds.length === 0) return;
+            
+            if (action === 'delete') {
+                for (const uId of uniqueIssueIds) {
+                    const { data: existing } = await supabase.from('material_issues').select('is_posted, status').eq('id', uId).single();
+                    if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                        throw new Error("لا يمكن حذف إذن صرف مرحل. يرجى فك الترحيل أولاً.");
+                    }
+                }
+            }
 
             let rpcName = '';
             if (action === 'post') rpcName = 'rpc_post_material_issue';

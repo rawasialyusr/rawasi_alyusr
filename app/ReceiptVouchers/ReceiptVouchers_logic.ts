@@ -256,10 +256,21 @@ export function useReceiptVouchersLogic() {
             else showToast("لا يمكن تعديل سند معتمد", "warning");
         }, 
         
-        handleSave: (record: any) => saveMutation.mutate(record), 
+        handleSave: (record: any) => {
+            if (record && (record.status === 'مرحل' || record.status === 'معتمد' || record.is_posted)) {
+                return showToast("⚠️ لا يمكن تعديل سجل مرحل. يرجى فك الترحيل أولاً.", "error");
+            }
+            saveMutation.mutate(record);
+        }, 
         handlePostSelected: () => { if(permissions.canPost) postMutation.mutate(); }, 
         handleUnpostSelected: () => { if(permissions.canUnpost) unpostMutation.mutate(); }, 
-        handleDeleteSelected: () => { if(confirm("تأكيد الحذف النهائي؟")) deleteMutation.mutate(); }, 
+        handleDeleteSelected: () => { 
+            const posted = receipts.filter((r:any) => selectedIds.includes(String(r.id)) && (r.status === 'مرحل' || r.status === 'معتمد' || r.is_posted));
+            if (posted.length > 0) {
+                return showToast("⚠️ لا يمكن حذف سجلات مرحلة. يرجى فك الترحيل أولاً.", "error");
+            }
+            if(confirm("تأكيد الحذف النهائي؟")) deleteMutation.mutate(); 
+        }, 
         
         focusedIndex, setFocusedIndex, handleTableKeyDown,
         permissions, canUserEdit, isSaving: isTotalSaving

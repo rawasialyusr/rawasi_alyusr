@@ -103,6 +103,12 @@ export function useViolationsLogic() {
 
     const deleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
+            for (const vId of ids) {
+                const { data: existing } = await supabase.from('violations').select('is_posted, status').eq('id', vId).single();
+                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    throw new Error("لا يمكن حذف مخالفة مرحلة. يرجى فك الترحيل أولاً.");
+                }
+            }
             const { error } = await supabase.rpc('delete_violations_bulk', { p_ids: ids });
             if (error) throw error;
             return ids; 
@@ -115,9 +121,15 @@ export function useViolationsLogic() {
         onError: (err: any) => showToast(`خطأ في الحذف: ${err.message}`, 'error')
     });
 
-    // 📝 التوجيه المحاسبي الديناميكي الذكي
+    // 🧠 التوجيه المحاسبي الديناميكي الذكي
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
+            if (payload.id) {
+                const { data: existing } = await supabase.from('violations').select('is_posted, status').eq('id', payload.id).single();
+                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    throw new Error("لا يمكن تعديل مخالفة مرحلة. يرجى فك الترحيل أولاً.");
+                }
+            }
             const { partner, project, debit_acc, credit_acc, ...cleanPayload } = payload;
             
             // حساب المدين ثابت دايماً: (رواتب وأجور مستحقة)

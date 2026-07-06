@@ -352,6 +352,10 @@ export function useInvoicesLogic() {
         handlePostSelected: () => postMutation.mutate(), 
         handleUnpostSelected: () => unpostMutation.mutate(), 
         handleDeleteSelected: () => {
+            const posted = invoices.filter((inv:any) => selectedIds.includes(String(inv.id)) && inv.status === 'معتمدة');
+            if (posted.length > 0) {
+                return showToast("⚠️ لا يمكن حذف فواتير معتمدة. يرجى فك الترحيل أولاً.", "error");
+            }
             if (!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي للفواتير والقيود التابعة لها؟")) return;
             deleteMutation.mutate();
         },

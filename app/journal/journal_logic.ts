@@ -108,11 +108,9 @@ export function useJournalLogic() {
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', session?.user?.id).single();
             const isAdmin = profile?.role === 'super_admin' || profile?.role === 'admin';
             
-            if (!isAdmin) {
-                const hasApproved = selectedLines.some(l => l.header_status === 'معتمد');
-                if (hasApproved) {
-                    throw new Error('عفواً، لا تملك صلاحية تعديل أو حذف القيود المعتمدة والمرحلة.');
-                }
+            const hasApproved = selectedLines.some((l:any) => l.header_status === 'معتمد' || l.header_status === 'مرحل');
+            if (hasApproved) {
+                throw new Error('عفواً، لا يمكن حذف القيود المعتمدة والمرحلة. يرجى فك الترحيل أولاً.');
             }
 
             if (headerIds.length === 0) throw new Error('لم يتم تحديد أي قيود صالحة.');

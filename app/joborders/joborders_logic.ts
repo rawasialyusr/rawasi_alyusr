@@ -274,10 +274,19 @@ export function useJobOrdersLogic() {
         isLedgerOpen, setIsLedgerOpen,
         ledgerRecord, setLedgerRecord,
         handleAddNew, handleEdit, 
-        handleSave: (record: any) => saveMutation.mutate(record),
+        handleSave: (record: any) => {
+            if (record && record.status === 'مكتمل') {
+                return showToast("⚠️ لا يمكن تعديل أمر تشغيل مكتمل.", "error");
+            }
+            saveMutation.mutate(record);
+        },
         handleCompleteSelected: () => changeStatusMutation.mutate('مكتمل'), 
         handleSuspendSelected: () => changeStatusMutation.mutate('موقوف'), 
         handleDeleteSelected: () => {
+            const completed = orders.filter((o:any) => selectedIds.includes(String(o.id)) && o.status === 'مكتمل');
+            if (completed.length > 0) {
+                return showToast("⚠️ لا يمكن حذف أوامر تشغيل مكتملة.", "error");
+            }
             if (!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي لأوامر التشغيل المحددة؟")) return;
             deleteMutation.mutate();
         }

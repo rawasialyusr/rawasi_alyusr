@@ -68,7 +68,7 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
                                     boq_budget_id: selectedJobOrder?.boq_budget_id, 
                                     unit: selectedJobOrder?.boq_budget?.unit,
                                     assigned_qty: selectedJobOrder?.assigned_qty || 1, 
-                                    unit_price: selectedJobOrder?.unit_price || 0 
+                                    unit_price: '' // 🚀 المقاول يسحب الكمية بس، السعر يضيفه المستخدم
                                 });
                             }}
                             disabled={!record.project_id}
