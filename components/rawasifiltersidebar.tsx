@@ -34,7 +34,6 @@ export default function RawasiFilterSidebar({
   const [isPinned, setIsPinned] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
   const [isMobile, setIsMobile] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -47,7 +46,7 @@ export default function RawasiFilterSidebar({
 
   const { summary, actions, customFilters } = useSidebar();
 
-  const isOpen = isMobile ? isMobileOpen : isPinned;
+  const isOpen = isPinned;
 
   // 🚀 إبلاغ الـ Layout بحالة السايد بار عشان يزق المحتوى
   useEffect(() => {
@@ -84,7 +83,7 @@ export default function RawasiFilterSidebar({
         }
 
         .filter-toggle-tab {
-          position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+          position: fixed; top: 120px; right: 0;
           background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(20px);
           color: #fff; padding: 25px 8px; border-radius: 16px 0 0 16px;
           cursor: pointer; z-index: 998; display: flex; align-items: center; justify-content: center;
@@ -145,30 +144,25 @@ export default function RawasiFilterSidebar({
         @media (max-width: 768px) {
           .filter-sidebar {
             width: 280px !important;
-            right: ${isMobileOpen ? '0' : '-300px'} !important;
+            right: ${isOpen ? '0' : '-300px'} !important;
             border-left: none !important;
             top: 0 !important;
             height: 100vh !important;
           }
-          .filter-toggle-tab { display: none !important; }
+          /* removed filter-toggle-tab hiding */
           .filter-content {
             width: 100% !important;
           }
-          .pin-btn-sidebar { display: none !important; }
+          /* pin button is visible on mobile too */
         }
       `}</style>
 
-      {isMobile && (
-        <button onClick={() => setIsMobileOpen(!isMobileOpen)} className="mobile-filter-btn no-print" style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 1001, background: accentColor, color: 'white', border: 'none', borderRadius: '50%', width: '45px', height: '45px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
-          {isMobileOpen ? '✕' : '⚙️'}
-        </button>
-      )}
-      {isMobile && isMobileOpen && (
-        <div onClick={() => setIsMobileOpen(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
+      {isMobile && isOpen && (
+        <div onClick={() => setIsPinned(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
       )}
       
       <aside className="filter-sidebar no-print">
-        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(!isPinned); setIsMobileOpen(false); }}>
+        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(false); }}>
           <span style={{ fontSize: '16px', color: '#fff' }}>✕</span>
         </button>
 
