@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // تهيئة عميل Supabase بصلاحيات الإدارة (Service Role)
-const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+const getSupabaseAdmin = () => createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder',
     {
         auth: {
             autoRefreshToken: false,
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         const { email, password, phone, full_name, role, linked_partner_id, permissions, is_active } = body;
 
         // 1️⃣ إنشاء الحساب في المصادقة (Auth)
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        const { data: authData, error: authError } = await getSupabaseAdmin().auth.admin.createUser({
             email,
             password,
             phone: phone || undefined,
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
         if (profileError) {
             // في حالة فشل تحديث البروفايل يمكن محاولة مسح اليوزر لمنع بقاء بيانات ناقصة
-            // await supabaseAdmin.auth.admin.deleteUser(userId);
+            // await getSupabaseAdmin().auth.admin.deleteUser(userId);
             return NextResponse.json({ error: profileError.message }, { status: 400 });
         }
 
@@ -88,7 +88,7 @@ export async function PUT(req: Request) {
         }
 
         if (Object.keys(updateParams).length > 0) {
-            const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, updateParams);
+            const { error: authError } = await getSupabaseAdmin().auth.admin.updateUserById(userId, updateParams);
             if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
         }
 
@@ -138,8 +138,8 @@ export async function PATCH(req: Request) {
 
         // 2️⃣ تطبيق التغييرات على Auth و Profiles
         const updatePromises = users.map(async (u) => {
-            await supabaseAdmin.auth.admin.updateUserById(u.id, { ban_duration: banDuration });
-            await supabaseAdmin.from('profiles').update({ is_active: isActivating }).eq('id', u.id);
+            await getSupabaseAdmin().auth.admin.updateUserById(u.id, { ban_duration: banDuration });
+            await getSupabaseAdmin().from('profiles').update({ is_active: isActivating }).eq('id', u.id);
         });
 
         await Promise.all(updatePromises);
