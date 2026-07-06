@@ -43,7 +43,7 @@ export default function EditJournalEntryPage() {
         }
 
         // سحب شجرة الحسابات
- (الحسابات الفرعية فقط اللي بتقبل حركات)
+        // (الحسابات الفرعية فقط اللي بتقبل حركات)
         const { data: accData } = await supabase.from('accounts').select('id, code, name').eq('is_transactional', true);
         if (accData) setAccounts(accData);
 
