@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
         // 3️⃣ تحديث بيانات الـ Profile
         const isAdminFlag = role === 'super_admin' || role === 'admin';
-        const { error: profileError } = await supabaseAdmin
+        const { error: profileError } = await getSupabaseAdmin()
             .from('profiles')
             .update({
                 full_name,
@@ -94,7 +94,7 @@ export async function PUT(req: Request) {
 
         // 2️⃣ تحديث الـ Profile
         const isAdminFlag = role === 'super_admin' || role === 'admin';
-        const { error: profileError } = await supabaseAdmin
+        const { error: profileError } = await getSupabaseAdmin()
             .from('profiles')
             .update({
                 full_name,
