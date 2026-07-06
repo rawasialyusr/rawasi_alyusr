@@ -285,7 +285,7 @@ export function useProjectsLogic() {
       setProjects(enrichedProjects);
     }
 
-    const clientData = await fetchAllSupabaseData(supabase, 'partners', 'id, name', 'id', false);
+    const clientData = await fetchAllSupabaseData(supabase, 'partners', 'id, name, partner_type', 'id', false);
     if (clientData) {
       setClients(clientData.filter((p: any) => p.partner_type === 'عميل'));
     }

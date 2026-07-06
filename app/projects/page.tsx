@@ -71,7 +71,7 @@ export default function AdvancedProjectsPage() {
                 {logic.activeTab === 'boq' && (
                     <SecureAction module="boqbudget" action="create">
                     <button onClick={() => {
-                        logic.setCurrentBoqRecord({ item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, estimated_labor_cost: 0, estimated_operational_cost: 0, start_date: '', end_date: '' });
+                        logic.setCurrentBoqRecord({ item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, estimated_labor_cost: 0, estimated_material_cost: 0, estimated_expenses_cost: 0, start_date: '', end_date: '' });
                         logic.setIsBoqModalOpen(true);
                     }} className="btn-main-glass gold">
                         ➕ إضافة بند للمقايسة (WBS)

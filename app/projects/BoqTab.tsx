@@ -40,7 +40,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
   // 2️⃣ حساب الإحصائيات الكلية للسامري بقراءة الأعمدة المحسوبة من الداتا بيز مباشرة
   const boqStats = useMemo(() => {
     let totalContractValue = 0, totalEstimatedCosts = 0, subItemsCount = 0;
-    let totalActualLabor = 0, totalActualMaterial = 0, totalDirectExpenses = 0, totalActualOperational = 0;
+    let totalActualLabor = 0, totalActualMaterial = 0, totalDirectExpenses = 0;
     let totalRetentionValue = 0, totalNetProfit = 0, totalBudgetVariance = 0;
     let totalAllocatedExpensesABC = 0; // 🚀 متغير لتجميع مصاريف ABC
 
@@ -49,13 +49,12 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
       if (!hasChildren) {
         subItemsCount++;
         totalContractValue += Number(item.total_contract_amount || 0);
-        totalEstimatedCosts += (Number(item.estimated_labor_cost || 0) + Number(item.estimated_material_cost || 0) + Number(item.estimated_expenses_cost || 0) + Number(item.estimated_operational_cost || 0));
+        totalEstimatedCosts += (Number(item.estimated_labor_cost || 0) + Number(item.estimated_material_cost || 0) + Number(item.estimated_expenses_cost || 0));
         
         // التكاليف الفعلية المباشرة المسحوبة للبند
         totalActualLabor += Number(item.actual_labor_cost || 0);
         totalActualMaterial += Number(item.actual_material_cost || 0);
         totalDirectExpenses += Number(item.actual_expenses_cost || 0);
-        totalActualOperational += Number(item.actual_operational_cost || 0);
 
         // القيم المالية المحسوبة من السيرفر
         totalRetentionValue += Number(item.actual_retention_amount || 0);
@@ -81,7 +80,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
     return { 
       totalContractValue, totalEstimatedCosts, subItemsCount, totalAssignedContracts, 
       totalRetentionValue, totalNetProfit, profitMargin, isLoss, totalBudgetVariance,
-      totalAllocatedOverhead, totalActualLabor, totalActualMaterial, totalDirectExpenses, totalActualOperational,
+      totalAllocatedOverhead, totalActualLabor, totalActualMaterial, totalDirectExpenses,
       totalAllocatedExpensesABC // 🚀 إرجاع الإجمالي الجديد
     };
   }, [flatBoqData, assignments, expenses]);
@@ -103,7 +102,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
     { 
         header: 'الميزانية المقدرة', 
         render: (row: any) => {
-            const budget = Number(row.estimated_labor_cost || 0) + Number(row.estimated_material_cost || 0) + Number(row.estimated_expenses_cost || 0) + Number(row.estimated_operational_cost || 0);
+            const budget = Number(row.estimated_labor_cost || 0) + Number(row.estimated_material_cost || 0) + Number(row.estimated_expenses_cost || 0);
             return <span style={{ fontWeight: 900, color: '#475569', backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>{formatCurrency(budget)}</span>;
         }
     },
@@ -127,7 +126,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
     { 
         header: 'عمالة ومعدات فعلية', 
         render: (row: any) => {
-            const laborAndOps = Number(row.actual_labor_cost || 0) + Number(row.actual_operational_cost || 0);
+            const laborAndOps = Number(row.actual_labor_cost || 0);
             return <span style={{ fontWeight: 900, color: '#0369A1' }}>{formatCurrency(laborAndOps)}</span>;
         }
     },
@@ -176,7 +175,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
             </div>
         )
     }
-  ], [assignments, logic, setDeleteAlert]);
+  ], [logic, setDeleteAlert]);
 
   return (
     <div>
@@ -283,6 +282,8 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
                 isOpen={logic.isBoqModalOpen} onClose={() => logic.setIsBoqModalOpen(false)}
                 record={logic.currentBoqRecord} setRecord={logic.setCurrentBoqRecord}
                 onSave={logic.handleSaveBoq} projectBoq={logic.projectDetails.boq}
+                onImport={logic.importFromLibrary}
+                isSaving={logic.isSavingBoq}
             />
         )}
 
@@ -292,7 +293,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
           logic={logic} 
           boqStats={boqStats} 
           flatBoqData={flatBoqData} 
-          normalizeArabic={normalizeArabic}
+          flatBoqData={flatBoqData} 
         />
       </div>
     </div>

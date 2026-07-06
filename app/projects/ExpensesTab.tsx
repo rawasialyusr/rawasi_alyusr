@@ -8,7 +8,33 @@ import LoadingScreen from '@/components/LoadingScreen';
 
 export default function ExpensesTab({ logic }: { logic: any }) {
   // 🚀 1. سحب كشف الحساب المباشر من اللوجيك
-  const directLedger = logic.projectDetails.ledger || [];
+  const directLedger = useMemo(() => {
+    const expenses = logic.projectDetails?.expenses || [];
+    return expenses.map((exp: any) => {
+      const date = exp.exp_date?.split('T')[0] || exp.created_at?.split('T')[0] || '---';
+      const amount = Number(exp.total_price || 0) || (Number(exp.quantity || 0) * Number(exp.unit_price || 0));
+      
+      let costType = '🏢 مصاريف مباشرة';
+      if (exp.row_type === 'labor_direct' || exp.main_category?.includes('عمالة')) {
+        costType = '👷 عمالة مباشرة';
+      } else if (exp.row_type === 'labor_allocated') {
+        costType = '👷 عمالة موزعة';
+      }
+      
+      const monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+      const dateObj = new Date(date);
+      const financialMonth = isNaN(dateObj.getTime()) ? '---' : `${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+      
+      return {
+        id: exp.id,
+        'التاريخ': date,
+        'الشهر المالي': financialMonth,
+        'نوع التكلفة': costType,
+        'البيان / البند': exp.description || exp.payee_name || exp.sub_contractor || 'مصروف عام',
+        'التكلفة المحملة (جنيه)': amount
+      };
+    });
+  }, [logic.projectDetails?.expenses]);
 
   // 🚀 2. سحب المصروفات الموزعة (ABC) بشكل مستقل لضمان دمجها في كشف الحساب
   const [abcLedger, setAbcLedger] = useState<any[]>([]);

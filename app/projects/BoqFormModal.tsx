@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo';
 
-export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSave, projectBoq = [], onImport }: any) {
+export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSave, projectBoq = [], onImport, isSaving }: any) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
@@ -83,8 +83,7 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                                     unit: isObj ? b.unit_of_measure : record.unit || 'مقطوعية',
                                     unit_contract_price: isObj && b.default_unit_price ? b.default_unit_price : record.unit_contract_price,
                                     estimated_labor_cost: isObj && b.default_labor_price ? b.default_labor_price : record.estimated_labor_cost,
-                                    estimated_material_cost: isObj && b.default_material_price ? b.default_material_price : record.estimated_material_cost,
-                                    daily_target: fetchedTarget
+                                    estimated_material_cost: isObj && b.default_material_price ? b.default_material_price : record.estimated_material_cost
                                 });
                             }} 
                         />
@@ -142,24 +141,6 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                             <input type="number" style={{ width: '100%', padding: '12px', borderRadius: '12px', border: `2px solid ${THEME.accent}50`, fontWeight: 900, textAlign: 'center', color: THEME.accent, outline: 'none' }} value={record.unit_contract_price || ''} onChange={e => setRecord({...record, unit_contract_price: e.target.value})} />
                         </div>
 
-                        {/* خانة الطريحة المستهدفة المحدثة */}
-                        <div style={{ background: '#f8fafc', padding: '4px 12px', borderRadius: '14px', border: '1px solid #cbd5e1' }}>
-                            <label style={{ fontSize: '12px', fontWeight: 900, display: 'block', marginBottom: '4px', color: THEME.coffeeDark }}>
-                                🎯 الطريحة اليومية المستهدفة
-                            </label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <input 
-                                    type="number" 
-                                    style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 900, textAlign: 'center', color: THEME.primary, outline: 'none' }} 
-                                    value={record.daily_target || ''} 
-                                    onChange={e => setRecord({...record, daily_target: e.target.value})} 
-                                    placeholder="0"
-                                />
-                                <span style={{ fontSize: '11px', fontWeight: 900, color: '#64748b', whiteSpace: 'nowrap' }}>
-                                    {record.unit || 'وحدة'} / يوم
-                                </span>
-                            </div>
-                        </div>
                     </div>
 
                     {/* 📊 هيكلة الموازنة التقديرية (WBS Baseline) */}
@@ -184,10 +165,10 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
 
                 {/* أزرار التحكم والاعتماد */}
                 <div style={{ display: 'flex', gap: '15px', marginTop: '35px' }}>
-                    <button onClick={handleSave} style={{ flex: 2, background: THEME.success, color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 900, cursor: 'pointer', fontSize: '16px', boxShadow: `0 10px 20px ${THEME.success}40` }}>
-                        ✅ حفظ وتسكين البند في شجرة المشروع
+                    <button onClick={handleSave} disabled={isSaving} style={{ flex: 2, background: isSaving ? '#94a3b8' : THEME.success, color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 900, cursor: isSaving ? 'not-allowed' : 'pointer', fontSize: '16px', boxShadow: isSaving ? 'none' : `0 10px 20px ${THEME.success}40` }}>
+                        {isSaving ? '⏳ جاري الحفظ...' : '✅ حفظ وتسكين البند في شجرة المشروع'}
                     </button>
-                    <button onClick={onClose} style={{ flex: 1, background: '#f1f5f9', color: '#64748b', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إلغاء</button>
+                    <button onClick={onClose} disabled={isSaving} style={{ flex: 1, background: '#f1f5f9', color: '#64748b', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 900, cursor: isSaving ? 'not-allowed' : 'pointer', fontSize: '16px' }}>إلغاء</button>
                 </div>
             </div>
         </div>,

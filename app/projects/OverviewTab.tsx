@@ -25,10 +25,10 @@ export default function OverviewTab({ logic }: { logic: any }) {
         totalAllocatedABC += allocated;
 
         totalContract += Number(item.total_contract_amount || 0);
-        totalBudget += (Number(item.estimated_labor_cost || 0) + Number(item.estimated_material_cost || 0) + Number(item.estimated_expenses_cost || 0) + Number(item.estimated_operational_cost || 0));
+        totalBudget += (Number(item.estimated_labor_cost || 0) + Number(item.estimated_material_cost || 0) + Number(item.estimated_expenses_cost || 0));
         
         // التكلفة الفعلية + التكاليف الموزعة
-        totalActualCost += (Number(item.actual_labor_cost || 0) + Number(item.actual_material_cost || 0) + Number(item.actual_expenses_cost || 0) + Number(item.actual_operational_cost || 0)) + allocated;
+        totalActualCost += (Number(item.actual_labor_cost || 0) + Number(item.actual_material_cost || 0) + Number(item.actual_expenses_cost || 0)) + allocated;
         
         totalRetention += Number(item.actual_retention_amount || 0);
         
