@@ -68,7 +68,7 @@ export default function RawasiFilterSidebar({
   return (
     <>
       <style>{`
-        .filter-sidebar {
+        .filter-sidebar-v2 {
           position: fixed; top: 0; right: ${isOpen ? '0' : '-350px'}; bottom: 0; height: 100vh;
           width: 280px;
           background: rgba(15, 12, 10, 0.95);
@@ -82,15 +82,15 @@ export default function RawasiFilterSidebar({
           flex-direction: column;
         }
 
-        .filter-toggle-tab {
+        .filter-toggle-tab-v2 {
           position: fixed; top: 120px; right: 0;
           background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(20px);
-          color: #fff; padding: 25px 8px; border-radius: 16px 0 0 16px;
+          color: #fff; padding: 20px 4px; border-radius: 8px 0 0 8px;
           cursor: pointer; z-index: 998; display: flex; align-items: center; justify-content: center;
-          box-shadow: -5px 0 15px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: -2px 0 10px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
           border-right: none; transition: all 0.3s ease; opacity: ${isOpen ? 0 : 1}; pointer-events: ${isOpen ? 'none' : 'auto'};
         }
-        .filter-toggle-tab:hover { background: ${accentColor}; padding-right: 12px; }
+        .filter-toggle-tab-v2:hover { background: ${accentColor}; padding-right: 6px; }
 
         .vertical-text {
           writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 900;
@@ -142,21 +142,20 @@ export default function RawasiFilterSidebar({
         .date-label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 5px; }
 
         @media (max-width: 768px) {
-          .filter-sidebar {
+          .filter-sidebar-v2 {
             width: 280px !important;
             right: ${isOpen ? '0' : '-350px'} !important;
             border-left: none !important;
             top: 0 !important;
             height: 100vh !important;
           }
-          /* removed filter-toggle-tab hiding */
           .filter-content {
             width: 100% !important;
           }
-          .filter-toggle-tab {
-            padding: 12px 6px !important;
+          .filter-toggle-tab-v2 {
+            padding: 8px 4px !important;
             top: 20% !important;
-            border-radius: 12px 0 0 12px !important;
+            border-radius: 8px 0 0 8px !important;
           }
           .tab-text { display: none !important; }
           .tab-icon { display: block !important; font-size: 16px; transform: none !important; writing-mode: horizontal-tb !important; }
@@ -167,7 +166,7 @@ export default function RawasiFilterSidebar({
         <div onClick={() => setIsPinned(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
       )}
       
-      <aside className="filter-sidebar no-print">
+      <aside className="filter-sidebar-v2 no-print">
         <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(false); }}>
           <span style={{ fontSize: '16px', color: '#fff' }}>✕</span>
         </button>
@@ -251,7 +250,7 @@ export default function RawasiFilterSidebar({
         </div>
       </aside>
 
-      <div className="filter-toggle-tab no-print" onClick={() => setIsPinned(true)}>
+      <div className="filter-toggle-tab-v2 no-print" onClick={() => setIsPinned(true)}>
           <span className="tab-text" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, letterSpacing: '2px', fontSize: '12px' }}>
             ◀ الفلاتر والملخص
           </span>
