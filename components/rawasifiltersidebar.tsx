@@ -86,7 +86,7 @@ export default function RawasiFilterSidebar({
         .filter-toggle-tab-v3 {
           position: fixed; top: 120px; right: 0;
           background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(20px);
-          color: #fff; padding: 20px 4px; border-radius: 8px 0 0 8px;
+          color: #fff; padding: 8px 4px; border-radius: 8px 0 0 8px;
           cursor: pointer; z-index: 998; display: flex; align-items: center; justify-content: center;
           box-shadow: -2px 0 10px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
           border-right: none; transition: all 0.3s ease; opacity: ${isOpen ? 0 : 1}; pointer-events: ${isOpen ? 'none' : 'auto'};
@@ -257,25 +257,16 @@ export default function RawasiFilterSidebar({
         </div>
       </aside>
 
-      {/* Hover strip for Desktop */}
-      {!isMobile && !isOpen && (
-        <div 
-          className="no-print"
-          onMouseEnter={() => setIsHovered(true)}
-          style={{
-            position: 'fixed', top: 0, right: 0, width: '20px', height: '100vh', zIndex: 990, cursor: 'pointer'
-          }}
-        />
-      )}
-
-      {/* Toggle Knob for Mobile ONLY */}
-      {isMobile && (
-        <div className="filter-toggle-tab-v3 no-print" onClick={() => setIsPinned(true)}>
-            <span className="tab-icon" style={{ fontSize: '16px' }}>
-              ⚙️
-            </span>
-        </div>
-      )}
+      {/* Toggle Knob (Small handle) for Desktop (Hover) & Mobile (Click) */}
+      <div 
+        className="filter-toggle-tab-v3 no-print" 
+        onMouseEnter={() => !isMobile && setIsHovered(true)}
+        onClick={() => isMobile && setIsPinned(true)}
+      >
+          <span className="tab-icon" style={{ fontSize: '16px' }}>
+            ⚙️
+          </span>
+      </div>
     </>
   );
 }
