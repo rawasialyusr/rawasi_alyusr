@@ -171,6 +171,20 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           .fab-main { width: 65px !important; height: 65px !important; bottom: 20px !important; left: 20px !important; }
           .items-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 12px !important; }
           .nav-card { padding: 15px !important; }
+          .overlay-screen {
+            right: ${isOpen ? '0' : '-100%'} !important;
+            left: auto !important;
+            width: 280px !important;
+            max-width: 85vw !important;
+            height: 100dvh !important;
+            clip-path: none !important;
+            border-radius: 20px 0 0 20px !important;
+            transition: right 0.4s ease !important;
+            background: rgba(15, 12, 10, 0.98) !important;
+            padding: 40px 15px !important;
+            align-items: flex-start !important;
+            box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+          }
         }
       `}</style>
 

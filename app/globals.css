@@ -637,10 +637,22 @@ td {
   }
   
   /* 6. Modals */
-  .modal-content, .supreme-modal {
-      width: 95% !important;
+  .modal-content, .supreme-modal,
+  div[style*="width: 500px"], 
+  div[style*="width: 600px"], 
+  div[style*="width: 700px"], 
+  div[style*="width: 800px"], 
+  div[style*="width: 900px"],
+  div[style*="max-width: 550px"],
+  div[style*="max-width: 600px"],
+  .profile-modal-box {
+      width: 95vw !important;
+      max-width: 95vw !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
       padding: 15px !important;
       max-height: 90vh !important;
       overflow-y: auto !important;
+      box-sizing: border-box !important;
   }
 }
