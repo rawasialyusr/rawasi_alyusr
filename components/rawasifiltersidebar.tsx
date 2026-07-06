@@ -31,22 +31,23 @@ export default function RawasiFilterSidebar({
   setIsOpenStatus
 }: RawasiSidebarProps) {
   
-  const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    setMounted(true);
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const { summary, actions, customFilters } = useSidebar();
 
-  const isOpen = isMobile ? isMobileOpen : (isHovered || isPinned);
+  const isOpen = isMobile ? isMobileOpen : isPinned;
 
   // 🚀 إبلاغ الـ Layout بحالة السايد بار عشان يزق المحتوى
   useEffect(() => {
@@ -68,21 +69,15 @@ export default function RawasiFilterSidebar({
   return (
     <>
       <style>{`
-        /* 🚀 عرض السايد بار */
         .filter-sidebar {
+          position: fixed; top: 0; right: 0; bottom: 0; height: 100vh;
           width: ${isMobile ? (isMobileOpen ? '280px' : '0px') : (isOpen ? '280px' : '65px')};
-          background: linear-gradient(180deg, rgba(67, 52, 46, 0.98) 0%, rgba(140, 106, 93, 0.4) 100%);
-          backdrop-filter: blur(25px) saturate(180%);
-          -webkit-backdrop-filter: blur(25px) saturate(180%);
-          border-left: 1px solid rgba(255, 255, 255, 0.08);
-          height: 100vh;
-          position: fixed;
-          right: 0;
-          top: 0;
-          z-index: 1000;
-          transition: width 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
-          overflow: hidden;
-          box-shadow: -10px 0 30px rgba(0,0,0,0.2);
+          background: rgba(15, 12, 10, 0.95);
+          border-radius: 0;
+          box-shadow: -5px 10px 30px rgba(0,0,0,0.4);
+          z-index: 1000; transition: width 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+          backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08);
+          border-right: none; overflow: hidden;
           color: ${textColor};
           display: flex;
           flex-direction: column;
@@ -91,7 +86,7 @@ export default function RawasiFilterSidebar({
         .vertical-label-container {
           position: absolute; right: 0; top: 0; bottom: 0; width: 65px;
           display: flex; align-items: center; justify-content: center;
-          pointer-events: none; opacity: ${isOpen ? 0 : 1}; transition: opacity 0.3s ease;
+          cursor: pointer; opacity: ${isOpen ? 0 : 1}; transition: opacity 0.3s ease;
         }
 
         .vertical-text {
@@ -149,6 +144,8 @@ export default function RawasiFilterSidebar({
             width: 280px !important;
             right: ${isMobileOpen ? '0' : '-300px'} !important;
             border-left: none !important;
+            top: 0 !important;
+            height: 100vh !important;
           }
           .vertical-label-container { display: none !important; }
           .filter-content {
@@ -169,9 +166,9 @@ export default function RawasiFilterSidebar({
         <div onClick={() => setIsMobileOpen(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
       )}
       
-      <aside className="filter-sidebar no-print" onMouseEnter={() => !isMobile && setIsHovered(true)} onMouseLeave={() => !isMobile && setIsHovered(false)}>
-        <button className="pin-btn-sidebar" onClick={() => setIsPinned(!isPinned)}>
-          <span style={{ fontSize: '16px', color: isPinned ? '#fff' : accentColor }}>📌</span>
+      <aside className="filter-sidebar no-print" onClick={() => { if (!isMobile && !isOpen) setIsPinned(true); }}>
+        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(!isPinned); }}>
+          <span style={{ fontSize: '16px', color: '#fff' }}>{isPinned ? '✕' : '⚙️'}</span>
         </button>
 
         <div className="vertical-label-container">
