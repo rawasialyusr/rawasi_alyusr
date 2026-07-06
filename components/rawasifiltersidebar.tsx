@@ -69,7 +69,7 @@ export default function RawasiFilterSidebar({
     <>
       <style>{`
         .filter-sidebar {
-          position: fixed; top: 0; right: ${isOpen ? '0' : '-280px'}; bottom: 0; height: 100vh;
+          position: fixed; top: 0; right: ${isOpen ? '0' : '-350px'}; bottom: 0; height: 100vh;
           width: 280px;
           background: rgba(15, 12, 10, 0.95);
           border-radius: 0;
@@ -144,7 +144,7 @@ export default function RawasiFilterSidebar({
         @media (max-width: 768px) {
           .filter-sidebar {
             width: 280px !important;
-            right: ${isOpen ? '0' : '-300px'} !important;
+            right: ${isOpen ? '0' : '-350px'} !important;
             border-left: none !important;
             top: 0 !important;
             height: 100vh !important;
