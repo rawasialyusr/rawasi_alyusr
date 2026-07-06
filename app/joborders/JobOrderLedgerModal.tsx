@@ -5,7 +5,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import LoadingScreen from '@/components/LoadingScreen';
 import { supabase } from '@/lib/supabase';
-
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) {
     const [activeTab, setActiveTab] = useState('خامات مصروفة');
     const [loading, setLoading] = useState(true);
@@ -186,6 +186,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
     const tabTotal = tableRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
     const tabs = [
+        { id: 'مؤشرات الأداء', label: '📊 مؤشرات الأداء' },
         { id: 'خامات مصروفة', label: '🧱 الخامات' },
         { id: 'مصروفات نثرية', label: '💸 مصروفات' },
         { id: 'دفعات مقاولين', label: '🤝 المستخلصات (سداد وخصم)' },
@@ -271,7 +272,30 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
 
                 {/* Table Data */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-                    {loading ? (
+                    {activeTab === 'مؤشرات الأداء' ? (
+                        <div style={{ height: '400px', width: '100%', padding: '20px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                            <h3 style={{ textAlign: 'center', marginBottom: '20px', color: THEME.primary, fontWeight: 900 }}>تحليل ميزانية أمر التشغيل</h3>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={[
+                                    { 
+                                        name: 'تحليل الميزانية', 
+                                        'الميزانية المعتمدة': isSubcontractor ? totalWorkValue : (jobOrder?.boq_total_budget || 0), 
+                                        'التكلفة الفعلية': isSubcontractor ? (paymentsTotal + advanceTotal + retentionTotal) : (jobOrder?.effective_cost || 0),
+                                        'صافي الربح / (الخسارة)': isSubcontractor ? estimatedNet : (jobOrder?.total_profit_or_loss || 0)
+                                    }
+                                ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontWeight: 800 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontWeight: 800 }} tickFormatter={(val) => val.toLocaleString()} />
+                                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }} itemStyle={{ fontWeight: 800 }} />
+                                    <Legend wrapperStyle={{ paddingTop: '20px', fontWeight: 800 }} />
+                                    <Bar dataKey="الميزانية المعتمدة" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={50} />
+                                    <Bar dataKey="التكلفة الفعلية" fill="#f43f5e" radius={[6, 6, 0, 0]} barSize={50} />
+                                    <Bar dataKey="صافي الربح / (الخسارة)" fill="#10b981" radius={[6, 6, 0, 0]} barSize={50} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : loading ? (
                         <LoadingScreen message="جاري استخراج السجل المالي بدقة..." fullScreen={false} />
                     ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>

@@ -36,223 +36,7 @@ export default function JobOrdersPage() {
   // =========================================================================
   // 💎 أعمدة الجدول (متوافقة مع RawasiSmartTable)
   // =========================================================================
-  const jobOrderColumns = useMemo(() => [
-    {
-      key: 'select',
-      label: (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <input 
-                  type="checkbox" 
-                  className="custom-checkbox"
-                  checked={isAllVisibleSelected}
-                  title="تحديد كل الصفحة"
-                  onChange={() => {
-                      if (isAllVisibleSelected) {
-                          logic.setSelectedIds(logic.selectedIds.filter((id: string) => !currentVisibleIds.includes(id)));
-                      } else {
-                          logic.setSelectedIds([...new Set([...logic.selectedIds, ...currentVisibleIds])]);
-                      }
-                  }}
-              />
-          </div>
-      ), 
-      render: (row: any) => {
-        if (!row) return null;
-        const isSelected = logic.selectedIds.includes(String(row.id));
-        return (
-          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
-              <input 
-                  type="checkbox" 
-                  className="custom-checkbox" 
-                  checked={isSelected} 
-                  onChange={(e) => {
-                      e.stopPropagation();
-                      if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
-                      else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
-                  }} 
-              />
-          </div>
-        );
-      }
-    },
-    { 
-      key: 'order_number',
-      label: 'رقم وتاريخ الأمر', 
-      render: (row: any) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px' }}>#{row.order_number}</b>
-          <span style={{ fontSize: '10px', color: '#64748b' }}>
-              📅 البدء: {row.start_date ? new Date(row.start_date).toLocaleDateString('ar-EG') : '---'}
-          </span>
-        </div>
-      ) 
-    },
-    { 
-      key: 'project_name',
-      label: 'العقار والبند المستهدف', 
-      render: (row: any) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '250px' }}>
-          {row.job_order_name && (
-             <span style={{fontWeight: 900, color: '#1e293b', fontSize: '12px', lineHeight: '1.4'}}>
-                 {row.job_order_name}
-             </span>
-          )}
-          <span style={{fontWeight: 900, color: row.job_order_name ? '#64748b' : '#1e293b', fontSize: row.job_order_name ? '11px' : '13px'}}>
-              {row.projects?.Property || row.projects?.project_name || 'العقار غير محدد'}
-          </span>
-          {row.boq_budget?.work_item && (
-             <span style={{ fontSize: '10px', color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', width: 'fit-content', border: '1px solid #e2e8f0' }}>
-               🛠️ {row.boq_budget.work_item}
-             </span>
-          )}
-        </div>
-      ) 
-    },
-    { 
-      key: 'executor',
-      label: 'المنفذ / المقاول', 
-      render: (row: any) => {
-        const isSelf = row.executor_type === 'تنفيذ ذاتي';
-        const executorName = isSelf ? 'تنفيذ ذاتي (عمالة الشركة)' : (row.partners?.name || 'غير محدد');
-        return (
-          <span style={{ 
-            padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 800, display: 'inline-block',
-            background: isSelf ? 'rgba(99, 102, 241, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-            color: isSelf ? '#4f46e5' : '#d97706',
-            border: `1px solid ${isSelf ? 'rgba(99, 102, 241, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`
-          }}>
-            {isSelf ? '👷‍♂️' : '🤝'} {executorName}
-          </span>
-        );
-      } 
-    },
-    {
-      key: 'qty_price',
-      label: 'الكمية والسعر المقدر',
-      render: (row: any) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', fontWeight: 700, textAlign: 'right' }}>
-           <span style={{ color: '#334155' }}>الكمية: {Number(row.assigned_qty || 0).toLocaleString()}</span>
-           <span style={{ color: THEME.primary }}>السعر: {Number(row.unit_price || 0).toLocaleString()} ر.س</span>
-        </div>
-      )
-    },
-    {
-      key: 'performance',
-      label: 'الأداء والربحية 📊',
-      render: (row: any) => {
-        // 🚀 المعادلة المحاسبية الدقيقة والصريحة جداً
-        
-        // 1. أصل الموازنة (قيمة البند الأساسية في المقايسة)
-        const targetBudget = Number(row.boq_budget?.total_price || row.boq_total_budget || 0); 
-        
-        // 2. المنصرف الفعلي (مواد وخامات وعمالة يوميات ومصروفات)
-        const materialsAndExpenses = Number(row.effective_cost || 0); 
-        
-        // 3. المنصرف للمقاول (من المستخلصات)
-        const subcontractorPaid = Number(row.subcontractor_paid || 0); 
-        
-        // إجمالي التكلفة الحقيقية = المنصرف (خامات/عمالة/مصاريف) + اللي خده المقاول
-        const finalCost = row.executor_type === 'مقاول باطن' 
-            ? materialsAndExpenses + subcontractorPaid 
-            : materialsAndExpenses;
-        
-        // صافي الربح = أصل قيمة البند - إجمالي المنصرف
-        const calculatedProfit = targetBudget - finalCost;
-        
-        let profitColor = '#10b981'; 
-        let profitBg = 'rgba(16, 185, 129, 0.1)';
-        let profitLabel = 'الربح الصافي:';
-        
-        if (calculatedProfit < 0) {
-            profitColor = '#ef4444'; 
-            profitBg = 'rgba(239, 68, 68, 0.1)';
-            profitLabel = 'الخسارة:';
-        } else if (calculatedProfit === 0 && finalCost === 0) {
-            profitColor = '#94a3b8'; 
-            profitBg = '#f1f5f9';
-            profitLabel = 'لم يبدأ:';
-        } else if (calculatedProfit === 0 && finalCost > 0) {
-            profitColor = '#f59e0b'; 
-            profitBg = 'rgba(245, 158, 11, 0.1)';
-            profitLabel = 'تعادل:';
-        }
-
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 800, minWidth: '200px' }}>
-             <span style={{ color: '#0ea5e9', display: 'flex', justifyContent: 'space-between' }}>
-                 <span>أصل الموازنة:</span> <span>{targetBudget.toLocaleString()} ر.س</span>
-             </span>
-             
-             {row.executor_type === 'مقاول باطن' ? (
-                <>
-                    <span style={{ color: '#f59e0b', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>خامات ومصروفات:</span> <span dir="ltr"> - {materialsAndExpenses.toLocaleString()}</span>
-                    </span>
-                    <span style={{ color: '#8b5cf6', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>مسدد للمقاول:</span> <span dir="ltr"> - {subcontractorPaid.toLocaleString()}</span>
-                    </span>
-                </>
-             ) : (
-                <span style={{ color: '#ef4444', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>منصرف (عمالة/خامات):</span> <span dir="ltr"> - {materialsAndExpenses.toLocaleString()}</span>
-                </span>
-             )}
-             
-             <span style={{ color: '#1e293b', borderTop: '1px dashed #cbd5e1', paddingTop: '4px', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
-                 <span>إجمالي التكلفة:</span> <span>{finalCost.toLocaleString()} ر.س</span>
-             </span>
-             
-             <span style={{ 
-                 color: profitColor, background: profitBg, 
-                 padding: '4px 8px', borderRadius: '6px', border: `1px solid ${profitColor}40`, marginTop: '4px', display: 'flex', justifyContent: 'space-between'
-             }}>
-               <span>{profitLabel}</span> <span>{Math.abs(calculatedProfit).toLocaleString()} ر.س</span>
-             </span>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'status',
-      label: 'الحالة',
-      render: (row: any) => {
-        let badgeStyle = { bg: '#f1f5f9', color: '#475569', dot: '#94a3b8', icon: '📄' }; // مسودة
-        if (row.status === 'جاري التنفيذ') badgeStyle = { bg: '#dbeafe', color: '#2563eb', dot: '#3b82f6', icon: '⏳' };
-        if (row.status === 'مكتمل') badgeStyle = { bg: '#dcfce3', color: '#10b981', dot: '#22c55e', icon: '✅' };
-        if (row.status === 'موقوف') badgeStyle = { bg: '#fee2e2', color: '#dc2626', dot: '#ef4444', icon: '⏸️' };
-        
-        return (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
-            backgroundColor: badgeStyle.bg, color: badgeStyle.color, border: `1px solid ${badgeStyle.dot}40`
-          }}>
-            <span>{badgeStyle.icon}</span>
-            {row.status}
-          </div>
-        );
-      }
-    },
-    {
-      key: 'actions',
-      label: 'الإجراءات',
-      render: (row: any) => (
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); logic.handleEdit(row); }} className="btn-glass-pay" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }} title="تعديل الأمر">📝</button>
-          
-          <button onClick={(e) => { 
-              e.stopPropagation(); 
-              logic.setLedgerRecord(row); 
-              logic.setIsLedgerOpen(true); 
-          }} 
-          className="btn-glass-pay" 
-          style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, fontSize: '12px' }} title="عرض السجل التحليلي">
-              📊 السجل
-          </button>
-        </div>
-      )
-    }
-  ], [logic.selectedIds, isAllVisibleSelected, currentVisibleIds, logic]);
+// jobOrderColumns removed
 
   // =========================================================================
   // 🎛️ أزرار السايد بار
@@ -344,21 +128,182 @@ export default function JobOrdersPage() {
         .btn-main-glass:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
 
-      {(logic.isLoading && logic.allFiltered.length === 0) ? (
+            {(logic.isLoading && logic.allFiltered.length === 0) ? (
         <LoadingScreen message="جاري تحميل أوامر التشغيل..." fullScreen={false} />
       ) : (
-        <div className="clickable-rows cinematic-scroll" style={{ background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-          <RawasiSmartTable 
-              data={logic.allFiltered} 
-              columns={jobOrderColumns} 
-              enablePagination={true}
-              currentPage={logic.currentPage}
-              totalItems={logic.allFiltered.length}
-              rowsPerPage={logic.rowsPerPage}
-              onPageChange={logic.setCurrentPage}
-              onRowsChange={logic.setRowsPerPage}
-              onRowClick={(row:any) => logic.handleEdit(row)}
-          />
+        <div style={{ padding: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+            {logic.allFiltered.slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage).map((row: any) => {
+              const isSelected = logic.selectedIds.includes(String(row.id));
+              const isSelf = row.executor_type === 'تنفيذ ذاتي';
+              const executorName = isSelf ? 'تنفيذ ذاتي (عمالة الشركة)' : (row.partners?.name || 'غير محدد');
+              
+              const targetBudget = Number(row.boq_budget?.total_price || row.boq_total_budget || 0); 
+              const materialsAndExpenses = Number(row.effective_cost || 0); 
+              const subcontractorPaid = Number(row.subcontractor_paid || 0); 
+              const finalCost = row.executor_type === 'مقاول باطن' ? materialsAndExpenses + subcontractorPaid : materialsAndExpenses;
+              const calculatedProfit = targetBudget - finalCost;
+              
+              let profitColor = '#10b981'; 
+              let profitBg = 'rgba(16, 185, 129, 0.1)';
+              let profitLabel = 'الربح الصافي:';
+              
+              if (calculatedProfit < 0) {
+                  profitColor = '#ef4444'; 
+                  profitBg = 'rgba(239, 68, 68, 0.1)';
+                  profitLabel = 'الخسارة:';
+              } else if (calculatedProfit === 0 && finalCost === 0) {
+                  profitColor = '#94a3b8'; 
+                  profitBg = '#f1f5f9';
+                  profitLabel = 'لم يبدأ:';
+              } else if (calculatedProfit === 0 && finalCost > 0) {
+                  profitColor = '#f59e0b'; 
+                  profitBg = 'rgba(245, 158, 11, 0.1)';
+                  profitLabel = 'تعادل:';
+              }
+
+              let badgeStyle = { bg: '#f1f5f9', color: '#475569', dot: '#94a3b8', icon: '📄' };
+              if (row.status === 'جاري التنفيذ') badgeStyle = { bg: '#dbeafe', color: '#2563eb', dot: '#3b82f6', icon: '⏳' };
+              if (row.status === 'مكتمل') badgeStyle = { bg: '#dcfce3', color: '#10b981', dot: '#22c55e', icon: '✅' };
+              if (row.status === 'موقوف') badgeStyle = { bg: '#fee2e2', color: '#dc2626', dot: '#ef4444', icon: '⏸️' };
+
+              return (
+                <div 
+                  key={row.id}
+                  onClick={() => { logic.setLedgerRecord(row); logic.setIsLedgerOpen(true); }}
+                  style={{ 
+                    background: 'rgba(255, 255, 255, 0.85)', 
+                    backdropFilter: 'blur(20px)', 
+                    border: isSelected ? '2px solid #d97706' : '1px solid rgba(255, 255, 255, 0.4)', 
+                    borderRadius: '24px', 
+                    padding: '20px', 
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 10px 30px rgba(217, 119, 6, 0.15)' : '0 10px 30px rgba(0, 0, 0, 0.03)',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '15px'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.08)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isSelected ? '0 10px 30px rgba(217, 119, 6, 0.15)' : '0 10px 30px rgba(0, 0, 0, 0.03)'; }}
+                >
+                  <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10 }}>
+                    <input 
+                      type="checkbox" 
+                      className="custom-checkbox" 
+                      checked={isSelected} 
+                      onChange={(e) => {
+                          e.stopPropagation();
+                          if (isSelected) logic.setSelectedIds(logic.selectedIds.filter((i:any) => i !== String(row.id))); 
+                          else logic.setSelectedIds([...logic.selectedIds, String(row.id)]); 
+                      }} 
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '25px' }}>
+                    <div>
+                      <b style={{ color: '#8b5cf6', fontSize: '15px', fontWeight: 900 }}>#{row.order_number}</b>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>📅 {row.start_date ? new Date(row.start_date).toLocaleDateString('ar-EG') : '---'}</div>
+                    </div>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
+                      backgroundColor: badgeStyle.bg, color: badgeStyle.color, border: `1px solid ${badgeStyle.dot}40`
+                    }}>
+                      <span>{badgeStyle.icon}</span> {row.status}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{fontWeight: 900, color: '#1e293b', fontSize: '14px'}}>
+                        {row.projects?.Property || row.projects?.project_name || 'العقار غير محدد'}
+                    </span>
+                    {row.boq_budget?.work_item && (
+                       <span style={{ fontSize: '11px', color: '#475569', background: '#f1f5f9', padding: '4px 10px', borderRadius: '8px', width: 'fit-content', border: '1px solid #e2e8f0', fontWeight: 800 }}>
+                         🛠️ {row.boq_budget.work_item}
+                       </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span style={{ 
+                      padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 800, display: 'inline-block',
+                      background: isSelf ? 'rgba(99, 102, 241, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                      color: isSelf ? '#4f46e5' : '#d97706',
+                      border: `1px solid ${isSelf ? 'rgba(99, 102, 241, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`
+                    }}>
+                      {isSelf ? '👷‍♂️' : '🤝'} {executorName}
+                    </span>
+                  </div>
+
+                  <div style={{ borderTop: '1px dashed #cbd5e1', margin: '5px 0' }}></div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontWeight: 800 }}>
+                     <div style={{ color: '#0ea5e9', display: 'flex', justifyContent: 'space-between' }}>
+                         <span>أصل الموازنة:</span> <span>{targetBudget.toLocaleString()} ر.س</span>
+                     </div>
+                     
+                     {row.executor_type === 'مقاول باطن' ? (
+                        <>
+                            <div style={{ color: '#f59e0b', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>مواد ومصروفات:</span> <span dir="ltr"> - {materialsAndExpenses.toLocaleString()}</span>
+                            </div>
+                            <div style={{ color: '#8b5cf6', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>مسدد للمقاول:</span> <span dir="ltr"> - {subcontractorPaid.toLocaleString()}</span>
+                            </div>
+                        </>
+                     ) : (
+                        <div style={{ color: '#ef4444', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>منصرف للعمالة والخامات:</span> <span dir="ltr"> - {materialsAndExpenses.toLocaleString()}</span>
+                        </div>
+                     )}
+                     
+                     <div style={{ color: '#1e293b', borderTop: '1px dashed #cbd5e1', paddingTop: '6px', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                         <span>إجمالي التكلفة:</span> <span>{finalCost.toLocaleString()} ر.س</span>
+                     </div>
+                     
+                     <div style={{ 
+                         color: profitColor, background: profitBg, 
+                         padding: '6px 10px', borderRadius: '8px', border: `1px solid ${profitColor}40`, marginTop: '4px', display: 'flex', justifyContent: 'space-between', fontSize: '13px'
+                     }}>
+                       <span>{profitLabel}</span> <span>{Math.abs(calculatedProfit).toLocaleString()} ر.س</span>
+                     </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <button onClick={(e) => { e.stopPropagation(); logic.handleEdit(row); }} className="btn-main-glass" style={{ flex: 1, padding: '8px', background: 'rgba(59, 130, 246, 0.05)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                      📝 تعديل
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); logic.setLedgerRecord(row); logic.setIsLedgerOpen(true); }} className="btn-main-glass" style={{ flex: 1, padding: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                      📊 الليدجر
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '30px', padding: '15px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <button 
+                  onClick={() => logic.setCurrentPage((p:number) => Math.max(1, p - 1))} 
+                  disabled={logic.currentPage === 1}
+                  style={{ padding: '8px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', background: logic.currentPage === 1 ? '#f1f5f9' : 'white', cursor: logic.currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 800 }}
+              >
+                  السابق
+              </button>
+              <div style={{ fontWeight: 900, color: '#2d1a11' }}>
+                  صفحة {logic.currentPage} من {Math.ceil(logic.allFiltered.length / logic.rowsPerPage) || 1}
+              </div>
+              <button 
+                  onClick={() => logic.setCurrentPage((p:number) => Math.min(Math.ceil(logic.allFiltered.length / logic.rowsPerPage), p + 1))} 
+                  disabled={logic.currentPage >= Math.ceil(logic.allFiltered.length / logic.rowsPerPage)}
+                  style={{ padding: '8px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', background: logic.currentPage >= Math.ceil(logic.allFiltered.length / logic.rowsPerPage) ? '#f1f5f9' : 'white', cursor: 'pointer', fontWeight: 800 }}
+              >
+                  التالي
+              </button>
+          </div>
         </div>
       )}
 
