@@ -54,7 +54,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         items: [
             { id: 'global_summary', title: 'الملخص العام', icon: '📊', path: '/GlobalSummary' }, 
             { id: 'dashboard', title: 'لوحة القيادة', icon: '🖥️', path: '/Dashboard' },
-            { id: 'financial_center', title: 'المركز المالي', icon: '🏦', path: '/financial-center' }
+            { id: 'financial_center', title: 'المركز المالي', icon: '🏦', path: '/financial-center' },
+            { id: 'performance', title: 'مؤشرات الأداء', icon: '🚀', path: '/performance' }
         ] 
     },
     { 
@@ -69,7 +70,12 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'receipts', title: 'سندات القبض', icon: '🟢', path: '/ReceiptVouchers' }, 
             { id: 'revenue', title: 'الإيرادات', icon: '📈', path: '/revenue' }, 
             { id: 'expenses', title: 'المصروفات', icon: '📉', path: '/expenses' }, 
-            { id: 'invoices', title: 'الفواتير ومطالبات العملاء', icon: '🧾', path: '/invoices' }
+            { id: 'invoices', title: 'الفواتير ومطالبات العملاء', icon: '🧾', path: '/invoices' },
+            { id: 'audit', title: 'المراجعة والتدقيق', icon: '🔍', path: '/audit' },
+            { id: 'financialplan', title: 'الخطة المالية', icon: '📅', path: '/financialplan' },
+            { id: 'trialbalance', title: 'ميزان المراجعة', icon: '⚖️', path: '/trialbalance' },
+            { id: 'statement', title: 'كشف حساب', icon: '📄', path: '/statement' },
+            { id: 'financial_statements', title: 'القوائم المالية', icon: '📑', path: '/financial-statements' }
         ] 
     },
     { 
@@ -78,16 +84,19 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             { id: 'fieldops', title: 'رادار الميدان الحي', icon: '📡', path: '/fieldops' },
             { id: 'projects', title: 'غرفة المشاريع', icon: '🏗️', path: '/projects' }, 
             { id: 'materials', title: 'توريد الخامات', icon: '🧱', path: '/materials' },
+            { id: 'materialitems', title: 'أصناف الخامات', icon: '📦', path: '/materialitems' },
+            { id: 'material_issues', title: 'صرف الخامات', icon: '📤', path: '/material_issues' },
             { id: 'subclaims', title: 'مستخلصات مقاولي الباطن', icon: '📑', path: '/subclaims' },
-            { id: 'boqcatalog', title: 'الدليل الموحد للبنود (BOQ)', icon: '📚', path: '/boqcatalog' },
+            { id: 'subcontractor_costs', title: 'تكاليف مقاولي الباطن', icon: '💸', path: '/subcontractor-costs' },
+            { id: 'joborders', title: 'أوامر الشغل', icon: '🛠️', path: '/joborders' },
+            { id: 'laborcost', title: 'تكاليف العمالة', icon: '👷‍♂️', path: '/laborcost' },
+            { id: 'boqcatalog', title: 'الدليل الموحد (BOQ)', icon: '📚', path: '/boqcatalog' },
             { id: 'partners', title: 'دليل الشركاء', icon: '🤝', path: '/partners' },
             { id: 'partner_balances', title: 'أرصدة الشركاء', icon: '⚖️', path: '/PartnerBalances' },
-            // 🚀 تم تعديل التعليق هنا إلى Syntax الجافا سكريبت الصحيح:
-            { id: 'project_overhead', title: 'تحميل الأوفر هيد (Overhead)', icon: '🦅', path: '/overhead' },
-            { id: 'boq_budget', title: 'ميزانية المقايسات (BOQ Budget)', icon: '💼', path: '/boqbudget' },
-            { id: 'cost_allocation', title: 'محرك توزيع التكاليف (Cost Allocation)', icon: '🧮', path: '/costallocation' },
-            { id: 'project_ledger', title: 'دفتر  التكاليف', icon: '📋', path: '/project-ledger' }
-            
+            { id: 'project_overhead', title: 'الأوفر هيد (Overhead)', icon: '🦅', path: '/overhead' },
+            { id: 'boq_budget', title: 'ميزانية المقايسات', icon: '💼', path: '/boqbudget' },
+            { id: 'cost_allocation', title: 'توزيع التكاليف', icon: '🧮', path: '/costallocation' },
+            { id: 'project_ledger', title: 'دفتر التكاليف', icon: '📋', path: '/project-ledger' }
         ] 
     },
     { 
@@ -160,8 +169,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         .overlay-backdrop { position: fixed; inset: 0; z-index: 8999; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); opacity: ${isOpen ? 1 : 0}; pointer-events: ${isOpen ? 'auto' : 'none'}; transition: opacity 0.4s ease; }
         .command-center { width: 100%; display: flex; flex-direction: column; gap: 30px; margin-top: 10px; }
         .group-header { color: #C5A059; font-weight: 900; font-size: 14px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 8px; text-align: right; display: block; position: relative; }
-        .items-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-        .nav-card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 15px 20px; border-radius: 12px; display: flex; align-items: center; gap: 15px; color: #fff; cursor: pointer; transition: all 0.3s; opacity: 0; animation: popIn 0.5s forwards; position: relative; text-decoration: none; }
+        .items-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 15px; }
+        .nav-card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 15px 10px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #fff; cursor: pointer; transition: all 0.3s; opacity: 0; animation: popIn 0.5s forwards; position: relative; text-decoration: none; text-align: center; }
         @keyframes popIn { 0% { opacity: 0; transform: translateX(30px); } 100% { opacity: 1; transform: translateX(0); } }
         .nav-card:hover { background: rgba(197, 160, 89, 0.2); border-color: rgba(197, 160, 89, 0.5); transform: translateX(-5px); }
         .nav-card.active { background: rgba(197, 160, 89, 0.3); border-color: #C5A059; }
@@ -212,9 +221,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                       return (
                         <Link key={iIdx} href={item.path} onClick={() => setIsOpen(false)}>
                             <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
-                              <div className="icon-wrapper">{item.icon}</div>
-                              <span style={{ fontWeight: 800, fontSize: '15px', color: 'white' }}>{item.title}</span>
-                              {isActive && <div style={{ position: 'absolute', top: '15px', right: '15px', width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
+                                <div className="icon-wrapper" style={{ fontSize: '24px' }}>{item.icon}</div>
+                                <span style={{ fontWeight: 800, fontSize: '13px', color: 'white', lineHeight: '1.4' }}>{item.title}</span>
+                                {isActive && <div style={{ position: 'absolute', top: '10px', right: '10px', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 15px #10b981' }}></div>}
                             </div>
                         </Link>
                       );
