@@ -45,7 +45,7 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
             }
             const { data } = await supabase
                 .from('boq_budget_distinct')
-                .select('id, work_item, unit')
+                .select('id, work_item, unit, contract_quantity, unit_contract_price')
                 .eq('project_id', record.project_id);
                 
             if (data) setBoqItems(data);
@@ -122,17 +122,19 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                     </div>
                 </div>
 
-                {/* Grid 3 Columns */}
-                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px' }}>
+                {/* Grid 2 Columns for better flow */}
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
                     
                     {/* التواريخ والحالة */}
-                    <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ البدء</label>
-                        <input type="date" value={record.start_date?.split('T')[0] ?? ''} onChange={(e) => setRecord({...record, start_date: e.target.value})} className="glass-input-field" />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ الانتهاء (المتوقع)</label>
-                        <input type="date" value={record.end_date?.split('T')[0] ?? ''} onChange={(e) => setRecord({...record, end_date: e.target.value})} className="glass-input-field" />
+                    <div style={{ display: 'flex', gap: '15px' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ البدء</label>
+                            <input type="date" value={record.start_date?.split('T')[0] ?? ''} onChange={(e) => setRecord({...record, start_date: e.target.value})} className="glass-input-field" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ الانتهاء</label>
+                            <input type="date" value={record.end_date?.split('T')[0] ?? ''} onChange={(e) => setRecord({...record, end_date: e.target.value})} className="glass-input-field" />
+                        </div>
                     </div>
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>حالة الأمر</label>
@@ -146,22 +148,37 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
 
                     {/* المشروع والبند */}
                     <div style={{ gridColumn: 'span 1' }}>
-                        {/* 🚀 تم تعديل الـ SmartCombo هنا ليعتمد على Property بدلاً من project_name */}
                         <SmartCombo 
                             label="العقار / الفيلا المرتبطة" 
                             icon="🏢"
                             table="projects" 
                             searchCols="Property,project_name,project_code" displayCol="Property"
                             initialDisplay={record.projects?.Property || record.projects?.project_name || ''}
-                            onSelect={(p: any) => setRecord({...record, project_id: p?.id || null, boq_budget_id: null})} 
+                            onSelect={(p: any) => setRecord({...record, project_id: p?.id || null, boq_budget_id: null, assigned_qty: '', unit_price: ''})} 
                         />
                     </div>
 
-                    <div style={{ gridColumn: 'span 2' }}>
+                    <div style={{ gridColumn: 'span 1' }}>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>بند المقايسة (BOQ) المستهدف</label>
                         <select 
                             value={record.boq_budget_id ?? ''} 
-                            onChange={(e) => setRecord({...record, boq_budget_id: e.target.value})} 
+                            onChange={(e) => {
+                                const selectedId = e.target.value;
+                                const selectedBoq = boqItems.find(b => b.id === selectedId);
+                                let updates: any = { boq_budget_id: selectedId };
+                                
+                                if (selectedBoq) {
+                                    const executionType = record.executor_type || 'تنفيذ ذاتي';
+                                    if (executionType === 'تنفيذ ذاتي') {
+                                        updates.assigned_qty = selectedBoq.contract_quantity || 0;
+                                        updates.unit_price = selectedBoq.unit_contract_price || 0;
+                                    } else {
+                                        updates.assigned_qty = selectedBoq.contract_quantity || 0;
+                                        updates.unit_price = ''; // Reset price for manual entry
+                                    }
+                                }
+                                setRecord({...record, ...updates});
+                            }} 
                             className="glass-input-field" 
                             style={{ appearance: 'auto', background: !record.project_id ? 'rgba(226, 232, 240, 0.6)' : 'rgba(255, 255, 255, 0.65)' }}
                             disabled={!record.project_id}
@@ -176,7 +193,23 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>جهة التنفيذ</label>
                         <select 
                             value={record.executor_type ?? 'تنفيذ ذاتي'} 
-                            onChange={(e) => setRecord({...record, executor_type: e.target.value, contractor_id: null, client_name: ''})} 
+                            onChange={(e) => {
+                                const newType = e.target.value;
+                                let updates: any = { executor_type: newType, contractor_id: null, client_name: '' };
+                                if (record.boq_budget_id) {
+                                    const selectedBoq = boqItems.find(b => b.id === record.boq_budget_id);
+                                    if (selectedBoq) {
+                                        if (newType === 'تنفيذ ذاتي') {
+                                            updates.assigned_qty = selectedBoq.contract_quantity || 0;
+                                            updates.unit_price = selectedBoq.unit_contract_price || 0;
+                                        } else {
+                                            updates.assigned_qty = selectedBoq.contract_quantity || 0;
+                                            updates.unit_price = ''; // Reset price for manual entry
+                                        }
+                                    }
+                                }
+                                setRecord({...record, ...updates});
+                            }} 
                             className="glass-input-field" style={{ appearance: 'auto' }}
                         >
                             <option value="تنفيذ ذاتي">👷‍♂️ تنفيذ ذاتي (عمالة الشركة)</option>
@@ -184,7 +217,7 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                         </select>
                     </div>
 
-                    <div style={{ gridColumn: 'span 2', opacity: record.executor_type === 'مقاول باطن' ? 1 : 0.4, pointerEvents: record.executor_type === 'مقاول باطن' ? 'auto' : 'none', transition: '0.3s' }}>
+                    <div style={{ gridColumn: 'span 1', opacity: record.executor_type === 'مقاول باطن' ? 1 : 0.4, pointerEvents: record.executor_type === 'مقاول باطن' ? 'auto' : 'none', transition: '0.3s' }}>
                         <SmartCombo 
                             label="اسم مقاول الباطن" 
                             icon="👤"
@@ -198,15 +231,14 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                     {/* الكمية والسعر والملاحظات */}
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>الكمية المسندة</label>
-                        <input type="number" min="0" step="0.01" value={record.assigned_qty ?? ''} onChange={(e) => setRecord({...record, assigned_qty: e.target.value})} className="glass-input-field" placeholder="0" />
+                        <input type="number" min="0" step="0.01" value={record.assigned_qty ?? ''} onChange={(e) => setRecord({...record, assigned_qty: e.target.value})} className="glass-input-field" placeholder="الكمية من المقايسة..." />
                     </div>
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>سعر الوحدة</label>
-                        <input type="number" min="0" step="0.01" value={record.unit_price ?? ''} onChange={(e) => setRecord({...record, unit_price: e.target.value})} className="glass-input-field" placeholder="0.00" />
+                        <input type="number" min="0" step="0.01" value={record.unit_price ?? ''} onChange={(e) => setRecord({...record, unit_price: e.target.value})} className="glass-input-field" placeholder="السعر..." />
                     </div>
-                    <div style={{ gridColumn: 'span 1' }}></div> {/* Empty slot for alignment */}
 
-                    <div style={{ gridColumn: 'span 3' }}>
+                    <div style={{ gridColumn: 'span 2' }}>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>ملاحظات العمل</label>
                         <textarea value={record.notes ?? ''} onChange={(e) => setRecord({...record, notes: e.target.value})} className="glass-input-field" style={{ height: '70px', resize: 'none' }} placeholder="شروط التنفيذ أو ملاحظات فنية..." />
                     </div>
