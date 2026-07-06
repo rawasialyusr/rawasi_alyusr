@@ -184,7 +184,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                 .cinematic-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
 
                 .glass-input-field {
-                    width: 100%; padding: 12px; border-radius: 12px;
+                    width: 100%; padding: 10px 12px; border-radius: 12px;
                     background: rgba(255, 255, 255, 0.65);
                     border: 1px solid rgba(255, 255, 255, 0.8);
                     box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
@@ -198,8 +198,8 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                 
                 .btn-glass-save {
                     background: linear-gradient(135deg, #10b981, #059669);
-                    color: white; border: none; padding: 16px; border-radius: 16px;
-                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
+                    color: white; border: none; padding: 12px 20px; border-radius: 12px;
+                    font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s;
                     box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
                 }
                 .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); box-shadow: 0 15px 35px rgba(16, 185, 129, 0.5); }
@@ -208,8 +208,8 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
 
                 .btn-glass-cancel {
                     background: rgba(255, 255, 255, 0.6);
-                    color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px;
-                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
+                    color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 12px 20px; border-radius: 12px;
+                    font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s;
                 }
                 .btn-glass-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
 

@@ -35,13 +35,13 @@ export default function BOQModal({ isOpen, onClose, record, setRecord, onSave, i
                 }
                 .glass-input-field:focus { background: #ffffff; border-color: ${THEME.accent}; box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.15); }
                 .btn-glass-save {
-                    background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 16px; border-radius: 16px;
-                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+                    background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 12px 20px; border-radius: 12px;
+                    font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
                 }
                 .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); }
                 .btn-glass-cancel {
-                    background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px;
-                    font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s;
+                    background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 12px 20px; border-radius: 12px;
+                    font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s;
                 }
                 .section-title { font-size: 14px; font-weight: 900; margin-bottom: 15px; display: block; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 8px;}
             `}</style>

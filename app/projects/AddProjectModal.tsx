@@ -24,10 +24,10 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
         .glass-input-field:focus { background: #fff; border-color: ${THEME.goldAccent}; box-shadow: 0 0 0 4px rgba(197, 160, 89, 0.15); }
         .modal-label { font-size: 13px; font-weight: 900; color: ${THEME.coffeeDark}; display: block; margin-bottom: 8px; }
         
-        .btn-glass-save { background: linear-gradient(135deg, ${THEME.goldAccent}, ${THEME.coffeeMain}); color: white; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(197, 160, 89, 0.4); }
+        .btn-glass-save { background: linear-gradient(135deg, ${THEME.goldAccent}, ${THEME.coffeeMain}); color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(197, 160, 89, 0.4); }
         .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); }
         
-        .btn-glass-cancel { background: #f1f5f9; color: #64748b; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        .btn-glass-cancel { background: #f1f5f9; color: #64748b; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s; }
         .btn-glass-cancel:hover { background: #e2e8f0; transform: translateY(-2px); }
       `}</style>
 

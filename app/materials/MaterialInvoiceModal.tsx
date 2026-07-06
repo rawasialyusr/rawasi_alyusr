@@ -75,21 +75,21 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                     z-index: 999999999 !important;
                 }
                 .glass-input-field {
-                    width: 100%; padding: 12px; border-radius: 12px;
+                    width: 100%; padding: 10px 12px; border-radius: 12px;
                     background: rgba(255, 255, 255, 0.65);
                     border: 1px solid rgba(255, 255, 255, 0.8);
                     outline: none; transition: 0.2s; font-weight: 700; color: #1e293b;
                 }
                 .glass-input-field:focus { background: #fff; border-color: ${THEME.accent}; box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.15); }
                 
-                .btn-glass-save { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4); }
+                .btn-glass-save { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4); }
                 .btn-glass-save:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); }
-                .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
+                .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 12px 20px; border-radius: 12px; font-weight: 900; font-size: 14px; cursor: pointer; transition: 0.3s; }
                 .btn-glass-cancel:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-2px); }
                 
                 .lines-table-container {
                     background: rgba(255, 255, 255, 0.5);
-                    border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.7);
+                    border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.7);
                     overflow: visible; /* تعديل مهم لتجنب قص القوائم المنسدلة */
                     margin-top: 15px;
                 }

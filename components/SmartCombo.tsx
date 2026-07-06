@@ -344,17 +344,17 @@ export default function SmartCombo({
         <div style={{ position: 'relative', flex: 1, width: '100%' }}>
             <style>{`
                 .smart-combo-input {
-                    width: 100%; padding: 14px 15px; border-radius: 14px;
+                    width: 100%; padding: 10px 12px; border-radius: 12px;
                     background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px);
                     border: 1.5px solid rgba(255, 255, 255, 0.8); outline: none;
                     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                    font-weight: 800; color: #1e293b; font-size: 14px;
+                    font-weight: 800; color: #1e293b; font-size: 13px;
                     font-family: inherit; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
                 }
                 .smart-combo-input:focus { background: #ffffff; border-color: ${THEME.accent}; box-shadow: 0 0 0 4px ${THEME.accent}20; }
                 .smart-combo-input::placeholder { color: #94a3b8; font-weight: 600; }
                 .smart-combo-input.disabled { background: rgba(0,0,0,0.05); cursor: not-allowed; color: #64748b; border-color: transparent; }
-                .smart-drop-item { padding: 12px; cursor: pointer; border-radius: 12px; font-size: 13px; transition: all 0.1s; display: flex; align-items: center; gap: 10px; color: #334155; }
+                .smart-drop-item { padding: 10px; cursor: pointer; border-radius: 10px; font-size: 12px; transition: all 0.1s; display: flex; align-items: center; gap: 8px; color: #334155; }
                 .smart-drop-item:hover { background: #f8fafc; }
                 .smart-drop-item.highlighted { background: #f1f5f9; border-right: 4px solid ${THEME.primary}; color: ${THEME.primary}; font-weight: 800; }
                 .smart-drop-item.selected { background: ${THEME.success}10; border-right: 4px solid ${THEME.success}; color: ${THEME.success}; font-weight: 800; }
