@@ -69,6 +69,10 @@ export default function RawasiFilterSidebar({
   return (
     <>
       <style>{`
+        .filter-sidebar-v3, .filter-sidebar-v3 * {
+          box-sizing: border-box;
+        }
+
         .filter-sidebar-v3 {
           position: fixed; top: 0; right: ${isOpen ? '0' : '-100%'}; bottom: 0; height: 100vh;
           width: 280px;
@@ -84,14 +88,14 @@ export default function RawasiFilterSidebar({
         }
 
         .filter-toggle-tab-v3 {
-          position: fixed; top: 120px; right: 0;
-          background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(20px);
-          color: #fff; padding: 8px 4px; border-radius: 8px 0 0 8px;
+          position: fixed; top: 0; right: 0; bottom: 0; height: 100vh; width: 24px;
+          background: rgba(15, 12, 10, 0.4); backdrop-filter: blur(5px);
+          color: #fff; padding: 0 4px; border-radius: 0;
           cursor: pointer; z-index: 998; display: flex; align-items: center; justify-content: center;
-          box-shadow: -2px 0 10px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-          border-right: none; transition: all 0.3s ease; opacity: ${isOpen ? 0 : 1}; pointer-events: ${isOpen ? 'none' : 'auto'};
+          box-shadow: -2px 0 10px rgba(0,0,0,0.4); border-left: 1px solid rgba(255,255,255,0.1);
+          transition: all 0.3s ease; opacity: ${isOpen ? 0 : 1}; pointer-events: ${isOpen ? 'none' : 'auto'};
         }
-        .filter-toggle-tab-v3:hover { background: ${accentColor}; padding-right: 6px; }
+        .filter-toggle-tab-v3:hover { background: rgba(15, 12, 10, 0.8); width: 28px; }
 
         .vertical-text {
           writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 900;
@@ -154,9 +158,11 @@ export default function RawasiFilterSidebar({
             width: 100% !important;
           }
           .filter-toggle-tab-v3 {
-            padding: 8px 4px !important;
-            top: 20% !important;
-            border-radius: 8px 0 0 8px !important;
+            width: 24px !important;
+            padding: 0 4px !important;
+            top: 0 !important;
+            height: 100vh !important;
+            border-radius: 0 !important;
           }
           .tab-text { display: none !important; }
           .tab-icon { display: block !important; font-size: 16px; transform: none !important; writing-mode: horizontal-tb !important; }
