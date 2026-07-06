@@ -108,9 +108,9 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
         .u-name { font-size: 19px; font-weight: 900; color: #1e293b; letter-spacing: -0.3px; line-height: 1.2; }
         .u-role { font-size: 13px; font-weight: 800; color: #C5A059; margin-top: 4px; }
 
-        .avatar-frame { position: relative; width: 62px; height: 62px; }
-        .avatar-frame img { width: 100%; height: 100%; border-radius: 50%; border: 3px solid white; object-fit: cover; box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
-        .active-dot { position: absolute; bottom: 3px; right: 3px; width: 14px; height: 14px; background: #10b981; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .avatar-frame { position: relative; width: 85px; height: 85px; }
+        .avatar-frame img { width: 100%; height: 100%; border-radius: 50%; border: 4px solid white; object-fit: cover; box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
+        .active-dot { position: absolute; bottom: 4px; right: 4px; width: 16px; height: 16px; background: #10b981; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
 
         .supreme-dropdown {
             position: fixed; width: 220px; background: white; border-radius: 20px;
@@ -130,13 +130,13 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
         .title-area p { color: #64748b; fontSize: 14px; fontWeight: 600; marginTop: 4px; }
 
         .nav-btn-glass {
-            width: 40px; height: 40px; border-radius: 12px;
+            width: 50px; height: 50px; border-radius: 14px;
             background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.8);
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; transition: 0.3s;
             box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-            color: #1e293b; font-size: 18px;
+            color: #1e293b; font-size: 24px;
         }
         .nav-btn-glass:hover {
             background: white; transform: translateY(-2px);
@@ -158,6 +158,8 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
 
         /* 📱 🚀 التعديل السحري للموبايل (Fullscreen Edge-to-Edge) */
         @media (max-width: 768px) {
+          .header-divider { display: none; }
+
           .clean-page { 
               padding: 0 !important; 
               margin: 0 !important;
@@ -188,7 +190,7 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
           .u-info-text { display: none; }
           .imperial-trigger { padding: 0; background: transparent; border: none; box-shadow: none; }
           .imperial-trigger:hover { transform: none; box-shadow: none; border: none; }
-          .avatar-frame { width: 40px; height: 40px; } 
+          .avatar-frame { width: 55px; height: 55px; } 
         }
       `}</style>
 
@@ -204,51 +206,51 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
             justifyContent: 'space-between',
             gap: '15px'
       }}>
-        <div className="title-area" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        {/* Right side: Large Icon and Title */}
+        <div className="title-area" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ 
-            width: '45px', height: '45px', borderRadius: '14px', 
+            width: '80px', height: '80px', borderRadius: '22px', 
             background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 5px 15px rgba(15, 23, 42, 0.3)'
+            boxShadow: '0 8px 20px rgba(15, 23, 42, 0.3)'
           }}>
-            <span style={{ fontSize: '20px', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}>{icon || '✨'}</span>
+            <span style={{ fontSize: '38px', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}>{icon || '✨'}</span>
           </div>
-          <div className="nav-group">
-            <button onClick={() => router.back()} className="nav-btn-glass" title="رجوع للخلف">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-            <button onClick={() => router.forward()} className="nav-btn-glass" title="تقدم للأمام">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-          </div>
-          <div>
-            <h1 style={{ 
-                margin: 0, fontSize: '26px', fontWeight: 900, 
-                color: '#1e293b', letterSpacing: '-0.5px' 
-            }}>{title}</h1>
-            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 800 }}>{subtitle || 'نظام رواسي لإدارة الموارد المؤسسية'}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <h1 style={{ margin: 0, fontSize: '32px', fontWeight: 900, color: '#1e293b', letterSpacing: '-0.5px' }}>{title}</h1>
+              <p style={{ margin: 0, fontSize: '15px', color: '#64748b', fontWeight: 800 }}>{subtitle || 'نظام رواسي لإدارة الموارد المؤسسية'}</p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        {/* Left side: Avatar, Notifications/Messages, Nav Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {headerContent}
           
-          
-          
-          <div style={{ display: 'flex', gap: '12px', paddingRight: '20px', paddingLeft: '20px', alignItems: 'center', borderRight: '2px solid rgba(0,0,0,0.05)', marginRight: '10px' }}>
-             <button onClick={() => setIsNotificationsOpen(true)} style={{ background: 'white', border: '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', textDecoration: 'none', fontSize: '24px', transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)', opacity: 1, width: '45px', height: '45px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }} onMouseOver={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 8px 15px rgba(0,0,0,0.08)'; }} onMouseOut={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='0 4px 10px rgba(0,0,0,0.03)'; }}>
-                 🔔
-                 {unread_notifications > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', fontSize: '12px', minWidth: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(239, 68, 68, 0.5)', fontWeight: 900, border: '2px solid white' }}>{unread_notifications}</span>}
-             </button>
-             <Link href="/messages" style={{ background: 'white', border: '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', textDecoration: 'none', fontSize: '24px', transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)', opacity: 1, width: '45px', height: '45px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }} onMouseOver={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 8px 15px rgba(0,0,0,0.08)'; }} onMouseOut={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='0 4px 10px rgba(0,0,0,0.03)'; }}>
-                 ✉️
-                 {unread_messages > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#3b82f6', color: 'white', fontSize: '12px', minWidth: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(59, 130, 246, 0.5)', fontWeight: 900, border: '2px solid white' }}>{unread_messages}</span>}
-             </Link>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', borderRight: '2px solid rgba(0,0,0,0.05)', paddingRight: '20px' }}>
+             {/* Top: Notifications & Messages */}
+             <div style={{ display: 'flex', gap: '12px' }}>
+                 <button onClick={() => setIsNotificationsOpen(true)} style={{ background: 'white', border: '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', textDecoration: 'none', fontSize: '24px', transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)', width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+                     🔔
+                     {unread_notifications > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', fontSize: '12px', minWidth: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(239, 68, 68, 0.5)', fontWeight: 900, border: '2px solid white' }}>{unread_notifications}</span>}
+                 </button>
+                 <Link href="/messages" style={{ background: 'white', border: '1px solid rgba(0,0,0,0.08)', cursor: 'pointer', position: 'relative', textDecoration: 'none', fontSize: '24px', transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)', width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+                     ✉️
+                     {unread_messages > 0 && <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#3b82f6', color: 'white', fontSize: '12px', minWidth: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(59, 130, 246, 0.5)', fontWeight: 900, border: '2px solid white' }}>{unread_messages}</span>}
+                 </Link>
+             </div>
+             
+             {/* Bottom: Back & Forward */}
+             <div className="nav-group" style={{ display: 'flex', gap: '8px', margin: 0, padding: 0, border: 'none' }}>
+                <button onClick={() => router.forward()} className="nav-btn-glass" title="تقدم للأمام" style={{ width: '48px', height: '35px', borderRadius: '10px', fontSize: '20px' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <button onClick={() => router.back()} className="nav-btn-glass" title="رجوع للخلف" style={{ width: '48px', height: '35px', borderRadius: '10px', fontSize: '20px' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+             </div>
           </div>
 
-          <div className="imperial-trigger" ref={triggerRef} onClick={toggleMenu}>
-
-
+          <div className="imperial-trigger" ref={triggerRef} onClick={toggleMenu} style={{ marginLeft: '10px' }}>
             <div className="u-info-text">
               <span className="u-name">{userProfile?.full_name || 'جاري التحميل...'}</span>
               <span className="u-role">
