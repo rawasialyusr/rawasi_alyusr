@@ -70,12 +70,12 @@ export default function RawasiFilterSidebar({
     <>
       <style>{`
         .filter-sidebar {
-          position: fixed; top: 0; right: 0; bottom: 0; height: 100vh;
-          width: ${isMobile ? (isMobileOpen ? '280px' : '0px') : (isOpen ? '280px' : '65px')};
+          position: fixed; top: 0; right: ${isOpen ? '0' : '-280px'}; bottom: 0; height: 100vh;
+          width: 280px;
           background: rgba(15, 12, 10, 0.95);
           border-radius: 0;
           box-shadow: -5px 10px 30px rgba(0,0,0,0.4);
-          z-index: 1000; transition: width 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+          z-index: 1000; transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
           backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08);
           border-right: none; overflow: hidden;
           color: ${textColor};
@@ -83,11 +83,15 @@ export default function RawasiFilterSidebar({
           flex-direction: column;
         }
 
-        .vertical-label-container {
-          position: absolute; right: 0; top: 0; bottom: 0; width: 65px;
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer; opacity: ${isOpen ? 0 : 1}; transition: opacity 0.3s ease;
+        .filter-toggle-tab {
+          position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+          background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(20px);
+          color: #fff; padding: 25px 8px; border-radius: 16px 0 0 16px;
+          cursor: pointer; z-index: 998; display: flex; align-items: center; justify-content: center;
+          box-shadow: -5px 0 15px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+          border-right: none; transition: all 0.3s ease; opacity: ${isOpen ? 0 : 1}; pointer-events: ${isOpen ? 'none' : 'auto'};
         }
+        .filter-toggle-tab:hover { background: ${accentColor}; padding-right: 12px; }
 
         .vertical-text {
           writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 900;
@@ -96,8 +100,7 @@ export default function RawasiFilterSidebar({
         }
 
         .filter-content {
-          width: 280px; padding: 25px 20px; opacity: ${isOpen ? 1 : 0};
-          transform: translateX(${isOpen ? '0' : '40px'}); transition: all 0.4s ease;
+          width: 280px; padding: 25px 20px; opacity: 1;
           display: flex; flex-direction: column; height: 100%; overflow-y: auto; overflow-x: hidden;
         }
 
@@ -147,10 +150,8 @@ export default function RawasiFilterSidebar({
             top: 0 !important;
             height: 100vh !important;
           }
-          .vertical-label-container { display: none !important; }
+          .filter-toggle-tab { display: none !important; }
           .filter-content {
-            opacity: 1 !important;
-            transform: translateX(0) !important;
             width: 100% !important;
           }
           .pin-btn-sidebar { display: none !important; }
@@ -166,14 +167,10 @@ export default function RawasiFilterSidebar({
         <div onClick={() => setIsMobileOpen(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
       )}
       
-      <aside className="filter-sidebar no-print" onClick={() => { if (!isMobile && !isOpen) setIsPinned(true); }}>
-        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(!isPinned); }}>
-          <span style={{ fontSize: '16px', color: '#fff' }}>{isPinned ? '✕' : '⚙️'}</span>
+      <aside className="filter-sidebar no-print">
+        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(!isPinned); setIsMobileOpen(false); }}>
+          <span style={{ fontSize: '16px', color: '#fff' }}>✕</span>
         </button>
-
-        <div className="vertical-label-container">
-          <div className="vertical-text">رواسـي - الـتـحـكـم</div>
-        </div>
 
         <div className="filter-content">
           <div className="sidebar-logo-container">
@@ -253,6 +250,12 @@ export default function RawasiFilterSidebar({
           </div>
         </div>
       </aside>
+
+      <div className="filter-toggle-tab no-print" onClick={() => setIsPinned(true)}>
+          <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, letterSpacing: '2px', fontSize: '12px' }}>
+            ◀ الفلاتر والملخص
+          </span>
+      </div>
     </>
   );
 }

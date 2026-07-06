@@ -139,7 +139,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     };
   }, [isDragging]);
 
-  const currentMargin = mounted && isSidebarOpen ? '280px' : '65px';
+  const currentMargin = mounted && isSidebarOpen ? '280px' : '0px';
   let animationDelayCounter = 0;
 
   if (pathname === '/login') return <>{children}</>;
