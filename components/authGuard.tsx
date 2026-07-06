@@ -144,15 +144,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!isAuthorized) {
     return (
       <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', background: '#f8fafc', padding: '20px', textAlign: 'center' }}>
-        <div style={{ pointerEvents: 'none', marginBottom: '15px' }}>
-          <iframe 
-            src="https://tenor.com/embed/7072639765143073651" 
-            width="400" 
-            height="400" 
-            frameBorder="0" 
-            scrolling="no" 
-            style={{ borderRadius: '20px', boxShadow: '0 10px 25px rgba(220, 38, 38, 0.3)' }}
-          ></iframe>
+        <div style={{ marginBottom: '15px', fontSize: '60px' }}>
+          🛑
         </div>
         <h1 style={{ color: '#dc2626', fontWeight: 900, fontSize: '36px', margin: '0' }}>إنت إيه اللي جابك هنا؟! 🧐</h1>
         <button 
