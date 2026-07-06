@@ -8,6 +8,7 @@ import { useMaterialItemsLogic } from './material_items_logic';
 import { useConfirm } from '@/components/ConfirmContext';
 import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function MaterialCatalogPage() {
   const logic = useMaterialItemsLogic();
@@ -15,6 +16,31 @@ export default function MaterialCatalogPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // 🚀 اختصار الحفظ (Ctrl + Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (logic.isAddModalOpen && e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!logic.isSaving) logic.handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [logic.isAddModalOpen, logic.isSaving]);
+
+  // 🚀 اختصار إضافة جديد (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      if (!logic.isAddModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        logic.setEditingId(null); logic.setCurrentRecord({}); logic.setIsAddModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [logic.isAddModalOpen]);
+
   if (!mounted) return null;
 
   const tableColumns = [
@@ -66,7 +92,7 @@ export default function MaterialCatalogPage() {
 
   return (
     <div className="clean-page">
-      <MasterPage title="دليل أصناف الخامات الموحد" subtitle="تكويد وإدارة بنود التوريدات لمنع العشوائية في الفواتير">
+      <MasterPage icon="📦" title="دليل أصناف الخامات الموحد" subtitle="تكويد وإدارة بنود التوريدات لمنع العشوائية في الفواتير">
         
         <RawasiSidebarManager 
           summary={
@@ -89,7 +115,7 @@ export default function MaterialCatalogPage() {
         `}</style>
 
         {logic.isLoading ? (
-          <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري تحميل الكتالوج الموحد...</div>
+          <LoadingScreen message="جاري تحميل الكتالوج الموحد..." fullScreen={false} />
         ) : (
           <div className="glass-card" style={{ background: 'white', padding: '20px', borderRadius: '24px' }}>
             <RawasiSmartTable data={logic.items} columns={tableColumns} enablePagination={true} />

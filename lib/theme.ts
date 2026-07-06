@@ -8,9 +8,20 @@ export const THEME = {
   logo: '/RYC_Logo.png',   // مسار اللوجو
   success: '#10b981',      // الأخضر للنجاح
   danger: '#be123c',       // الأحمر للأخطاء
+  warning: '#f59e0b',      // الأصفر للتحذيرات
   ruby: '#e11d48',         // الأحمر الوردي للمهام والتنبيهات
+  coffeeMain: '#43342E',   // البني الغامق الأساسي
   coffeeDark: '#43342E',   // البني الغامق للنصوص
   goldAccent: '#C5A059',   // نفس الذهبي للتوحيد
+  white: '#FFFFFF',        // الأبيض
+  border: '#e2e8f0',       // لون الحدود الرمادي
+  sandLight: '#f8fafc',    // لون رملي فاتح للخلفيات
+  sandDark: '#e2e8f0',     // لون رملي داكن
+  cinematicGlass: {
+    background: 'rgba(15, 23, 42, 0.8)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+  },
 
   // 1️⃣ الألوان الأساسية (Brand Palette)
   brand: {

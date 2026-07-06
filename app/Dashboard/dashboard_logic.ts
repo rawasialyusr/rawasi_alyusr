@@ -36,22 +36,22 @@ export const useDashboardLogic = () => {
     queryFn: async () => {
       // 1. 📡 سحب كافة البيانات
       const [
-        expenses, invoices, labor, payments, receipts, advances, deductions, projects,
-        journalLines, accounts, subClaims, materialReceipts
+        expenses, invoices, labor, payments, receipts, projects,
+        journalLines, accounts, subClaims, materialReceipts, jobOrders, materialIssueLines
       ] = await Promise.all([
-        fetchAllForDashboard('expenses', 'total_price, is_posted, main_category'),
+        fetchAllForDashboard('expenses', 'total_price, is_posted, main_category, job_order_id'),
         fetchAllForDashboard('invoices', 'total_amount, status'), 
-        fetchAllForDashboard('labor_daily_logs', 'daily_wage, attendance_value, is_posted'),
+        fetchAllForDashboard('labor_daily_logs', 'daily_wage, attendance_value, is_posted, job_order_id'),
         fetchAllForDashboard('payment_vouchers', 'amount, is_posted, status'),
         fetchAllForDashboard('receipt_vouchers', 'amount, status'), 
-        fetchAllForDashboard('emp_adv', 'amount, is_posted'),
-        fetchAllForDashboard('emp_ded', 'amount, is_posted'),
         // 🚀 سحب كل المشاريع (عشان نجيب كل الحالات)
         fetchAllForDashboard('projects', 'id, status'),
         fetchAllForDashboard('journal_lines', 'debit, credit, account_id'),
         fetchAllForDashboard('accounts', 'id, account_type'),
         fetchAllForDashboard('sub_claims', 'net_amount, is_posted, status'),
-        fetchAllForDashboard('material_receipts', 'total_amount, is_posted, status')
+        fetchAllForDashboard('material_receipts', 'total_amount, is_posted, status'),
+        fetchAllForDashboard('job_orders', 'id, order_number, assigned_qty, unit_price'),
+        fetchAllForDashboard('material_issue_lines', 'total_price, job_order_id')
       ]);
 
       // --- 🏗️ تحليل حالات المشاريع والفلل ---
@@ -104,10 +104,10 @@ export const useDashboardLogic = () => {
           return item[postedKey] === postedVal || item[postedKey] === true; 
         }).length;
         const pending = data.length - posted;
-        return [ { name: 'مرحل/معتمد', value: posted }, { name: 'معلق/مسودة', value: pending } ];
+        return [ { name: 'معتمد', value: posted }, { name: 'معلق/مسودة', value: pending } ];
       };
 
-      const validStatuses = ['مُعتمد', 'مرحل', 'posted', 'معتمد'];
+      const validStatuses = ['معتمد', 'معتمد', 'posted', 'معتمد'];
 
       const postingCharts = {
         expenses: getPostingStats(expenses, 'is_posted', true),
@@ -115,8 +115,6 @@ export const useDashboardLogic = () => {
         labor: getPostingStats(labor, 'is_posted', true),
         payments: getPostingStats(payments, 'is_posted', true),
         receipts: getPostingStats(receipts, 'status', validStatuses),
-        advances: getPostingStats(advances, 'is_posted', true),
-        deductions: getPostingStats(deductions, 'is_posted', true),
         subClaims: getPostingStats(subClaims, 'is_posted', true),
         materialReceipts: getPostingStats(materialReceipts, 'is_posted', true) 
       };
@@ -132,7 +130,7 @@ export const useDashboardLogic = () => {
 
         if (count > 0) {
           alerts.push({ 
-            title: `يوجد (${count}) ${label} غير مرحل يحتاج مراجعة`, 
+            title: `يوجد (${count}) ${label} غير معتمد يحتاج مراجعة`, 
             type: count > 10 ? 'danger' : 'warning',
             route: route 
           });
@@ -146,7 +144,6 @@ export const useDashboardLogic = () => {
       checkPending(labor, 'يوميات عمالة', '/labor_logs', 'is_posted', true);
       checkPending(payments, 'سندات صرف', '/payment_vouchers', 'is_posted', true);
       checkPending(receipts, 'سندات قبض', '/receipt_vouchers', 'status', validStatuses); 
-      checkPending(advances, 'سلف موظفين', '/emp_adv', 'is_posted', true);
 
       // --- 💰 الحسابات التشغيلية الشاملة ---
       const totalExpensesOnly = expenses.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
@@ -173,6 +170,23 @@ export const useDashboardLogic = () => {
         .sort((a, b) => b.value - a.value)
         .slice(0, 5);
 
+      // --- 📊 أداء أوامر الشغل (الميزانية مقابل الفعلي) ---
+      const jobOrdersPerformance = jobOrders.map(jo => {
+         const budget = (Number(jo.assigned_qty) || 0) * (Number(jo.unit_price) || 0);
+         const joExpenses = expenses.filter(e => e.job_order_id === jo.id).reduce((sum, e) => sum + Number(e.total_price || 0), 0);
+         const joLabor = labor.filter(l => l.job_order_id === jo.id).reduce((sum, l) => sum + (Number(l.daily_wage || 0) * Number(l.attendance_value || 1)), 0);
+         const joSubClaims = subClaims.filter(s => s.job_order_id === jo.id || (Array.isArray(s.job_order_ids) && s.job_order_ids.includes(jo.id))).reduce((sum, s) => sum + Number(s.net_amount || 0), 0);
+         const joMaterials = materialIssueLines.filter(m => m.job_order_id === jo.id).reduce((sum, m) => sum + Number(m.total_price || 0), 0);
+
+         const actual = joExpenses + joLabor + joSubClaims + joMaterials;
+         return {
+            name: jo.order_number || 'بدون رقم',
+            budget,
+            actual,
+            variance: budget - actual
+         };
+      }).filter(jo => jo.budget > 0 || jo.actual > 0).sort((a, b) => b.budget - a.budget).slice(0, 10); // Show top 10
+
       return {
         totals: {
           totalExpenses, 
@@ -185,6 +199,7 @@ export const useDashboardLogic = () => {
         projectsStatusData, // 👈 تصدير حالات المشاريع
         postingCharts,
         expensesByCategory,
+        jobOrdersPerformance, // 👈 تصدير أداء أوامر الشغل
         alerts,
         cashFlowData: [
             { name: 'إجمالي التراكمي', income: totalInvoices, expense: totalExpenses + totalWages } 

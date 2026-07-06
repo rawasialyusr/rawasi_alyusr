@@ -32,9 +32,9 @@ export default function ReportsPage() {
 
   return (
     <div className="clean-page">
-      <MasterPage 
+      <MasterPage icon="📊" 
         title="مركز القيادة والتقارير الشاملة" 
-        subtitle="نظرة مالية وإدارية حية لجميع الموديولات (مرحل / معلق)"
+        subtitle="نظرة مالية وإدارية حية لجميع الموديولات (معتمد / معلق)"
       >
         <RawasiSidebarManager 
           actions={sidebarActions}
@@ -125,10 +125,11 @@ export default function ReportsPage() {
               color="#8b5cf6" 
             />
 
-            {/* بطاقة خاصة لشؤون الموظفين (لا تتبع نفس النمط مرحل/معلق) */}
-            <div style={{ background: 'rgba(255,255,255,0.6)', backdropFilter: `blur(${THEME.glass.blur})`, padding: '20px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.4)', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h3 style={{ margin: 0, fontSize: '15px', color: '#1e293b', fontWeight: 900 }}>شؤون الموظفين (مرحل فقط)</h3>
+            {/* بطاقة خاصة لشؤون الموظفين (لا تتبع نفس النمط معتمد/معلق) */}
+            <div className="premium-card module-card">
+              <div className="module-header">
+                <div className="module-icon purple">👥</div>
+                <h3 style={{ margin: 0, fontSize: '15px', color: '#1e293b', fontWeight: 900 }}>شؤون الموظفين (معتمد فقط)</h3>
                 <span style={{ fontSize: '24px' }}>👥</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', fontWeight: 800 }}>
@@ -170,7 +171,7 @@ function ReportCard({ title, data, icon, color }: { title: string, data: any, ic
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', borderTop: '1px dashed rgba(0,0,0,0.1)', paddingTop: '15px', zIndex: 2, position: 'relative' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ color: '#94a3b8', fontSize: '10px' }}>مُرحل ومعتمد</span>
+          <span style={{ color: '#94a3b8', fontSize: '10px' }}>معتمد ومعتمد</span>
           <span style={{ color: '#059669', fontWeight: 900 }}>{formatCurrency(data.posted)}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>

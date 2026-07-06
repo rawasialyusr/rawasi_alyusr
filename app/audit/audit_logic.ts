@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/lib/toast-context';
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function useAdvancedAuditLogic() {
     const { showToast } = useToast();
@@ -17,9 +18,7 @@ export function useAdvancedAuditLogic() {
     const { data: errors = [], isLoading, refetch } = useQuery({
         queryKey: ['advanced_audit_errors'],
         queryFn: async () => {
-            const { data, error } = await supabase.from('vw_advanced_audit').select('*');
-            if (error) throw error;
-            return data || [];
+            return await fetchAllSupabaseData(supabase, 'vw_advanced_audit') || [];
         }
     });
 

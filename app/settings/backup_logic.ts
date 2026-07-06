@@ -11,17 +11,16 @@ export const TABLE_SCHEMAS: Record<string, string[]> = {
   "boq_budget": ["id", "project_id", "parent_id", "item_type", "work_item", "contract_quantity", "unit", "unit_contract_price", "estimated_labor_cost", "estimated_operational_cost", "main_category", "sub_category", "estimated_expenses_cost"],
   "boq_items": ["id", "item_code", "main_category", "sub_category", "item_name", "unit_of_measure", "created_at"],
   "contractor_assignments": ["id", "contractor_id", "project_id", "boq_item_id", "assigned_qty", "unit_price", "status"],
-  "emp_adv": ["date", "emp_name", "amount", "Desc", "notes", "partner_id", "is_posted", "id", "created_by", "target_month", "account_id", "is_deleted"],
-  "emp_ded": ["date", "emp_name", "amount", "reason", "notes", "id", "partner_id", "is_posted", "created_by", "target_month", "is_deleted"],
   "expenses": ["id", "exp_date", "sub_contractor", "payee_id", "creditor_account", "description", "quantity", "unit_price", "vat_amount", "discount_amount", "discount_account", "paid_amount", "payment_method", "payment_account", "notes", "is_posted", "created_at", "site_ref", "payee_name", "project_id", "employee_name", "invoice_image", "lines_data", "is_deducted_in_claim", "claim_id", "is_auto_distributed", "total_price", "main_category"],
-  "housing": ["emp_name", "deduction_month", "amount", "service_type", "notes"],
-  "housing_services": ["id", "date", "emp_name", "amount", "reason", "description", "notes", "created_at"],
   "inventory": ["id", "item_name", "unit", "current_stock", "avg_price"],
   "invoices": ["id", "invoice_number", "date", "partner_id", "client_name", "project_ids", "description", "materials_discount", "taxable_amount", "tax_amount", "guarantee_percent", "guarantee_amount", "total_amount", "debit_account_id", "credit_account_id", "materials_acc_id", "guarantee_acc_id", "tax_acc_id", "skip_zatca", "status", "created_at", "due_in_days", "due_date", "paid_amount", "lines_data"],
+  "job_orders": ["id", "order_number", "project_id", "boq_budget_id", "executor_type", "contractor_id", "assigned_qty", "unit_price", "status", "start_date", "end_date", "notes", "created_at"],
   "journal_errors": ["id", "error_type", "description", "is_fixed", "created_at"],
   "journal_headers": ["id", "entry_date", "description", "created_at", "status", "reference_id", "v_type"],
   "journal_lines": ["id", "header_id", "account_id", "partner_id", "item_name", "quantity", "unit_price", "debit", "credit", "notes", "project_id", "debit_account_id", "tax_amount", "tax_rate", "created_at"],
   "labor_daily_logs": ["id", "work_date", "worker_name", "site_ref", "work_item", "production_desc", "unit", "skill_level", "daily_wage", "attendance_value", "sub_contractor", "notes", "project_id", "created_at", "worker_partner_id", "sub_contractor_id", "is_posted", "work_item_id", "tareeha", "productivity", "completion_percentage", "credit_account_id", "debit_account_id"],
+  "material_issue_lines": ["id", "issue_id", "item_name", "quantity", "unit", "unit_price", "total_price", "boq_id", "boq_item_id", "item_id", "job_order_id", "is_deducted_from_contractor", "claim_id"],
+  "material_issues": ["id", "issue_number", "project_id", "subcontractor_id", "issue_date", "issue_type", "total_amount", "notes", "jv_id", "is_posted", "created_at", "claim_id", "contractor_text_name"],
   "material_receipt_lines": ["id", "receipt_id", "item_name", "quantity", "unit", "unit_price", "total_price", "boq_id", "created_at"],
   "material_receipts": ["id", "receipt_number", "project_id", "supplier_id", "account_id", "receipt_date", "total_amount", "status", "attachments", "is_posted", "notes", "created_by", "created_at"],
   "notifications": ["id", "user_id", "type", "message", "is_read", "created_at"],
@@ -33,7 +32,8 @@ export const TABLE_SCHEMAS: Record<string, string[]> = {
   "project_work_structure": ["id", "project_id", "technical_item", "stage_name", "status", "created_at"],
   "projects": ["id", "project_code", "Property", "client_name", "contract_value", "estimated_budget", "down_payment", "start_date", "end_date", "actual_completion_date", "location_address", "location_url", "project_manager", "status", "notes", "created_at", "project_name", "client_id", "current_stage"],
   "receipt_vouchers": ["id", "date", "amount", "payment_method", "notes", "partner_id", "invoice_id", "created_at", "updated_at", "receipt_number", "status", "safe_bank_acc_id", "partner_acc_id", "project_ids", "reference_number", "attachment_url"],
-  "sub_claims": ["id", "claim_number", "contractor_id", "project_id", "date", "total_amount", "retention_amount", "net_amount", "status", "is_posted", "created_at"],
+  "sub_claims": ["id", "claim_number", "contractor_id", "project_id", "date", "total_amount", "retention_amount", "net_amount", "status", "is_posted", "created_at", "jv_header_id", "deductions_amount", "advance_payment", "materials_deduction", "other_deductions", "jv_id", "paid_amount", "payment_period_days", "job_order_id", "project_ids", "project_names_text"],
+  "sys_financial_reports": ["report_name", "report_data", "updated_at"],
   "system_settings": ["id", "theme_config", "privacy_settings", "notifications", "updated_at"],
   "user_requests": ["id", "user_id", "type", "category", "subject", "details", "status", "admin_note", "created_at"],
   "user_tasks": ["id", "user_id", "title", "description", "status", "priority", "created_at"],
@@ -47,7 +47,7 @@ export const useBackupLogic = () => {
     // 🟢 تصدير لإكسيل (بيانات حقيقية) مع معالجة حقول الـ JSONB
     const backupToExcel = async (selectedTables: string[]) => {
         try {
-            showToast('⏳ جاري تجميع البيانات وتحضير ملف الإكسل...', 'loading');
+            showToast('⏳ جاري تجميع البيانات وتحضير ملف الإكسل...', 'info');
             const workbook = XLSX.utils.book_new();
             
             for (const table of selectedTables) {
@@ -109,7 +109,7 @@ export const useBackupLogic = () => {
     // 🔵 تصدير لـ JSON
     const backupToJSON = async (selectedTables: string[]) => {
         try {
-            showToast('⏳ جاري تحضير ملف JSON...', 'loading');
+            showToast('⏳ جاري تحضير ملف JSON...', 'info');
             const fullSnapshot: any = { metadata: { date: new Date().toISOString() }, data: {} };
             
             for (const table of selectedTables) {
@@ -137,7 +137,7 @@ export const useBackupLogic = () => {
     // 📄 تحميل نموذج فارغ (Template) - يدعم الإدخال الذكي والتطابق مع الداتابيز
     const downloadTemplate = (tableName: string, displayName: string) => {
         try {
-            showToast(`⏳ جاري تحضير قالب ${displayName}...`, 'loading');
+            showToast(`⏳ جاري تحضير قالب ${displayName}...`, 'info');
             let templateData: any[] = [];
             let wscols: any[] = [];
 

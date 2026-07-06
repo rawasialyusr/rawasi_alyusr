@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { useToast } from '@/lib/toast-context'; 
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function useMaterialItemsLogic() {
   const { showToast } = useToast();
@@ -24,10 +25,7 @@ export function useMaterialItemsLogic() {
 
   const fetchData = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('material_items')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const data = await fetchAllSupabaseData(supabase, 'material_items', '*', 'created_at', false);
     if (data) setItems(data);
     setIsLoading(false);
   };

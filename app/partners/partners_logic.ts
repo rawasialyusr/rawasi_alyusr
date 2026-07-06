@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function usePartnersLogic() {
   // 1️⃣ الحالات (States) الأساسية
@@ -39,15 +40,10 @@ export function usePartnersLogic() {
   const fetchPartners = async () => {
     setIsLoading(true);
     // 🚀 تحديث الاستعلام لسحب اسم الحساب من جدول accounts
-    const { data, error } = await supabase
-      .from('partners')
-      .select('*, account:accounts(name)')
-      .order('code', { ascending: true });
-    
-    if (error) {
-      console.error('Error fetching partners:', error);
-    } else {
-      const formattedData = data.map(p => ({
+    try {
+      const data = await fetchAllSupabaseData(supabase, 'partners', '*, account:accounts(name)', 'code', true);
+      
+      const formattedData = data.map((p: any) => ({
         id: p.id,
         code: p.code,
         name: p.name,
@@ -62,6 +58,8 @@ export function usePartnersLogic() {
         account_name: p.account?.name || 'غير مربوط' // 🚀
       }));
       setPartners(formattedData);
+    } catch (error) {
+      console.error('Error fetching partners:', error);
     }
     setIsLoading(false);
   };

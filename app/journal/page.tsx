@@ -11,6 +11,7 @@ import SmartCombo from '@/components/SmartCombo';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
+import LoadingScreen from '@/components/LoadingScreen';
 
 // ==========================================
 // 🧠 العقل المدبر (Logic) - متوافق مع قوانين Supabase
@@ -26,6 +27,8 @@ function useJournalLogic() {
     const [dateTo, setDateTo] = useState('');
     const [filterAccountId, setFilterAccountId] = useState<string | null>(null);
     const [filterPartnerId, setFilterPartnerId] = useState<string | null>(null);
+    const [filterProjectId, setFilterProjectId] = useState<string | null>(null);
+    const [filterVType, setFilterVType] = useState<string>('الكل');
     const [filterStatus, setFilterStatus] = useState('الكل'); 
     
     // 🟢 ترقيم الصفحات (Pagination) اليدوي للجدول
@@ -35,13 +38,14 @@ function useJournalLogic() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [globalSearch, dateFrom, dateTo, filterAccountId, filterPartnerId, filterStatus, rowsPerPage]);
+    }, [globalSearch, dateFrom, dateTo, filterAccountId, filterPartnerId, filterProjectId, filterVType, filterStatus, rowsPerPage]);
 
     // 🟢 السحب من السيرفر (بيسحب الداتا 1000 بـ 1000 عشان Supabase ميقفلش الطلب)
     const { data: journalMaster = [], isLoading, isError } = useQuery({
-        queryKey: ['journal_master_view', dateFrom, dateTo, filterAccountId, filterPartnerId, filterStatus], 
+        queryKey: ['journal_master_view', dateFrom, dateTo, filterAccountId, filterPartnerId, filterProjectId, filterVType, filterStatus], 
         queryFn: async () => {
             const allData: any[] = [];
+            const seenIds = new Set<string>(); // 🛡️ حماية من التكرار
             const step = 1000; // 🟢 الرقم ده ثابت عشان Supabase بيرفض يبعت أكتر منه في المرة
             let from = 0; 
             let hasMore = true;
@@ -63,17 +67,25 @@ function useJournalLogic() {
                 if (filterAccountId) query = query.eq('account_id', filterAccountId);
                 if (filterPartnerId) query = query.eq('partner_id', filterPartnerId);
                 
-                if (filterStatus === 'مرحل') query = query.eq('header_status', 'posted');
+                if (filterStatus === 'معتمد') query = query.eq('header_status', 'معتمد');
                 if (filterStatus === 'مسودة') query = query.eq('header_status', 'draft');
+                if (filterProjectId) query = query.eq('project_id', filterProjectId);
+                if (filterVType && filterVType !== 'الكل') query = query.eq('v_type', filterVType);
 
                 const { data, error } = await query;
                 if (error) throw error;
 
                 if (data && data.length > 0) {
-                    allData.push(...data); 
+                    // 🛡️ إضافة فقط الأسطر الغير مكررة
+                    for (const row of data) {
+                        const id = String(row.line_id);
+                        if (!seenIds.has(id)) {
+                            seenIds.add(id);
+                            allData.push(row);
+                        }
+                    }
                     from += step;
                     
-                    // لو رجع رقم أقل من 1000 يبقى دي آخر صفحة في الداتابيز
                     if (data.length < step) {
                         hasMore = false; 
                     }
@@ -141,8 +153,8 @@ function useJournalLogic() {
         onError: (err: any) => showToast(`فشل في الحذف: ${err.message}`, 'error')
     });
 
-    // كاشف الفلترة النشطة (لتغيير مسمى كارت الاتزان تلقائياً بدلاً من إرباك المستخدم)
-    const isFiltered = !!(filterAccountId || filterPartnerId);
+    // كاشف الفلترة النشطة
+    const isFiltered = !!(filterAccountId || filterPartnerId || filterProjectId || dateFrom || dateTo || (filterStatus !== 'الكل') || (filterVType !== 'الكل'));
 
     return {
         isLoading, isError,
@@ -150,6 +162,8 @@ function useJournalLogic() {
         dateFrom, setDateFrom, dateTo, setDateTo,
         filterAccountId, setFilterAccountId,
         filterPartnerId, setFilterPartnerId,
+        filterProjectId, setFilterProjectId,
+        filterVType, setFilterVType,
         filterStatus, setFilterStatus,
         rowsPerPage, setRowsPerPage, 
         currentPage, setCurrentPage, totalPages,
@@ -240,8 +254,8 @@ export default function JournalPage() {
       accessor: 'header_status',
       render: (row: any) => {
         if (!row) return null;
-        return row.header_status === 'posted' ? 
-          <span className="badge-glass green">مُرحل ✅</span> : 
+        return row.header_status === 'معتمد' ? 
+          <span className="badge-glass green">معتمد ✅</span> : 
           <span className="badge-glass yellow">مسودة ⏳</span>;
       }
     }
@@ -262,7 +276,7 @@ export default function JournalPage() {
 
   return (
     <div className="clean-page">
-      <MasterPage title="دفتر اليومية الشامل 📓" subtitle="استعلام شامل وسريع جداً مع تقسيم يدوي للصفحات لمنع التهنيج.">
+      <MasterPage icon="📓" title="دفتر اليومية الشامل 📓" subtitle="استعلام شامل وسريع جداً مع تقسيم يدوي للصفحات لمنع التهنيج.">
           
           <RawasiSidebarManager 
             summary={
@@ -337,10 +351,35 @@ export default function JournalPage() {
                     />
                 </div>
 
+                <div style={{ zIndex: 80 }}>
+                    <SmartCombo 
+                        label="البحث باسم المشروع / الفيلا" 
+                        table="projects"
+                        displayCol="name"
+                        initialDisplay="" 
+                        onSelect={(v:any) => logic.setFilterProjectId(v?.id || null)} 
+                    />
+                </div>
+
+                <div>
+                  <label className="filter-label">تصفية حسب نوع القيد</label>
+                  <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                    {['الكل', 'يدوي', 'مصروف', 'إيراد', 'صرف', 'قبض', 'توريد', 'مستخلص'].map(type => (
+                      <button 
+                        key={type} 
+                        onClick={() => logic.setFilterVType(type)} 
+                        className={`filter-btn ${logic.filterVType === type ? 'active' : ''}`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <label className="filter-label">تصفية حسب الحالة</label>
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    {['الكل', 'مرحل', 'مسودة'].map(type => (
+                    {['الكل', 'معتمد', 'مسودة'].map(type => (
                       <button 
                         key={type} 
                         onClick={() => logic.setFilterStatus(type)} 
@@ -355,7 +394,7 @@ export default function JournalPage() {
               </div>
             }
             onSearch={(val) => logic.setGlobalSearch(val)} 
-            watchDeps={[logic.selectedIds.length, logic.totals.balance, logic.filterStatus, logic.dateFrom, logic.dateTo, logic.filterAccountId, logic.filterPartnerId, logic.rowsPerPage, logic.globalSearch]}
+            watchDeps={[logic.selectedIds.length, logic.totals.balance, logic.filterStatus, logic.filterVType, logic.dateFrom, logic.dateTo, logic.filterAccountId, logic.filterPartnerId, logic.filterProjectId, logic.rowsPerPage, logic.globalSearch]}
           />
 
           <style>{`
@@ -387,7 +426,7 @@ export default function JournalPage() {
           `}</style>
 
           {(logic.isLoading || permsLoading) ? (
-            <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري سحب البيانات (دفعات 1000 سطر)...</div>
+            <LoadingScreen message="جاري سحب البيانات (دفعات 1000 سطر)..." fullScreen={false} />
           ) : logic.isError ? (
             <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#ef4444' }}>
               ❌ حدث خطأ في الاتصال بقاعدة البيانات.

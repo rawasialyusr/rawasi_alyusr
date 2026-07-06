@@ -10,6 +10,7 @@ import SmartCombo from '@/components/SmartCombo';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function ViolationsPage() {
   const logic = useViolationsLogic();
@@ -101,7 +102,7 @@ export default function ViolationsPage() {
       header: 'الحالة',
       render: (row: any) => {
         if (!row) return null;
-        return row.is_posted ? <span className="badge-glass green">مُرحل ✅</span> : <span className="badge-glass yellow">معلق ⏳</span>;
+        return row.is_posted ? <span className="badge-glass green">معتمد ✅</span> : <span className="badge-glass yellow">معلق ⏳</span>;
       }
     },
     {
@@ -171,7 +172,7 @@ export default function ViolationsPage() {
   return (
     <>
       <div className="clean-page">
-        <MasterPage title="سجل الاستقطاعات والجزاءات ⚠️" subtitle="تسجيل الغرامات الإدارية، واستقطاعات الإعاشة وتوجيهها للرواتب.">
+        <MasterPage icon="⚠️" title="سجل الاستقطاعات والجزاءات ⚠️" subtitle="تسجيل الغرامات الإدارية، واستقطاعات الإعاشة وتوجيهها للرواتب.">
             <RawasiSidebarManager 
               summary={
                 <div className="summary-glass-card">
@@ -186,7 +187,7 @@ export default function ViolationsPage() {
                   <div>
                     <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>الحالة:</label>
                     <div style={{ display: 'flex', gap: '5px' }}>
-                      {['الكل', 'مرحل', 'معلق'].map(type => (
+                      {['الكل', 'معتمد', 'معلق'].map(type => (
                         <button key={type} onClick={() => { logic.actions.setFilterStatus(type); setCurrentPage(1); }} className={`filter-btn ${logic.state.filterStatus === type ? 'active' : ''}`}>{type}</button>
                       ))}
                     </div>
@@ -224,7 +225,7 @@ export default function ViolationsPage() {
             `}</style>
 
             {(logic.isLoading || permsLoading) ? (
-              <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
+              <LoadingScreen message="جاري المزامنة..." fullScreen={false} />
             ) : (
               <RawasiSmartTable data={logic.data} columns={columns} enablePagination={true} currentPage={currentPage} totalItems={logic.data.length} rowsPerPage={rowsPerPage} onPageChange={setCurrentPage} />
             )}

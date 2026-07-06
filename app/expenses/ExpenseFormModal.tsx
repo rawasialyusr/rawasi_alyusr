@@ -5,6 +5,7 @@ import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo';
 import { formatCurrency } from '@/lib/helpers';
 import { useToast } from '@/lib/toast-context'; 
+import { supabase } from '@/lib/supabase'; 
 
 // 🚀 مصفوفة التصنيفات
 const EXPENSE_CATEGORIES = [
@@ -20,7 +21,7 @@ const EXPENSE_CATEGORIES = [
     "مواد إنشائية"
 ];
 
-// 🚀 مصفوفة أنواع الاستحقاق (آجل للمصروفات العادية، وتسوية لخصومات المقاولين)
+// 🚀 مصفوفة أنواع الاستحقاق
 const PAYMENT_METHODS = [
     "آجل",
     "تسوية داخلية"
@@ -39,20 +40,57 @@ export default function ExpenseFormModal({
     const { showToast } = useToast();
     const [mounted, setMounted] = useState(false);
     
-    // 📸 حالات ومراجع الكاميرا والمرفقات
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    
+    const [jobOrders, setJobOrders] = useState<any[]>([]);
+    const [isLoadingJobOrders, setIsLoadingJobOrders] = useState(false);
         
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // =========================================================================
-    // 📷 دوال التقاط الصور والمرفقات
-    // =========================================================================
+    // 🚀 كود ذكي لجلب أوامر التشغيل المتاحة شاملة بيانات البند من جدول المقايسة (boq_budget)
+    useEffect(() => {
+        const fetchJobOrders = async () => {
+            if (record?.project_id && record?.payee_id) {
+                setIsLoadingJobOrders(true);
+                try {
+                    const { data, error } = await supabase
+                        .from('job_orders')
+                        .select('*, boq_budget(*)') // 👈 الجلب المزدوج (Join) لضمان الحصول على البند
+                        .eq('project_id', record.project_id)
+                        .eq('contractor_id', record.payee_id)
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+                    
+                    if (data) {
+                        setJobOrders(data);
+                        if (data.length === 1) {
+                            setRecord((prev: any) => ({ ...prev, job_order_id: data[0].id }));
+                        } else {
+                            const isStillValid = data.some(jo => jo.id === record?.job_order_id);
+                            if (!isStillValid) setRecord((prev: any) => ({ ...prev, job_order_id: null }));
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error fetching job orders:", err);
+                } finally {
+                    setIsLoadingJobOrders(false);
+                }
+            } else {
+                setJobOrders([]);
+            }
+        };
+
+        fetchJobOrders();
+    }, [record?.project_id, record?.payee_id]);
+
+    // 📷 دوال التقاط الصور
     const startCamera = async () => {
         setIsCameraOpen(true);
         try {
@@ -84,10 +122,7 @@ export default function ExpenseFormModal({
         setIsCameraOpen(false);
     };
 
-    // =========================================================================
-    // 🧮 الحسابات اللحظية والمعالجة الآمنة للـ JSON
-    // =========================================================================
-    
+    // 🧮 الحسابات اللحظية
     let safeAddedLines: any[] = [];
     if (record?.lines_data) {
         if (typeof record.lines_data === 'string') {
@@ -111,12 +146,8 @@ export default function ExpenseFormModal({
     const finalDiscount = currentDiscount + linesDiscount;
     const finalTotal = finalSubtotal + finalVat - finalDiscount;
 
-    // حالة ديناميكية لمعرفة إذا كانت العملية تسوية لضبط المسميات
     const isSettlement = record?.payment_method === 'تسوية داخلية';
 
-    // =========================================================================
-    // 🚀 دوال إضافة وحذف الأصناف من الجدول
-    // =========================================================================
     const handleAddStatement = (e: React.MouseEvent) => {
         e.preventDefault();
         if (!record.description) return showToast("يرجى إدخال اسم الصنف أو البيان أولاً ⚠️", "warning");
@@ -144,22 +175,14 @@ export default function ExpenseFormModal({
         setRecord({ ...record, lines_data: newLines });
     };
 
-    // =========================================================================
     // 🛡️ معترض الحفظ النهائي
-    // =========================================================================
     const handleValidateAndSave = () => {
         if (!record.exp_date) return showToast("تاريخ المصروف مطلوب ⚠️", "warning");
         if (!record.main_category) return showToast("يرجى اختيار التصنيف الرئيسي للمصروف ⚠️", "warning"); 
         if (!record.creditor_account) return showToast("حساب المصروف المدين مطلوب ⚠️", "warning");
         
-        // 🚀 تحديث الذكاء المحاسبي في الـ Validation لضمان اختيار الحساب الموازي ديماً
         if (!record.payment_account) {
-            return showToast(
-                isSettlement 
-                    ? "يرجى تحديد حساب الإيراد / التسوية (الدائن) ⚠️" 
-                    : "يرجى تحديد حساب الالتزام / المقاول (الدائن) ⚠️", 
-                "warning"
-            );
+            return showToast("يرجى تحديد الحساب الدائن ⚠️", "warning");
         }
         
         let finalLinesToSave = safeAddedLines;
@@ -178,6 +201,13 @@ export default function ExpenseFormModal({
             return showToast("يرجى إدخال صنف أو بيان واحد على الأقل للمصروف ⚠️", "error");
         }
 
+        const isSubContractorExpense = record.creditor_account === 'التزام مقاولي الباطن' || !!record.payee_id;
+
+        // Require Job Order for ALL expenses to link with the budget properly
+        if (!record.job_order_id && record.project_id) {
+            return showToast("يرجى تحديد أمر التشغيل لكي يُخصم المصروف من الميزانية بشكل صحيح ⚠️", "error");
+        }
+
         onSave({
             ...record,
             lines_data: finalLinesToSave, 
@@ -185,7 +215,11 @@ export default function ExpenseFormModal({
             unit_price: finalSubtotal,
             vat_amount: finalVat,
             discount_amount: finalDiscount,
-            payment_method: record.payment_method || 'آجل' 
+            payment_method: record.payment_method || 'آجل',
+            project_id: record.project_id || null,
+            payee_id: record.payee_id || null,
+            job_order_id: record.job_order_id || null,
+            is_deducted_from_contractor: isSubContractorExpense
         });
     };
 
@@ -208,7 +242,6 @@ export default function ExpenseFormModal({
 
             <div className="cinematic-scroll glass-modal-container" onClick={(e) => e.stopPropagation()} style={{ width: '1000px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.9)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.4)', overflowY: 'auto', direction: 'rtl' }}>
                 
-                {/* 📝 الهيدر */}
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:`2px solid ${THEME.accent}50`, paddingBottom:'15px'}}>
                     <h2 style={{ color: THEME.primary, fontWeight: 900, margin: 0, fontSize: '26px' }}>📝 {record?.id ? 'تعديل المصروف' : 'إنشاء مصروف جديد'}</h2>
                     <div style={{ textAlign: 'left' }}>
@@ -223,39 +256,127 @@ export default function ExpenseFormModal({
                         <input type="date" className="glass-input-field" value={record?.exp_date || ''} onChange={e => setRecord({...record, exp_date: e.target.value})} />
                     </div>
                     <div style={{ gridColumn: 'span 2', zIndex: 90, position: 'relative' }}>
-                        <SmartCombo label="🏢 المشروع / العقار" icon="🏢" table="projects" displayCol="Property" initialDisplay={record?.site_ref} onSelect={(val:any) => setRecord({...record, site_ref: val.Property})} />
+                        <SmartCombo 
+                            label="🏢 المشروع / العقار" 
+                            icon="🏢" 
+                            options={projects || []} 
+                            table="projects" 
+                            displayCol="Property" 
+                            initialDisplay={record?.site_ref} 
+                            onSelect={(val: any) => {
+                                let finalSiteRef = typeof val === 'object' && val !== null ? val.Property : val;
+                                let finalProjectId = typeof val === 'object' && val !== null ? val.id : null;
+
+                                if (!finalProjectId && finalSiteRef && projects) {
+                                    const matchedProject = projects.find((p: any) => p.Property === finalSiteRef);
+                                    if (matchedProject) {
+                                        finalProjectId = matchedProject.id;
+                                    }
+                                }
+
+                                setRecord((prev: any) => ({
+                                    ...prev, 
+                                    site_ref: finalSiteRef,
+                                    project_id: finalProjectId,
+                                    job_order_id: null
+                                }));
+                            }} 
+                        />
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px', marginBottom: '25px' }}>
                     <div style={{ zIndex: 80, position: 'relative' }}>
-                        <SmartCombo label="👷 المقاول " icon="👤" table="partners" displayCol="name" initialDisplay={record?.sub_contractor} onSelect={(val:any) => setRecord({...record, sub_contractor: val.name})} allowAddNew={true} />
+                        <SmartCombo 
+                            label="👷 المقاول " 
+                            icon="👤" 
+                            table="partners" 
+                            displayCol="name" 
+                            initialDisplay={record?.sub_contractor} 
+                            onSelect={(val:any) => {
+                                let finalName = typeof val === 'object' && val !== null ? val.name : val;
+                                let finalPayeeId = typeof val === 'object' && val !== null ? val.id : null;
+
+                                setRecord((prev: any) => ({
+                                    ...prev, 
+                                    sub_contractor: finalName,
+                                    payee_id: finalPayeeId,
+                                    job_order_id: null
+                                }));
+                            }} 
+                            allowAddNew={true} 
+                        />
                     </div>
                     <div style={{ zIndex: 70, position: 'relative' }}>
-                        <SmartCombo label="👤 المستفيد المباشر" icon="👤" table="partners" displayCol="name" initialDisplay={record?.payee_name} onSelect={(val:any) => setRecord({...record, payee_name: val.name})} />
+                        <SmartCombo label="👤 المستفيد المباشر" icon="👤" table="partners" displayCol="name" initialDisplay={record?.payee_name} onSelect={(val:any) => setRecord({...record, payee_name: typeof val === 'object' && val !== null ? val.name : val})} />
+                    </div>
+                    
+                    <div style={{ zIndex: 65, position: 'relative' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>🔢 أمر التشغيل / الشغل *</label>
+                        <select 
+                            className="glass-input-field"
+                            value={record?.job_order_id || ''}
+                            onChange={e => setRecord({ ...record, job_order_id: e.target.value || null })}
+                            style={{ 
+                                cursor: (record?.project_id && record?.payee_id) ? 'pointer' : 'not-allowed', 
+                                height: '47px',
+                                opacity: (record?.project_id && record?.payee_id) ? 1 : 0.6,
+                                appearance: 'none',
+                                paddingRight: '30px',
+                                textOverflow: 'ellipsis',
+                                overflow: 'hidden',
+                                whiteSpace: 'nowrap'
+                            }}
+                            disabled={!record?.project_id || !record?.payee_id || isLoadingJobOrders}
+                        >
+                            <option value="">
+                                {(!record?.project_id || !record?.payee_id) 
+                                    ? '⚠️ اختر العقار والمقاول أولاً' 
+                                    : isLoadingJobOrders 
+                                        ? '⏳ جاري التحميل...' 
+                                        : jobOrders.length === 0 
+                                            ? '❌ لا توجد أوامر شغل' 
+                                            : '-- اختر أمر الشغل --'}
+                            </option>
+                            
+                            {/* 🚀 فك البيانات المدمجة وإظهار الاسم الحقيقي */}
+                            {jobOrders.map((jo) => {
+                                const boq = Array.isArray(jo.boq_budget) ? jo.boq_budget[0] : (jo.boq_budget || {});
+                                const itemName = boq?.item_name || boq?.description || boq?.work_item || jo.notes || '';
+                                const fullText = itemName ? `أمر رقم (${jo.order_number}) - ${itemName}` : `أمر رقم (${jo.order_number})`;
+                                
+                                return (
+                                    <option key={jo.id} value={jo.id} title={fullText}>
+                                        {fullText}
+                                    </option>
+                                );
+                            })}
+                        </select>
+                        <div style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                            {isLoadingJobOrders ? <span style={{ fontSize: '12px', color: THEME.accent }}>⏳</span> : <span style={{ fontSize: '12px', color: THEME.primary }}>▼</span>}
+                        </div>
                     </div>
                 </div>
 
-                <div style={{ marginBottom: '25px', zIndex: 65, position: 'relative' }}>
+                <div style={{ marginBottom: '25px', zIndex: 60, position: 'relative' }}>
                     <SmartCombo 
                         label="📁 التصنيف الرئيسي *" 
                         icon="📁" 
                         options={EXPENSE_CATEGORIES} 
                         initialDisplay={record?.main_category} 
-                        onSelect={(val:any) => setRecord({...record, main_category: typeof val === 'object' ? val.name : val})} 
+                        onSelect={(val:any) => setRecord({...record, main_category: typeof val === 'object' && val !== null ? val.name : val})} 
                         strict={true} 
                     />
                 </div>
 
-                {/* 🚀 قسم الحسابات التفاعلي والذكي للـ UX المحاسبي النظيف */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px', background: isSettlement ? 'rgba(16, 185, 129, 0.05)' : '#f8fafc', padding: '25px', borderRadius: '20px', marginBottom: '25px', border: isSettlement ? '1px dashed #10b981' : '1px solid #e2e8f0', transition: 'all 0.3s' }}>
-                    <div style={{ zIndex: 60, position: 'relative' }}>
+                    <div style={{ zIndex: 55, position: 'relative' }}>
                         <SmartCombo 
                             label="💳 طريقة القيد *" 
                             icon="⚙️" 
                             options={PAYMENT_METHODS} 
                             initialDisplay={record?.payment_method || 'آجل'} 
-                            onSelect={(val:any) => setRecord({...record, payment_method: typeof val === 'object' ? val.name : val})} 
+                            onSelect={(val:any) => setRecord({...record, payment_method: typeof val === 'object' && val !== null ? val.name : val})} 
                             strict={true} 
                         />
                     </div>
@@ -266,30 +387,28 @@ export default function ExpenseFormModal({
                             table="accounts" 
                             displayCol="name" 
                             initialDisplay={record?.creditor_account} 
-                            onSelect={(val:any) => setRecord({...record, creditor_account: val.name})} 
+                            onSelect={(val:any) => setRecord({...record, creditor_account: typeof val === 'object' && val !== null ? val.name : val})} 
                             strict={true} 
                         />
                     </div>
-                    {/* 🚀 التحديث الجوهري: المسميات والإيموجيات بتتغير ديناميكياً لمنع المحاسب من الخطأ واختيار الخزنة في الآجل */}
                     <div style={{ zIndex: 45, position: 'relative' }}>
                         <SmartCombo 
-                            label={isSettlement ? "📈 حساب الإيراد / التسوية (الدائن) *" : "🤝 حساب الالتزام / المقاول (الدائن) *"} 
+                            label={isSettlement ? "📈 حساب الإيراد / التسوية (الدائن) *" : "🤝 الحساب الدائن *"} 
                             icon={isSettlement ? "📈" : "🤝"} 
                             table="accounts" 
                             displayCol="name" 
                             initialDisplay={record?.payment_account} 
-                            onSelect={(val:any) => setRecord({...record, payment_account: val.name})} 
+                            onSelect={(val:any) => setRecord({...record, payment_account: typeof val === 'object' && val !== null ? val.name : val})} 
                             strict={true} 
                         />
                     </div>
                 </div>
                 
-                {/* 🛒 قسم بنود الفاتورة */}
                 <div style={{ background: 'rgba(202, 138, 4, 0.05)', padding: '20px', borderRadius: '20px', marginBottom: '25px', border: `1px dashed ${THEME.accent}` }}>
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: THEME.brand.coffee, marginBottom: '15px' }}>🛒 إضافة بنود المصروف</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 0.5fr', gap: '15px', alignItems: 'end' }}>
                         <div style={{ zIndex: 40 }}>
-                            <SmartCombo label="البيان / الصنف *" icon="🛠️" freeText={true} initialDisplay={record.description} onSelect={(val: any) => setRecord({...record, description: typeof val === 'object' ? val.name : val})} options={historicalData?.descriptions || []} />
+                            <SmartCombo label="البيان / الصنف *" icon="🛠️" freeText={true} initialDisplay={record.description} onSelect={(val: any) => setRecord({...record, description: typeof val === 'object' && val !== null ? val.name : val})} options={historicalData?.descriptions || []} />
                         </div>
                         <div>
                             <label style={{ fontSize: '11px', fontWeight: 900, color: THEME.primary }}>الكمية *</label>
@@ -342,7 +461,6 @@ export default function ExpenseFormModal({
                     )}
                 </div>
 
-                {/* 📂 المرفقات */}
                 <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
                     <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, padding: '18px', background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '16px', fontWeight: 900, cursor: 'pointer', color: '#475569', transition: '0.2s' }}>📁 إرفاق مستند (صورة / PDF)</button>
                     <button onClick={isCameraOpen ? takePhoto : startCamera} style={{ flex: 1, padding: '18px', background: '#1e293b', color: 'white', borderRadius: '16px', border: 'none', fontWeight: 900, cursor: 'pointer', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>{isCameraOpen ? '📸 التقاط الفاتورة' : '📷 مسح بالكاميرا'}</button>
@@ -351,7 +469,6 @@ export default function ExpenseFormModal({
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
                 <input type="file" ref={fileInputRef} hidden accept="image/*,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if(file) { const r = new FileReader(); r.onload = () => setImagePreview(r.result as string); r.readAsDataURL(file); } }} />
 
-                {/* 🚀 الملخص المالي السفلي */}
                 <div className="responsive-summary-grid" style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الأعمال</div>

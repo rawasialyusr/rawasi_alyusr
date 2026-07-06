@@ -1,15 +1,59 @@
 "use client";
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, createContext, useContext, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import LoadingScreen from '@/components/LoadingScreen';
 import { supabase } from "@/lib/supabase";
 
-// 1. إنشاء "Context" عشان الصلاحيات تكون متاحة في أي صفحة أو زرار
 const AuthContext = createContext<{
   user: any;
   profile: any;
   loading: boolean;
   can: (module: string, action: string) => boolean;
 } | null>(null);
+
+const ROUTE_MODULE_MAP: Record<string, string> = {
+  '/Dashboard': 'dashboard',
+  '/GlobalSummary': 'global_summary',
+  '/financial-center': 'financial_center',
+  '/financial-statements': 'financial_statements',
+  '/accounts': 'accounts',
+  '/journal': 'journal',
+  '/ledger': 'ledger',
+  '/trialbalance': 'trialbalance',
+  '/journal-errors': 'journal_errors',
+  '/cashflows': 'cashflows',
+  '/PaymentVouchers': 'payments',
+  '/ReceiptVouchers': 'receipts',
+  '/revenue': 'revenue',
+  '/expenses': 'expenses',
+  '/invoices': 'invoices',
+  '/fieldops': 'fieldops',
+  '/projects': 'projects',
+  '/materials': 'materials',
+  '/materialitems': 'materialitems',
+  '/material_issues': 'material_issues',
+  '/subclaims': 'subclaims',
+  '/subcontractor-costs': 'subcontractor_costs',
+  '/boqcatalog': 'boqcatalog',
+  '/partners': 'partners',
+  '/PartnerBalances': 'partner_balances',
+  '/statement': 'statement',
+  '/overhead': 'project_overhead',
+  '/boqbudget': 'boqbudget',
+  '/costallocation': 'costallocation',
+  '/project-ledger': 'project_ledger',
+  '/joborders': 'projects',
+  '/employees': 'employees',
+  '/team': 'team',
+  '/labor_logs': 'labor_logs',
+  '/laborcost': 'laborcost',
+  '/payroll': 'payroll',
+  '/violations': 'violations',
+  '/reports': 'reports',
+  '/import': 'import',
+  '/settings': 'settings',
+  '/profile': 'profile',
+};
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
@@ -20,27 +64,31 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkUser = async () => {
-      // 🛡️ الدرع الماسي (1): لا تفعل حالة التحميل إذا كان المستخدم موجوداً بالفعل
       if (!user) setLoading(true);
       
-      // جلب بيانات الجلسة الحالية
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
-        // لو مش مسجل دخول، ارجع لصفحة اللوجن (إلا لو إنت فيها أصلاً)
-        if (pathname !== "/login") router.replace("/login");
+        if (pathname !== "/login" && pathname !== "/signup") router.replace("/login");
         setLoading(false);
         return;
       }
 
       setUser(session.user);
 
-      // 🛡️ جلب البروفايل مع مصفوفة الصلاحيات (الـ JSONB)
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", session.user.id)
         .single();
+
+      if (profileData?.is_active === false) {
+        await supabase.auth.signOut();
+        alert("⛔ تم إيقاف حسابك من قبل الإدارة. يرجى مراجعة مدير النظام.");
+        router.replace("/login");
+        setLoading(false);
+        return;
+      }
 
       setProfile(profileData);
       setLoading(false);
@@ -48,7 +96,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     checkUser();
 
-    // الاستماع لتغييرات حالة الدخول (لو عمل Logout مثلاً)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_OUT") {
         setUser(null);
@@ -62,21 +109,60 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => authListener.subscription.unsubscribe();
   }, [pathname, router]); 
 
-  // 🚀 دالة الفحص السحرية "can"
-  // بنمرر لها اسم الموديول (مثلاً invoices) والأكشن (مثلاً stamp)
-  const can = (module: string, action: string) => {
-    if (profile?.is_admin) return true; // المدير معاه كل الصلاحيات
+  const can = (moduleName: string, action: string) => {
+    if (!profile) return false;
+    if (profile.role === 'admin' || profile.is_admin) return true; 
     
-    const perms = profile?.permissions || {};
-    // التأكد إن الموديول موجود جواه الأكشن المطلوب
-    return Array.isArray(perms[module]) && perms[module].includes(action);
+    const perms = profile.permissions || {};
+    // Check for array format (old) or object format (new)
+    if (Array.isArray(perms[moduleName])) {
+      return perms[moduleName].includes(action);
+    } else if (perms[moduleName] && typeof perms[moduleName] === 'object') {
+      return !!perms[moduleName][action];
+    }
+    return false;
   };
 
-  // 🛡️ الدرع الماسي (2) والأهم: لا تعرض شاشة التحميل وتمسح الصفحة إلا لو لم يكن هناك مستخدم مسجل الدخول أصلاً
+  const isAuthorized = useMemo(() => {
+    if (loading || !user || !profile) return true; // Don't block while loading
+    if (pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname.startsWith('/api')) return true;
+    
+    // 🛡️ السماح دائماً للملف الشخصي لأي مستخدم مسجل
+    if (pathname === '/profile') return true;
+
+    const requiredModule = ROUTE_MODULE_MAP[pathname];
+    if (!requiredModule) return true; // If route not mapped, let it pass (or you could strictly block it)
+
+    return can(requiredModule, 'view');
+  }, [pathname, profile, loading, user]);
+
   if (loading && !user) {
+    if (pathname === '/login' || pathname === '/signup') return <>{children}</>;
+    return <LoadingScreen message="جاري تأمين الاتصال..." subMessage="نتحقق من صلاحيات الدخول الآمن لنظام رواسي" fullScreen={true} />;
+  }
+
+  if (!isAuthorized) {
     return (
-      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F4F1EE" }}>
-        <div className="loader">⏳ جاري تأمين الاتصال برواسي...</div>
+      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', background: '#f8fafc', padding: '20px', textAlign: 'center' }}>
+        <div style={{ pointerEvents: 'none', marginBottom: '15px' }}>
+          <iframe 
+            src="https://tenor.com/embed/7072639765143073651" 
+            width="400" 
+            height="400" 
+            frameBorder="0" 
+            scrolling="no" 
+            style={{ borderRadius: '20px', boxShadow: '0 10px 25px rgba(220, 38, 38, 0.3)' }}
+          ></iframe>
+        </div>
+        <h1 style={{ color: '#dc2626', fontWeight: 900, fontSize: '36px', margin: '0' }}>إنت إيه اللي جابك هنا؟! 🧐</h1>
+        <button 
+          onClick={() => router.push('/')}
+          style={{ marginTop: '25px', padding: '14px 30px', background: '#dc2626', color: 'white', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 900, fontSize: '16px', boxShadow: '0 4px 15px rgba(220,38,38,0.4)', transition: '0.3s' }}
+          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          🏃 العودة للرئيسية فوراً
+        </button>
       </div>
     );
   }
@@ -88,7 +174,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   );
 }
 
-// هوك (Hook) مخصص عشان تستخدم الصلاحيات في أي مكان بسهولة
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used within AuthGuard");

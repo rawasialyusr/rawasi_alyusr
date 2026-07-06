@@ -14,6 +14,7 @@ interface RawasiSidebarProps {
   logoPath?: string;
   isOpenStatus?: boolean; 
   setIsOpenStatus?: (val: boolean) => void; 
+  customFilters?: React.ReactNode;
 }
 
 export default function RawasiFilterSidebar({ 

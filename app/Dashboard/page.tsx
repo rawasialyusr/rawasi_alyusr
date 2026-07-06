@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MasterPage from '@/components/MasterPage';
+import LoadingScreen from '@/components/LoadingScreen';
 import { THEME } from '@/lib/theme';
 import { useDashboardLogic } from './dashboard_logic';
 import { 
@@ -36,10 +37,7 @@ export default function DashboardPage() {
     <MasterPage title="لوحة القيادة المركزية" subtitle="مراقبة الأداء التشغيلي والمالي - رواسي اليسر">
       
       {logic.isLoading ? (
-        <div style={{ textAlign: 'center', padding: '150px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-          <div className="loader-spinner"></div>
-          <h3 style={{ color: THEME.coffeeDark, fontWeight: 900 }}>جاري معالجة البيانات المالية...</h3>
-        </div>
+        <LoadingScreen message="جاري معالجة البيانات المالية..." subMessage="نقوم الآن بتجميع وتحليل البيانات من جميع الأقسام..." fullScreen={false} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '35px', animation: 'fadeUp 0.6s ease-out', paddingBottom: '50px' }}>
           
@@ -168,6 +166,33 @@ export default function DashboardPage() {
 
           </div>
 
+          {/* 🚀 القسم الجديد: أداء أوامر الشغل */}
+          <div style={{ marginTop: '30px', marginBottom: '30px' }}>
+            <div className="premium-card" style={{ width: '100%' }}>
+              <h3 className="section-title">📊 أداء أوامر الشغل (الميزانية مقابل التكلفة الفعلية)</h3>
+              <div style={{ height: '350px', width: '100%', marginTop: '20px' }}>
+                {!logic.stats?.jobOrdersPerformance || logic.stats.jobOrdersPerformance.length === 0 ? (
+                    <div style={{width:'100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color:'#94a3b8', fontWeight:900}}>لا توجد بيانات لأوامر الشغل أو لم يتم تسجيل تكاليف عليها بعد</div>
+                ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={logic.stats.jobOrdersPerformance} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 900, direction: 'rtl' }}
+                            formatter={(value: any, name: string) => [logic.formatCurrency(value), name === 'budget' ? 'الميزانية المعتمدة' : 'التكلفة الفعلية']}
+                        />
+                        <Legend wrapperStyle={{ fontWeight: 900, fontSize: '14px', paddingTop: '20px' }} />
+                        <Bar dataKey="budget" name="الميزانية المعتمدة" fill={THEME.primary} radius={[6, 6, 0, 0]} barSize={30} />
+                        <Bar dataKey="actual" name="التكلفة الفعلية" fill={THEME.goldAccent} radius={[6, 6, 0, 0]} barSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* 🚀 القسم الثالث: مؤشرات الأداء السريعة (ماليات) */}
           <div>
             <h3 className="section-title">📊 الأداء التشغيلي (شامل كافة التكاليف)</h3>
@@ -257,7 +282,7 @@ export default function DashboardPage() {
             <div className="alerts-list">
               {!logic.stats?.alerts || logic.stats.alerts.length === 0 ? (
                   <div className="empty-alerts">
-                      🎉 أحسنت! كافة المستندات والقيود مرحلة ومطابقة للمعايير المالية.
+                      🎉 أحسنت! كافة المستندات والقيود معتمدة ومطابقة للمعايير المالية.
                   </div>
               ) : (
                   logic.stats.alerts.map((task: any, idx: number) => (

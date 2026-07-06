@@ -2,246 +2,286 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { THEME } from '@/lib/theme';
-import { formatCurrency } from '@/lib/helpers';
-import { supabase } from '@/lib/supabase';
-import { usePermissions } from '@/lib/PermissionsContext'; // 🛡️ نظام الصلاحيات المركزي
-import SecureAction from '@/components/SecureAction';      // 🛡️ مغلف الأمان
+import { usePermissions } from '@/lib/PermissionsContext';
+import SecureAction from '@/components/SecureAction';
+import LoadingScreen from '@/components/LoadingScreen';
 
-export default function ExecutiveHomePage() {
-    // 🛡️ سحب الصلاحيات والدور الفعلي من النظام
-    const { role, can, loading: permsLoading } = usePermissions();
-    
-    const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState({
-        liquidity: 0,
-        activeProjects: 0,
-        todayEntries: 0,
-        pendingErrors: 0
-    });
+const MOTIVATIONAL_MESSAGES = [
+    "يوم جديد لنجاحات مبهرة، توكل على الله وانطلق! 🚀",
+    "النجاح يبدأ بخطوة، وأنت الآن في المسار الصحيح! 🌟",
+    "الأرقام لا تكذب، اجعل أرقام اليوم أفضل من الأمس! 📊",
+    "كل مجهود صغير يتراكم ليصنع إنجازاً عظيماً! 💪",
+    "رواسي اليسر تكبر بجهودكم، شكراً لعملكم الرائع! 🏗️",
+    "الدقة في العمل هي أساس الثقة، حافظ على تميزك! 💎",
+    "اجعل هدفك اليوم هو التميز، لا مجرد الإنجاز! ✨",
+    "لا حدود لما يمكنك تحقيقه اليوم، انطلق بثقة! 🎯",
+    "من جدّ وجد، ومن زرع حصد! العمل الجاد لا يخون! 🌾",
+    "بثقتنا بالله وبجهودكم، نحن نبني المستقبل! 🏛️"
+];
+
+export default function WelcomeHomePage() {
+    const { role, can, loading: permsLoading, profile } = usePermissions();
+    const [greeting, setGreeting] = useState('');
+    const [quote, setQuote] = useState('');
 
     useEffect(() => {
-        const fetchRealDashboardData = async () => {
-            setIsLoading(true);
-            try {
-                // 1. حساب السيولة النقدية (مجموع أرصدة الصناديق والبنوك)
-                // 💡 ملاحظة: عدل كلمة 'account_type' و 'balance' حسب مسميات الأعمدة في جدول accounts عندك
-                const { data: accounts } = await supabase
-                    .from('accounts')
-                    .select('balance')
-                    .in('account_type', ['صندوق', 'بنك', 'نقدية بالصندوق', 'حسابات بنكية', 'نقدية']);
-                
-                const totalLiquidity = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
+        const hour = new Date().getHours();
+        if (hour < 12) setGreeting('صباح الخير ☀️');
+        else if (hour < 18) setGreeting('طاب مساؤك 🌤️');
+        else setGreeting('مساء الخير 🌙');
 
-                // 2. حساب المشاريع النشطة
-                const { count: projectsCount } = await supabase
-                    .from('projects')
-                    .select('*', { count: 'exact', head: true })
-                    .in('status', ['نشط', 'جاري', 'قيد التنفيذ']); // عدل الحالات حسب نظامك
+        setQuote(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]);
+    }, []);
 
-                // 3. قيود اليومية لليوم الحالي
-                const today = new Date().toISOString().split('T')[0];
-                const { count: entriesCount } = await supabase
-                    .from('journal')
-                    .select('*', { count: 'exact', head: true })
-                    .gte('date', today);
-
-                // 4. أخطاء الرادار المعلقة
-                const { count: errorsCount } = await supabase
-                    .from('journal_errors')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('is_fixed', false); // أو eq('status', 'pending') حسب جدولك
-
-                setStats({
-                    liquidity: totalLiquidity,
-                    activeProjects: projectsCount || 0,
-                    todayEntries: entriesCount || 0,
-                    pendingErrors: errorsCount || 0
-                });
-
-            } catch (error) {
-                console.error("❌ خطأ في سحب بيانات الداشبورد:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        if (!permsLoading) {
-            fetchRealDashboardData();
-        }
-    }, [permsLoading]);
-
-    if (permsLoading || isLoading) {
-        return <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8', direction: 'rtl' }}>⏳ جاري إعداد مركز القيادة...</div>;
+    if (permsLoading) {
+        return <LoadingScreen message="جاري تحضير مساحة العمل..." fullScreen={false} />;
     }
 
-    // تحديد الترحيب حسب الدور
-    const roleTitle = role === 'super_admin' ? 'المدير العام 👑' : role === 'admin' ? 'مدير النظام 🛡️' : 'زميلنا العزيز 👋';
+    const userName = profile?.full_name || 'زميلنا العزيز';
+    const firstNameOnly = userName.split(' ')[0];
+    const roleTitle = role === 'super_admin' ? 'المدير العام 👑' : role === 'admin' ? 'مدير النظام 🛡️' : 'مستخدم النظام';
+    const avatarUrl = profile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=C5A059&color=fff&bold=true&size=128`;
 
     return (
-        <div className="clean-page">
-            
+        <div className="welcome-page-wrapper">
             <style>{`
-                /* 🚀 سحر المسافات والهوامش السلبية الموحد */
-                .clean-page { 
-                    padding: 30px 20px 30px 0px !important; 
-                    margin-right: -25px !important; 
-                    direction: rtl; 
-                    background: transparent; 
-                    min-height: 100vh; 
+                .welcome-page-wrapper {
+                    padding: 40px;
+                    direction: rtl;
+                    min-height: calc(100vh - 80px);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 30px;
+                    background: radial-gradient(circle at top right, rgba(197, 160, 89, 0.05), transparent 400px),
+                                radial-gradient(circle at bottom left, rgba(67, 52, 46, 0.03), transparent 400px);
                 }
-                
+
                 @media (max-width: 768px) {
-                    .clean-page { padding: 15px !important; margin-right: -10px !important; }
+                    .welcome-page-wrapper { padding: 20px; gap: 20px; }
                 }
 
-                .glass-card {
-                    background: rgba(255,255,255,0.6);
-                    backdrop-filter: blur(15px);
-                    border: 1px solid rgba(255,255,255,0.8);
-                    border-radius: 24px;
-                    padding: 25px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.03);
-                    transition: 0.3s;
-                }
-                .glass-card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.06); }
-
-                .quick-link-btn {
-                    background: rgba(255,255,255,0.8);
+                /* ===== كارت المستخدم (أعلى الصفحة) ===== */
+                .user-card {
+                    background: rgba(255,255,255,0.7);
+                    backdrop-filter: blur(20px);
                     border: 1px solid rgba(255,255,255,0.9);
+                    border-radius: 24px;
+                    padding: 22px 35px;
+                    display: flex;
+                    align-items: center;
+                    gap: 20px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+                    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    position: relative;
+                    overflow: hidden;
+                }
+                .user-card::before {
+                    content: '';
+                    position: absolute;
+                    top: 0; right: 0; left: 0; height: 3px;
+                    background: linear-gradient(90deg, ${THEME.goldAccent}, ${THEME.coffeeDark});
+                }
+                .user-avatar {
+                    width: 60px; height: 60px;
+                    border-radius: 50%;
+                    border: 3px solid ${THEME.goldAccent}60;
+                    object-fit: cover;
+                    flex-shrink: 0;
+                }
+                .user-card-info { flex: 1; }
+                .user-card-greeting {
+                    font-size: 12px; font-weight: 700;
+                    color: #94a3b8; margin: 0 0 3px 0;
+                }
+                .user-card-name {
+                    font-size: 22px; font-weight: 900;
+                    color: ${THEME.coffeeDark}; margin: 0 0 5px 0;
+                    letter-spacing: -0.5px;
+                }
+                .user-card-role {
+                    display: inline-block;
+                    padding: 3px 12px;
+                    background: ${THEME.goldAccent}18;
+                    border: 1px solid ${THEME.goldAccent}40;
                     border-radius: 20px;
-                    padding: 20px;
+                    font-size: 12px; font-weight: 900;
+                    color: ${THEME.coffeeDark};
+                }
+
+                @media (max-width: 768px) {
+                    .user-card { padding: 18px 20px; gap: 15px; }
+                    .user-card-name { font-size: 18px; }
+                }
+
+                /* ===== البطاقة الرئيسية (وسط الصفحة) ===== */
+                .hero-glass-card {
+                    background: rgba(255, 255, 255, 0.7);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.9);
+                    border-radius: 30px;
+                    padding: 60px 50px;
+                    text-align: center;
+                    box-shadow: 0 20px 50px rgba(0,0,0,0.03);
+                    animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    position: relative;
+                    overflow: hidden;
+                }
+                .hero-glass-card::before {
+                    content: '';
+                    position: absolute;
+                    top: 0; left: 0; right: 0; height: 4px;
+                    background: linear-gradient(90deg, ${THEME.goldAccent}, ${THEME.coffeeDark});
+                }
+
+                .welcome-title {
+                    font-size: 48px;
+                    font-weight: 900;
+                    color: ${THEME.coffeeDark};
+                    margin: 0 0 15px 0;
+                    letter-spacing: -1px;
+                }
+
+                .welcome-subtitle {
+                    font-size: 18px;
+                    color: #64748b;
+                    font-weight: 700;
+                    max-width: 600px;
+                    margin: 0 auto 40px auto;
+                    line-height: 1.7;
+                    font-style: italic;
+                }
+
+                .modules-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    max-width: 1000px;
+                    margin: 0 auto;
+                }
+
+                .module-card {
+                    background: white;
+                    border: 1px solid #f1f5f9;
+                    border-radius: 20px;
+                    padding: 30px 20px;
+                    text-align: center;
+                    text-decoration: none;
+                    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.02);
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    justify-content: center;
-                    gap: 10px;
-                    text-decoration: none;
-                    color: #1e293b;
-                    font-weight: 900;
-                    transition: 0.3s;
-                    cursor: pointer;
-                    box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+                    gap: 15px;
                 }
-                .quick-link-btn:hover { background: white; transform: scale(1.05); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
-                .quick-link-btn .icon { font-size: 32px; }
+                .module-card:hover {
+                    transform: translateY(-10px) scale(1.02);
+                    box-shadow: 0 20px 40px rgba(197, 160, 89, 0.1);
+                    border-color: ${THEME.goldAccent};
+                }
+                .module-icon {
+                    width: 70px; height: 70px;
+                    background: #f8fafc;
+                    border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 32px;
+                    transition: 0.3s;
+                }
+                .module-card:hover .module-icon {
+                    background: ${THEME.goldAccent}20;
+                    transform: rotate(5deg) scale(1.1);
+                }
+                .module-title { color: ${THEME.coffeeDark}; font-weight: 900; font-size: 18px; margin: 0; }
+                .module-desc { color: #94a3b8; font-size: 12px; font-weight: 700; margin: 0; }
+
+                @media (max-width: 768px) {
+                    .hero-glass-card { padding: 30px 20px; }
+                    .welcome-title { font-size: 30px; }
+                    .welcome-subtitle { font-size: 15px; }
+                    .modules-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+                    .module-card { padding: 20px 12px; }
+                    .module-icon { width: 52px; height: 52px; font-size: 24px; }
+                    .module-title { font-size: 15px; }
+                }
             `}</style>
 
-            {/* 🔝 الهيدر الترحيبي الذكي */}
-            <div style={{ marginBottom: '40px', paddingRight: '15px' }}>
-                <h1 style={{ fontSize: '32px', fontWeight: 900, color: THEME.brand.coffee, margin: 0, letterSpacing: '-0.5px' }}>
-                    مرحباً بك، {roleTitle}
-                </h1>
-                <p style={{ color: '#64748b', fontSize: '15px', fontWeight: 600, marginTop: '8px' }}>إليك نبذة سريعة وحية عن حالة "رواسي" اليوم</p>
+            {/* ===== كارت المستخدم (أعلى الصفحة لوحده) ===== */}
+            <div className="user-card">
+                <img src={avatarUrl} alt={userName} className="user-avatar" />
+                <div className="user-card-info">
+                    <p className="user-card-greeting">{greeting}،</p>
+                    <h2 className="user-card-name">{firstNameOnly} 👋</h2>
+                    <span className="user-card-role">{roleTitle}</span>
+                </div>
             </div>
 
-            {/* 🎴 كروت الأداء الحية */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-                
-                {/* 🛡️ كارت السيولة (يظهر لمن لديه صلاحية رؤية المركز المالي أو الإدارة العليا) */}
-                {(role === 'super_admin' || role === 'admin' || can('financial_center', 'view')) && (
-                    <div className="glass-card" style={{ borderRight: `6px solid ${THEME.success}` }}>
-                        <div style={{ fontSize: '35px', marginBottom: '10px' }}>💰</div>
-                        <p style={{ fontSize: '13px', fontWeight: 900, color: '#64748b', margin: 0 }}>إجمالي السيولة النقدية المتاحة</p>
-                        <h2 style={{ fontSize: '28px', color: THEME.success, margin: '5px 0 0 0', fontWeight: 900 }}>{formatCurrency(stats.liquidity)}</h2>
-                    </div>
-                )}
+            {/* ===== البطاقة الرئيسية — الرسالة + الوحدات ===== */}
+            <div className="hero-glass-card">
 
-                {/* كارت المشاريع */}
-                <div className="glass-card" style={{ borderRight: `6px solid ${THEME.primary}` }}>
-                    <div style={{ fontSize: '35px', marginBottom: '10px' }}>🏗️</div>
-                    <p style={{ fontSize: '13px', fontWeight: 900, color: '#64748b', margin: 0 }}>المشاريع النشطة حالياً</p>
-                    <h2 style={{ fontSize: '28px', color: THEME.primary, margin: '5px 0 0 0', fontWeight: 900 }}>{stats.activeProjects} مشروع</h2>
+                <div style={{ display: 'inline-block', padding: '8px 20px', background: `${THEME.goldAccent}20`, color: THEME.coffeeDark, borderRadius: '20px', fontWeight: 900, fontSize: '14px', marginBottom: '20px' }}>
+                    {roleTitle}
                 </div>
 
-                {/* كارت القيود */}
-                <div className="glass-card" style={{ borderRight: `6px solid ${THEME.accent}` }}>
-                    <div style={{ fontSize: '35px', marginBottom: '10px' }}>📝</div>
-                    <p style={{ fontSize: '13px', fontWeight: 900, color: '#64748b', margin: 0 }}>حركة القيود اليوم</p>
-                    <h2 style={{ fontSize: '28px', color: THEME.accent, margin: '5px 0 0 0', fontWeight: 900 }}>{stats.todayEntries} قيد جديد</h2>
-                </div>
+                <h1 className="welcome-title">{greeting}، {firstNameOnly}</h1>
+                <p className="welcome-subtitle">✨ {quote}</p>
 
-                {/* 🛡️ كارت التنبيهات والأخطاء (يظهر لمن لديه صلاحية رادار الأخطاء) */}
-                {(role === 'super_admin' || role === 'admin' || can('journal_errors', 'view')) && (
-                    <div className="glass-card" style={{ borderRight: `6px solid ${stats.pendingErrors > 0 ? THEME.ruby : THEME.success}`, background: stats.pendingErrors > 0 ? 'rgba(239, 68, 68, 0.05)' : '' }}>
-                        <div style={{ fontSize: '35px', marginBottom: '10px' }}>🛡️</div>
-                        <p style={{ fontSize: '13px', fontWeight: 900, color: '#64748b', margin: 0 }}>أخطاء وتنبيهات الرادار</p>
-                        <h2 style={{ fontSize: '28px', color: stats.pendingErrors > 0 ? THEME.ruby : THEME.success, margin: '5px 0 0 0', fontWeight: 900 }}>
-                            {stats.pendingErrors > 0 ? `${stats.pendingErrors} أخطاء تحتاج مراجعة` : 'الدفاتر سليمة 100%'}
-                        </h2>
-                    </div>
-                )}
+                <div className="modules-grid">
+
+                    <SecureAction module="dashboard" action="view">
+                        <Link href="/Dashboard" className="module-card">
+                            <div className="module-icon">📊</div>
+                            <div><h3 className="module-title">لوحة القيادة</h3><p className="module-desc">ملخص المؤشرات والإحصائيات</p></div>
+                        </Link>
+                    </SecureAction>
+
+                    <SecureAction module="accounts" action="view">
+                        <Link href="/accounts" className="module-card">
+                            <div className="module-icon">🏦</div>
+                            <div><h3 className="module-title">دليل الحسابات</h3><p className="module-desc">إدارة شجرة الحسابات المالية</p></div>
+                        </Link>
+                    </SecureAction>
+
+                    <SecureAction module="projects" action="view">
+                        <Link href="/projects" className="module-card">
+                            <div className="module-icon">🏗️</div>
+                            <div><h3 className="module-title">المشاريع</h3><p className="module-desc">متابعة المشاريع والتكاليف</p></div>
+                        </Link>
+                    </SecureAction>
+
+                    <SecureAction module="journal" action="view">
+                        <Link href="/journal" className="module-card">
+                            <div className="module-icon">📓</div>
+                            <div><h3 className="module-title">دفتر اليومية</h3><p className="module-desc">القيود المحاسبية الشاملة</p></div>
+                        </Link>
+                    </SecureAction>
+
+                    <SecureAction module="partners" action="view">
+                        <Link href="/partners" className="module-card">
+                            <div className="module-icon">🤝</div>
+                            <div><h3 className="module-title">الشركاء</h3><p className="module-desc">إدارة المقاولين والموردين</p></div>
+                        </Link>
+                    </SecureAction>
+
+                    <SecureAction module="team" action="view">
+                        <Link href="/team" className="module-card">
+                            <div className="module-icon">👥</div>
+                            <div><h3 className="module-title">إدارة الفريق</h3><p className="module-desc">الصلاحيات والمستخدمين</p></div>
+                        </Link>
+                    </SecureAction>
+
+                    <SecureAction module="settings" action="view">
+                        <Link href="/settings" className="module-card">
+                            <div className="module-icon">⚙️</div>
+                            <div><h3 className="module-title">إعدادات النظام</h3><p className="module-desc">النسخ الاحتياطي والصيانة</p></div>
+                        </Link>
+                    </SecureAction>
+
+                </div>
             </div>
 
-            {/* 🏗️ قسم الوصول السريع (Quick Navigation) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '30px' }}>
-                
-                {/* صندوق الاختصارات */}
-                <div className="glass-card" style={{ background: 'rgba(255,255,255,0.4)' }}>
-                    <h3 style={{ marginBottom: '25px', fontWeight: 900, color: THEME.brand.coffee }}>🔗 اختصارات الإدارة السريعة</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '15px' }}>
-                        
-                        <SecureAction module="projects" action="view">
-                            <Link href="/projects" className="quick-link-btn">
-                                <span className="icon">📂</span><span>المشاريع</span>
-                            </Link>
-                        </SecureAction>
-
-                        <SecureAction module="employees" action="view">
-                            <Link href="/employees" className="quick-link-btn">
-                                <span className="icon">👷</span><span>العمالة</span>
-                            </Link>
-                        </SecureAction>
-
-                        <SecureAction module="expenses" action="view">
-                            <Link href="/expenses" className="quick-link-btn">
-                                <span className="icon">📉</span><span>المصروفات</span>
-                            </Link>
-                        </SecureAction>
-
-                        <SecureAction module="invoices" action="view">
-                            <Link href="/invoices" className="quick-link-btn">
-                                <span className="icon">🧾</span><span>الفواتير</span>
-                            </Link>
-                        </SecureAction>
-
-                        <SecureAction module="journal_errors" action="view">
-                            <Link href="/journal-errors" className="quick-link-btn" style={{ border: `1px solid ${THEME.ruby}50` }}>
-                                <span className="icon">🛡️</span><span style={{color: THEME.ruby}}>الرادار</span>
-                            </Link>
-                        </SecureAction>
-                        
-                        {(role === 'super_admin' || role === 'admin') && (
-                            <Link href="/team" className="quick-link-btn" style={{ border: `1px solid ${THEME.primary}50` }}>
-                                <span className="icon">👥</span><span style={{color: THEME.primary}}>صلاحيات الفريق</span>
-                            </Link>
-                        )}
-                    </div>
-                </div>
-
-                {/* صندوق التنبيهات المباشرة (Live Feed) */}
-                <div className="glass-card" style={{ background: 'linear-gradient(145deg, #0f172a, #1e293b)', color: 'white', border: 'none' }}>
-                    <h3 style={{ marginBottom: '20px', fontWeight: 900, color: THEME.brand.gold }}>📢 نبض النظام (مباشر)</h3>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                        {stats.pendingErrors > 0 ? (
-                            <div style={{ padding: '15px', borderRadius: '15px', borderRight: `4px solid ${THEME.ruby}`, background: 'rgba(239, 68, 68, 0.1)' }}>
-                                <small style={{ color: '#94a3b8', fontWeight: 900 }}>تنبيه محاسبي 🔴</small>
-                                <p style={{ fontSize: '13px', fontWeight: 800, margin: '5px 0 0 0' }}>تم اكتشاف ({stats.pendingErrors}) قيود غير متزنة. يرجى التوجه لرادار الأخطاء فوراً.</p>
-                            </div>
-                        ) : (
-                            <div style={{ padding: '15px', borderRadius: '15px', borderRight: `4px solid ${THEME.success}`, background: 'rgba(34, 197, 94, 0.1)' }}>
-                                <small style={{ color: '#94a3b8', fontWeight: 900 }}>حالة الدفاتر 🟢</small>
-                                <p style={{ fontSize: '13px', fontWeight: 800, margin: '5px 0 0 0' }}>جميع القيود المالية متزنة ولا توجد أخطاء في الدفاتر.</p>
-                            </div>
-                        )}
-
-                        <div style={{ padding: '15px', borderRadius: '15px', borderRight: `4px solid ${THEME.accent}`, background: 'rgba(255,255,255,0.05)' }}>
-                            <small style={{ color: '#94a3b8', fontWeight: 900 }}>نشاط اليوم ⚡</small>
-                            <p style={{ fontSize: '13px', fontWeight: 800, margin: '5px 0 0 0' }}>تم تسجيل ({stats.todayEntries}) حركة مالية في دفتر اليومية منذ صباح اليوم.</p>
-                        </div>
-                    </div>
-                </div>
-
+            {/* Footer */}
+            <div style={{ textAlign: 'center', color: '#94a3b8', fontWeight: 700, fontSize: '13px', paddingBottom: '10px' }}>
+                تم تأمين الجلسة الخاصة بك 🔒 | رواسي اليسر © {new Date().getFullYear()}
             </div>
         </div>
     );

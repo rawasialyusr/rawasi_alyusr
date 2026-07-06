@@ -18,6 +18,7 @@ import SmartCombo from '@/components/SmartCombo';
 import InvoiceFormModal from './InvoiceFormModal';
 import InvoicePrintModal from './InvoicePrintModal';
 import ReceiptVoucherModal from '@/app/ReceiptVouchers/ReceiptVoucherModal';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function InvoicesPage() {
   const logic = useInvoicesLogic(); 
@@ -182,7 +183,7 @@ export default function InvoicesPage() {
       label: 'الاعتماد',
       render: (row: any) => {
         if (!row) return null; 
-        const isApproved = row.status === 'مُعتمد' || row.status === 'مرحل';
+        const isApproved = row.status === 'معتمد' || row.status === 'معتمد';
         return (
           <div className={`approval-glass-badge ${isApproved ? 'approved' : 'pending'}`}>
             <span className="dot"></span>
@@ -228,7 +229,7 @@ export default function InvoicesPage() {
         
         // 🚀 الشرط اللي بيخفي الزرار لو الفاتورة مسددة أو بزيادة
         const needsPayment = balance > 0; 
-        const isApproved = row.status === 'مُعتمد' || row.status === 'مرحل' || row.is_posted === true;
+        const isApproved = row.status === 'معتمد' || row.status === 'معتمد' || row.is_posted === true;
         
         return (
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
@@ -335,7 +336,7 @@ export default function InvoicesPage() {
       `}</style>
 
       {( (logic.isLoading || permsLoading) && logic.allFiltered.length === 0 ) ? (
-        <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
+        <LoadingScreen message="جاري المزامنة..." fullScreen={false} />
       ) : (
         <div className="clickable-rows cinematic-scroll" style={{ background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
           <RawasiSmartTable 

@@ -5,7 +5,8 @@ import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase'; 
-import PrintStatement from './printstatement'; // 🚀 سطر إضافي: استدعاء ملف الطباعة من جنبه علطول
+import PrintStatement from './printstatement'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function PartnerBalancesPage() {
     const [data, setData] = useState<any[]>([]);
@@ -13,8 +14,10 @@ export default function PartnerBalancesPage() {
     
     // الفلاتر
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState('all');
+    const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     const [showInactive, setShowInactive] = useState(false);
+    const [dateFrom, setDateFrom] = useState(''); 
+    const [dateTo, setDateTo] = useState('');     
     
     // الصفحات
     const [rowsPerPage, setRowsPerPage] = useState(50);
@@ -24,7 +27,6 @@ export default function PartnerBalancesPage() {
     const [ledgers, setLedgers] = useState<Record<string, any[]>>({});
     const [loadingLedgers, setLoadingLedgers] = useState<Record<string, boolean>>({});
 
-    // 🚀 سطر إضافي: حالة ذكية لمعرفة هل نحن في مود الطباعة أم لا بدون ضرب الـ Build
     const [isPrintMode, setIsPrintMode] = useState(false);
 
     useEffect(() => {
@@ -36,6 +38,50 @@ export default function PartnerBalancesPage() {
         }
     }, []);
 
+    // 🚀 دالة جلب كشف الحساب التفصيلي لشريك واحد (بترتيب حتمي لمنع السقوط والتكرار)
+    const fetchSingleLedger = async (partnerId: string) => {
+        setLoadingLedgers(prev => ({ ...prev, [partnerId]: true }));
+        try {
+            let allLedgerData: any[] = [];
+            let fromRow = 0;
+            const step = 999;
+            let hasMore = true;
+
+            while (hasMore) {
+                let query = supabase.from('partner_statement_ledger')
+                    .select('*')
+                    .eq('partner_id', partnerId);
+                
+                if (dateFrom) query = query.gte('transaction_date', dateFrom);
+                if (dateTo) query = query.lte('transaction_date', dateTo);
+
+                // 🚀 ترتيب حتمي صارم يمنع تداخل الصفحات في الداتابيز
+                query = query.order('transaction_date', { ascending: true })
+                             .order('debit', { ascending: true })
+                             .order('credit', { ascending: true })
+                             .range(fromRow, fromRow + step);
+
+                const { data: ledgerData, error } = await query;
+                if (error) throw error;
+
+                if (ledgerData && ledgerData.length > 0) {
+                    allLedgerData.push(...ledgerData);
+                    fromRow += step + 1;
+                    if (ledgerData.length <= step) hasMore = false;
+                } else {
+                    hasMore = false;
+                }
+            }
+
+            setLedgers(prev => ({ ...prev, [partnerId]: allLedgerData }));
+        } catch (err) {
+            console.error("خطأ في جلب كشف الحساب:", err);
+        } finally {
+            setLoadingLedgers(prev => ({ ...prev, [partnerId]: false }));
+        }
+    };
+
+    // 🚀 المحرك اللحظي لجلب الأرصدة الشاملة للمشروع وإعادة التجميع بدقة متناهية
     const fetchData = async () => {
         setIsLoading(true);
         try {
@@ -44,7 +90,56 @@ export default function PartnerBalancesPage() {
                 .select('*');
 
             if (error) throw error;
-            setData(accountsData || []);
+            let finalData = accountsData || [];
+
+            if (dateFrom || dateTo) {
+                let allLedgerData: any[] = [];
+                let fromRow = 0;
+                const step = 999;
+                let hasMore = true;
+
+                while (hasMore) {
+                    let query = supabase.from('partner_statement_ledger').select('partner_id, debit, credit');
+                    if (dateFrom) query = query.gte('transaction_date', dateFrom);
+                    if (dateTo) query = query.lte('transaction_date', dateTo);
+                    
+                    // 🚀 الترتيب الحتمي لضمان سحب الآلاف من السطور بدون ضياع أو تكرار أي سجل
+                    query = query.order('transaction_date', { ascending: true })
+                                 .order('partner_id', { ascending: true })
+                                 .order('debit', { ascending: true })
+                                 .order('credit', { ascending: true })
+                                 .range(fromRow, fromRow + step);
+                    
+                    const { data: ledgerData, error: ledgerError } = await query;
+                    
+                    if (ledgerError) throw ledgerError;
+                    
+                    if (ledgerData && ledgerData.length > 0) {
+                        allLedgerData.push(...ledgerData);
+                        fromRow += step + 1;
+                        if (ledgerData.length <= step) hasMore = false;
+                    } else {
+                        hasMore = false;
+                    }
+                }
+
+                // 🎯 تجميع الأرصدة بطريقة التجميع التراكمي المباشر بدون حذف أي حركة
+                const sums: Record<string, { credit: number, debit: number }> = {};
+                allLedgerData.forEach((row: any) => {
+                    if (!sums[row.partner_id]) sums[row.partner_id] = { credit: 0, debit: 0 };
+                    sums[row.partner_id].credit += Number(row.credit || 0);
+                    sums[row.partner_id].debit += Number(row.debit || 0);
+                });
+
+                // تحديث بيانات الجدول الرئيسي
+                finalData = finalData.map(p => ({
+                    ...p,
+                    total_credit: sums[p.partner_id]?.credit || 0,
+                    total_debit: sums[p.partner_id]?.debit || 0,
+                })).filter(p => p.total_credit > 0 || p.total_debit > 0);
+            }
+
+            setData(finalData);
         } catch (error) {
             console.error("خطأ في جلب الأرصدة:", error);
         } finally {
@@ -52,9 +147,15 @@ export default function PartnerBalancesPage() {
         }
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        const timer = setTimeout(() => {
+            fetchData();
+            expandedPartners.forEach(id => fetchSingleLedger(id));
+        }, 400); 
+        return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dateFrom, dateTo]);
 
-    // 🚀 دالة إيقاف/تفعيل الحساب
     const handleToggleActive = async (partnerId: string, currentStatus: boolean, e: React.MouseEvent) => {
         e.stopPropagation(); 
         const actionName = currentStatus ? 'إيقاف/أرشفة' : 'تفعيل';
@@ -79,25 +180,9 @@ export default function PartnerBalancesPage() {
             setExpandedPartners(prev => prev.filter(id => id !== partnerId));
             return;
         }
-
         setExpandedPartners(prev => [...prev, partnerId]);
-
         if (!ledgers[partnerId]) {
-            setLoadingLedgers(prev => ({ ...prev, [partnerId]: true }));
-            try {
-                const { data: ledgerData, error } = await supabase
-                    .from('partner_statement_ledger')
-                    .select('*')
-                    .eq('partner_id', partnerId)
-                    .order('transaction_date', { ascending: true });
-                
-                if (error) throw error;
-                setLedgers(prev => ({ ...prev, [partnerId]: ledgerData || [] }));
-            } catch (err) {
-                console.error("خطأ في جلب كشف الحساب:", err);
-            } finally {
-                setLoadingLedgers(prev => ({ ...prev, [partnerId]: false }));
-            }
+            fetchSingleLedger(partnerId);
         }
     };
 
@@ -107,7 +192,7 @@ export default function PartnerBalancesPage() {
         let filtered = data.filter(item => {
             const searchStr = `${item.partner_name} ${item.partner_code}`.toLowerCase();
             const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
-            const matchesType = filterType === 'all' || item.partner_type === filterType;
+            const matchesType = selectedTypes.length === 0 || selectedTypes.includes(item.partner_type);
             const isActiveMatch = showInactive ? true : (item.is_active !== false); 
             return matchesSearch && matchesType && isActiveMatch;
         });
@@ -117,7 +202,7 @@ export default function PartnerBalancesPage() {
             const netB = Math.abs(Number(b.total_credit || 0)) - Math.abs(Number(b.total_debit || 0));
             return netB - netA;
         });
-    }, [data, searchTerm, filterType, showInactive]);
+    }, [data, searchTerm, selectedTypes, showInactive]);
 
     const stats = useMemo(() => {
         let totalCredit = 0, totalDebit = 0;
@@ -129,56 +214,128 @@ export default function PartnerBalancesPage() {
         return { totalCredit, totalDebit, net };
     }, [filteredData]);
 
-    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterType, showInactive]);
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedTypes, showInactive]);
+    
     const totalPages = Math.ceil(filteredData.length / rowsPerPage) || 1;
     const paginatedData = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
         return filteredData.slice(start, start + rowsPerPage);
     }, [filteredData, currentPage, rowsPerPage]);
 
-    // 🚀 دالة ذكية لتحديد حالة الرصيد والألوان
     const getBalanceInfo = (netBal: number) => {
         if (netBal > 0.01) return { label: 'لــه', bg: '#ecfdf5', text: '#047857' }; 
         if (netBal < -0.01) return { label: 'عليــه', bg: '#fef2f2', text: '#dc2626' }; 
         return { label: 'مُتزن', bg: '#fef9c3', text: '#a16207' }; 
     };
 
-    const exportToExcel = () => {
-        const excelData = filteredData.map(p => {
+    // 🚀 تصدير الإكسيل المطور (بدون حدود + ملون وناعم + كروت إحصائية)
+    // 🚀 تصدير الإكسيل المطور (بخط Arial لمنع تقطيع الحروف + أرقام إنجليزية)
+    const exportToExcelWithColors = () => {
+        let htmlContent = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40" dir="rtl" lang="ar">
+            <head>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                <style>
+                    /* استخدام Arial يمنع الإكسيل من تقطيع الحروف العربية */
+                    body { font-family: Arial, sans-serif; background-color: #ffffff; direction: rtl; }
+                    table { border-collapse: collapse; width: 100%; text-align: center; margin-top: 20px; direction: rtl; }
+                    th { padding: 15px; font-size: 14px; border: none; font-family: Arial, sans-serif; }
+                    td { padding: 12px; font-size: 14px; font-weight: bold; border: none; font-family: Arial, sans-serif; }
+                    
+                    /* كلاس سحري لإجبار الأرقام على الظهور بالانجليزية وتجنب انعكاسها */
+                    .en-num { font-family: Arial, sans-serif; direction: ltr !important; display: inline-block; unicode-bidi: bidi-override; }
+                </style>
+            </head>
+            <body>
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h2 style="color: #1e293b; font-size: 24px; margin-bottom: 5px;">التقرير المالي: أرصدة الشركاء وكشف الحساب المجمع</h2>
+                    <h4 style="color: #64748b; margin-top: 0;">${dateFrom || dateTo ? `(حركات الفترة من ${dateFrom || 'البداية'} إلى ${dateTo || 'النهاية'})` : '(أرصدة تراكمية حتى تاريخه)'}</h4>
+                </div>
+                
+                <!-- 📊 كروت السامري العلوية -->
+                <table style="width: 80%; margin: 0 auto 30px auto; border-collapse: separate; border-spacing: 15px;">
+                    <tr>
+                        <td style="background-color: #ecfdf5; border-radius: 12px; padding: 20px; text-align: center;">
+                            <div style="color: #065f46; font-size: 14px; margin-bottom: 8px;">إجمالي دائن (لهم) في الفترة</div>
+                            <div style="color: #059669; font-size: 22px; font-weight: bold;" class="en-num">${stats.totalCredit.toLocaleString('en-US')}</div>
+                        </td>
+                        <td style="background-color: #fef2f2; border-radius: 12px; padding: 20px; text-align: center;">
+                            <div style="color: #991b1b; font-size: 14px; margin-bottom: 8px;">إجمالي مدين (عليهم) في الفترة</div>
+                            <div style="color: #dc2626; font-size: 22px; font-weight: bold;" class="en-num">${stats.totalDebit.toLocaleString('en-US')}</div>
+                        </td>
+                        <td style="background-color: ${getBalanceInfo(stats.net).bg}; border-radius: 12px; padding: 20px; text-align: center;">
+                            <div style="color: ${getBalanceInfo(stats.net).text}; font-size: 14px; margin-bottom: 8px;">الرصيد الصافي</div>
+                            <div style="color: ${getBalanceInfo(stats.net).text}; font-size: 22px; font-weight: bold;">
+                                <span class="en-num">${Math.abs(stats.net).toLocaleString('en-US')}</span> (${getBalanceInfo(stats.net).label})
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- 📋 الجدول الرئيسي الناعم -->
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="background-color: #0f172a; color: white;">الكود</th>
+                            <th style="background-color: #0f172a; color: white; text-align: right;">اسم الجهة / الشريك</th>
+                            <th style="background-color: #0f172a; color: white;">التصنيف</th>
+                            <th style="background-color: #0f172a; color: white;">إجمالي دائن (له)</th>
+                            <th style="background-color: #0f172a; color: white;">إجمالي مدين (عليه)</th>
+                            <th style="background-color: #0f172a; color: white;">الرصيد الصافي</th>
+                            <th style="background-color: #0f172a; color: white;">الموقف</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        filteredData.forEach((p, index) => {
             const tCredit = Math.abs(Number(p.total_credit || 0));
             const tDebit = Math.abs(Number(p.total_debit || 0));
             const netBal = tCredit - tDebit;
             const balInfo = getBalanceInfo(netBal);
+            
+            const rowBg = index % 2 === 0 ? '#f8fafc' : '#ffffff';
 
-            return {
-                'الكود': p.partner_code || '---',
-                'اسم الجهة': p.partner_name,
-                'التصنيف': p.partner_type,
-                'الحالة': p.is_active === false ? 'موقوف/مؤرشف' : 'نشط',
-                'إجمالي أيام العمل': p.partner_type === 'عامل يومية' ? Number(p.total_work_days || 0) : '---',
-                'إجمالي دائن (له)': tCredit,
-                'إجمالي مدين (عليه)': tDebit,
-                'الرصيد الصافي': Math.abs(netBal),
-                'الموقف': balInfo.label
-            };
+            htmlContent += `
+                <tr style="background-color: ${rowBg};">
+                    <td style="color: #64748b;" class="en-num">${p.partner_code || '---'}</td>
+                    <td style="text-align: right; color: #1e293b; font-weight: bold; font-size: 15px;">${p.partner_name}</td>
+                    <td style="color: #475569;">${p.partner_type}</td>
+                    <td style="color: #059669; font-weight: bold;" class="en-num">${tCredit > 0 ? tCredit.toLocaleString('en-US') : '-'}</td>
+                    <td style="color: #dc2626; font-weight: bold;" class="en-num">${tDebit > 0 ? tDebit.toLocaleString('en-US') : '-'}</td>
+                    <td style="background-color: ${balInfo.bg}; color: ${balInfo.text}; font-weight: bold;" class="en-num">${Math.abs(netBal).toLocaleString('en-US')}</td>
+                    <td style="background-color: ${balInfo.bg}; color: ${balInfo.text}; font-weight: bold;">${balInfo.label}</td>
+                </tr>
+            `;
         });
 
-        const worksheet = XLSX.utils.json_to_sheet(excelData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "الأرصدة");
-        worksheet['!cols'] = [{wch: 15}, {wch: 35}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 15}];
-        worksheet['!dir'] = 'rtl';
-        XLSX.writeFile(workbook, `أرصدة_الشركاء_${new Date().toISOString().split('T')[0]}.xlsx`);
-    };
+        const finalBalInfo = getBalanceInfo(stats.net);
+        htmlContent += `
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" style="background-color: #e2e8f0; color: #0f172a; padding: 15px; font-size: 16px; font-weight: bold; text-align: center;">الإجماليات  </td>
+                            <td style="background-color: #e2e8f0; color: #059669; padding: 15px; font-size: 16px; font-weight: bold;" class="en-num">${stats.totalCredit.toLocaleString('en-US')}</td>
+                            <td style="background-color: #e2e8f0; color: #dc2626; padding: 15px; font-size: 16px; font-weight: bold;" class="en-num">${stats.totalDebit.toLocaleString('en-US')}</td>
+                            <td style="background-color: #e2e8f0; color: ${finalBalInfo.text}; padding: 15px; font-size: 16px; font-weight: bold;" class="en-num">${Math.abs(stats.net).toLocaleString('en-US')}</td>
+                            <td style="background-color: #e2e8f0; color: ${finalBalInfo.text}; padding: 15px; font-size: 16px; font-weight: bold;">${finalBalInfo.label}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </body>
+            </html>
+        `;
 
-    // 🚀 سطر إضافي: لو الصفحة مفتوحة للطباعة، اعرض كود الطباعة فوراً واقفل العرض العادي
-    if (isPrintMode) {
-        return <PrintStatement />;
-    }
+        const blob = new Blob(['\uFEFF' + htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `التقرير_المالي_للشركاء_${new Date().toISOString().split('T')[0]}.xls`;
+        link.click();
+    };
 
     return (
         <div className="clean-page print-container">
-            <MasterPage title="أرصدة الشركاء وكشف الحساب" subtitle="اضغط على أي حساب لعرض تفاصيل حركاته (Ledger)">
+            <MasterPage icon="⚖️" title="أرصدة الشركاء وكشف الحساب" subtitle="اضغط على أي حساب لعرض تفاصيل حركاته (Ledger)">
                 
                 <style>{`
                     .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.5); border-radius: 16px; padding: 20px; box-shadow: 0 4px 25px rgba(0,0,0,0.03); margin-bottom: 20px; }
@@ -201,7 +358,7 @@ export default function PartnerBalancesPage() {
 
                     .arrow-icon { display: inline-block; transition: transform 0.3s; margin-left: 10px; color: #94a3b8; }
                     .arrow-expanded { transform: rotate(90deg); color: #3b82f6; }
-                    .glass-input { width: 100%; padding: 12px 15px; border-radius: 10px; border: 2px solid #e2e8f0; outline: none; font-weight: 700; transition: 0.3s; background: white; }
+                    .glass-input { width: 100%; padding: 10px 15px; border-radius: 10px; border: 2px solid #e2e8f0; outline: none; font-weight: 700; transition: 0.3s; background: white; }
                     .glass-input:focus { border-color: ${THEME.primary || '#3b82f6'}; }
 
                     .btn-toggle-status { padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 900; border: none; cursor: pointer; transition: 0.2s; }
@@ -211,54 +368,92 @@ export default function PartnerBalancesPage() {
                     
                     .btn-print-row { padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 900; background: white; color: #0f172a; border: 1px solid #cbd5e1; cursor: pointer; transition: 0.2s; }
                     .btn-print-row:hover { background: #f1f5f9; transform: translateY(-1px); border-color: #94a3b8; }
+
+                    .pill-btn { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 800; cursor: pointer; border: 1px solid #cbd5e1; transition: 0.2s; background: white; color: #475569; white-space: nowrap; }
+                    .pill-btn.active { background: ${THEME.primary || '#3b82f6'}; color: white; border-color: ${THEME.primary || '#3b82f6'}; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3); }
+                    .pill-btn:hover:not(.active) { background: #f1f5f9; }
                 `}</style>
 
                 <div className="glass-panel" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                     <div className="stat-card credit">
-                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>إجمالي دائن (مستحقات للغير) 📉</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>إجمالي دائن (لهم) في الفترة 📉</div>
                         <div style={{ fontSize: '24px', fontWeight: 900, color: '#059669' }}>{formatCurrency(stats.totalCredit)}</div>
                     </div>
                     <div className="stat-card debit">
-                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>إجمالي مدين (مسحوبات ودفعات) 📈</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>إجمالي مدين (عليهم) في الفترة 📈</div>
                         <div style={{ fontSize: '24px', fontWeight: 900, color: '#d97706' }}>{formatCurrency(stats.totalDebit)}</div>
                     </div>
                     <div className="stat-card net">
-                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>الرصيد الصافي (المتأخرات) ⚖️</div>
+                        <div style={{ fontSize: '13px', fontWeight: 900, color: '#475569' }}>الرصيد الصافي لحركات الفترة ⚖️</div>
                         <div style={{ fontSize: '24px', fontWeight: 900, color: getBalanceInfo(stats.net).text }}>
                             {formatCurrency(Math.abs(stats.net))} ({getBalanceInfo(stats.net).label})
                         </div>
                     </div>
                 </div>
 
-                <div className="glass-panel no-print" style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 2, minWidth: '250px' }}>
-                        <input type="text" className="glass-input" placeholder="🔍 ابحث بالاسم أو الكود..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <div className="glass-panel no-print" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 2, minWidth: '250px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '5px', display: 'block' }}>بحث عام</label>
+                            <input type="text" className="glass-input" placeholder="🔍 ابحث بالاسم أو الكود..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                        </div>
+                        
+                        <div style={{ flex: 1, minWidth: '150px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '5px', display: 'block' }}>حركات من تاريخ</label>
+                            <input type="date" className="glass-input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: '150px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '5px', display: 'block' }}>حركات إلى تاريخ</label>
+                            <input type="date" className="glass-input" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', padding: '10px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', cursor: 'pointer', height: '44px' }} onClick={() => setShowInactive(!showInactive)}>
+                            <input type="checkbox" checked={showInactive} readOnly style={{ transform: 'scale(1.2)', marginLeft: '10px', cursor: 'pointer' }} />
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#475569' }}>عرض الموقوفين 🚫</span>
+                        </div>
+
+                        <button onClick={exportToExcelWithColors} style={{ padding: '0 20px', height: '44px', background: '#10b981', color: 'white', borderRadius: '10px', border: 'none', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span>📊</span> تحميل Excel
+                        </button>
                     </div>
-                    <div style={{ flex: 1, minWidth: '200px' }}>
-                        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="glass-input">
-                            <option value="all">كل التصنيفات</option>
-                            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', padding: '10px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', cursor: 'pointer' }} onClick={() => setShowInactive(!showInactive)}>
-                        <input type="checkbox" checked={showInactive} readOnly style={{ transform: 'scale(1.2)', marginLeft: '10px', cursor: 'pointer' }} />
-                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#475569' }}>عرض الموقوفين 🚫</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={exportToExcel} style={{ padding: '12px 20px', background: '#10b981', color: 'white', borderRadius: '10px', border: 'none', fontWeight: 900, cursor: 'pointer' }}>📊 Excel</button>
+
+                    <div>
+                        <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '8px', display: 'block' }}>فلترة بالتصنيف (يمكنك اختيار أكثر من تصنيف):</label>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button 
+                                className={`pill-btn ${selectedTypes.length === 0 ? 'active' : ''}`}
+                                onClick={() => setSelectedTypes([])}
+                            >
+                                الكل 🌍
+                            </button>
+                            {uniqueTypes.map(t => {
+                                const isSelected = selectedTypes.includes(t);
+                                return (
+                                    <button
+                                        key={t}
+                                        className={`pill-btn ${isSelected ? 'active' : ''}`}
+                                        onClick={() => {
+                                            if (isSelected) setSelectedTypes(prev => prev.filter(x => x !== t));
+                                            else setSelectedTypes(prev => [...prev, t]);
+                                        }}
+                                    >
+                                        {isSelected ? '✅ ' : ''}{t}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
 
                 {isLoading ? (
-                    <div style={{ textAlign: 'center', padding: '50px', fontWeight: 900, color: '#64748b' }}>⏳ جاري التحميل...</div>
+                    <LoadingScreen message="جاري تحميل وتجميع الحسابات بدقة..." fullScreen={false} />
                 ) : (
                     <>
                         <table className="smart-table">
                             <thead>
                                 <tr>
-                                    <th style={{ width: '20%' }}>الجهة / الشريك</th>
-                                    <th style={{ width: '10%' }}>التصنيف</th>
-                                    <th style={{ width: '10%', textAlign: 'center' }}>أيام العمل</th>
+                                    <th style={{ width: '25%' }}>الجهة / الشريك</th>
+                                    <th style={{ width: '15%' }}>التصنيف</th>
                                     <th style={{ width: '15%' }}>إجمالي له (دائن)</th>
                                     <th style={{ width: '15%' }}>إجمالي عليه (مدين)</th>
                                     <th style={{ width: '15%' }}>الرصيد الصافي</th>
@@ -288,18 +483,10 @@ export default function PartnerBalancesPage() {
                                                         <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: 800 }}>كود: #{row.partner_code || '---'}</div>
                                                     </div>
                                                 </td>
-                                                <td><span style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px', fontSize: '11px' }}>{row.partner_type}</span></td>
+                                                <td><span style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 900, color: '#475569' }}>{row.partner_type}</span></td>
                                                 
-                                                <td style={{ textAlign: 'center' }}>
-                                                    {row.partner_type === 'عامل يومية' ? (
-                                                        <span style={{ background: '#fef3c7', color: '#d97706', padding: '4px 10px', borderRadius: '6px', fontWeight: 900, fontSize: '13px' }}>
-                                                            {Number(row.total_work_days || 0)} يوم
-                                                        </span>
-                                                    ) : <span style={{ color: '#cbd5e1' }}>---</span>}
-                                                </td>
-
-                                                <td style={{ color: '#059669' }}>{formatCurrency(tCredit)}</td>
-                                                <td style={{ color: '#d97706' }}>{formatCurrency(tDebit)}</td>
+                                                <td style={{ color: '#059669', fontWeight: 900 }}>{formatCurrency(tCredit)}</td>
+                                                <td style={{ color: '#dc2626', fontWeight: 900 }}>{formatCurrency(tDebit)}</td>
                                                 <td>
                                                     <span style={{ background: balInfo.bg, color: balInfo.text, padding: '6px 12px', borderRadius: '8px', WebkitPrintColorAdjust: 'exact' }}>
                                                         {formatCurrency(Math.abs(netBal))} {balInfo.label}
@@ -312,7 +499,6 @@ export default function PartnerBalancesPage() {
                                                             title="طباعة كشف الحساب"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                // 🚀 التعديل الوحيد: توجيه رابط المود الذكي بدون الـ 404 الفرعي
                                                                 window.open(`/PartnerBalances?print=true&id=${row.partner_id}`, '_blank');
                                                             }}
                                                         >
@@ -332,24 +518,24 @@ export default function PartnerBalancesPage() {
 
                                             {isExpanded && (
                                                 <tr>
-                                                    <td colSpan={7} style={{ padding: 0 }}>
+                                                    <td colSpan={6} style={{ padding: 0 }}>
                                                         <div className="ledger-container">
                                                             <div style={{ marginBottom: '10px', fontWeight: 900, color: '#334155', display: 'flex', justifyContent: 'space-between' }}>
-                                                                <span>📄 كشف حساب تفصيلي: {row.partner_name}</span>
+                                                                <span>📄 تفاصيل كشف الحساب {dateFrom || dateTo ? '(حسب الفترة المحددة)' : ''}</span>
                                                                 <span style={{ color: '#94a3b8', fontSize: '12px' }}>{pLedger.length} حركة مسجلة</span>
                                                             </div>
                                                             
                                                             {loadingLedgers[row.partner_id] ? (
-                                                                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontWeight: 900 }}>⏳ جاري تحميل الحركات...</div>
+                                                                <LoadingScreen message="جاري تحميل الحركات..." fullScreen={false} />
                                                             ) : pLedger.length > 0 ? (
                                                                 <table className="ledger-table">
                                                                     <thead>
                                                                         <tr>
                                                                             <th style={{ width: '15%' }}>التاريخ</th>
-                                                                            <th style={{ width: '30%' }}>البيان / القيد</th>
+                                                                            <th style={{ width: '40%' }}>البيان / القيد</th>
                                                                             <th style={{ width: '15%' }}>دائن (له)</th>
                                                                             <th style={{ width: '15%' }}>مدين (عليه)</th>
-                                                                            <th style={{ width: '25%' }}>الرصيد التراكمي</th>
+                                                                            <th style={{ width: '15%' }}>الرصيد التراكمي للفترة</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -382,7 +568,7 @@ export default function PartnerBalancesPage() {
                                                                     </tbody>
                                                                 </table>
                                                             ) : (
-                                                                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontWeight: 800 }}>لا توجد حركات مُرحلة لهذا الحساب.</div>
+                                                                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontWeight: 800 }}>لا توجد حركات معتمدة لهذا الحساب في هذه الفترة.</div>
                                                             )}
                                                         </div>
                                                     </td>
@@ -398,7 +584,7 @@ export default function PartnerBalancesPage() {
                         {filteredData.length > 0 && (
                             <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                                 <div style={{ fontSize: '14px', fontWeight: 900, color: '#475569' }}>
-                                    إجمالي الحسابات: <span style={{ color: THEME.primary || '#3b82f6' }}>{filteredData.length}</span> حساب
+                                    الحسابات المعروضة: <span style={{ color: THEME.primary || '#3b82f6' }}>{filteredData.length}</span> حساب
                                 </div>
                                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                     <button 
@@ -419,7 +605,7 @@ export default function PartnerBalancesPage() {
                         )}
                         {filteredData.length === 0 && (
                             <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontWeight: 900, background: 'white', borderRadius: '12px', marginTop: '20px' }}>
-                                ❌ لا توجد حسابات مطابقة للبحث
+                                ❌ لا توجد حسابات أو حركات مطابقة للبحث في الفترة المحددة
                             </div>
                         )}
                     </>

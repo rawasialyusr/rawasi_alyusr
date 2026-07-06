@@ -17,6 +17,9 @@ import QueryProvider from '../components/QueryProvider';
 // 🚀 2. استدعاء خدمة رسائل التأكيد المخصصة (V11)
 import { ConfirmProvider } from '../components/ConfirmContext'; 
 
+// 🚀 3. اختصارات التنقل العامة
+import GlobalNavigationShortcuts from '../components/GlobalNavigationShortcuts';
+
 const cairo = Cairo({ 
   subsets: ["arabic"],
   weight: ["400", "500", "700", "900"], // أضفنا وزن 500 للجماليات
@@ -121,6 +124,7 @@ export default function RootLayout({
                                         <SidebarProvider> 
                                             {/* LayoutClient هو المتحكم في حركة السايد بار والصفحة */}
                                             <LayoutClient>
+                                                <GlobalNavigationShortcuts />
                                                 <div style={{ position: 'relative', zIndex: 1 }}>
                                                     {children}
                                                 </div>

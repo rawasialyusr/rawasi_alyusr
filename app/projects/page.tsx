@@ -1,5 +1,6 @@
 "use client";
 import React, { useMemo, useState, useEffect } from 'react';
+import SecureAction from '@/components/SecureAction';
 import { createPortal } from 'react-dom';
 import { useProjectsLogic } from './projects_logic';
 import BoqFormModal from './BoqFormModal';
@@ -18,6 +19,7 @@ import MaterialsTab from './MaterialsTab';
 import FinancialsTab from './FinancialsTab';
 import QcTab from './QcTab';
 import ExpensesTab from './ExpensesTab'; // 👈 استدعاء تاب المصروفات الجديد
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function AdvancedProjectsPage() {
     const logic = useProjectsLogic();
@@ -45,53 +47,42 @@ export default function AdvancedProjectsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         
         {!logic.selectedProject && (
-            <button onClick={() => {
-                logic.setCurrentProjectRecord({ project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', estimated_budget: '', down_payment: '', start_date: '', end_date: '', location_address: '', project_manager: '', engineer_in_charge: '', engineer_phone: '', status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: '' });
-                logic.setIsAddProjectModalOpen(true);
-            }} className="btn-main-glass gold">
+            <SecureAction module="projects" action="create">
+            <button onClick={() => { logic.setCurrentProjectRecord({ project_code: '', Property: '', unit_type: '', unit_area: '', client_id: '', contract_value: '', estimated_budget: '', down_payment: '', start_date: '', end_date: '', location_address: '', project_manager: '', engineer_in_charge: '', engineer_phone: '', status: 'قيد الدراسة', current_stage: 'تجهيز الموقع', notes: '' }); logic.setIsAddProjectModalOpen(true); }} className="btn-main-glass gold">
                 ➕ إضافة مشروع جديد
             </button>
+        </SecureAction>
         )}
 
         {logic.selectedProject && (
             <>
-                <button onClick={() => {
-                    logic.setCurrentProjectRecord({ ...logic.selectedProject }); 
-                    logic.setIsAddProjectModalOpen(true);
-                }} className="btn-main-glass blue">
+                <SecureAction module="projects" action="edit">
+                <button onClick={() => { logic.setCurrentProjectRecord({ ...logic.selectedProject }); logic.setIsAddProjectModalOpen(true); }} className="btn-main-glass blue">
                     ✏️ تعديل بيانات المشروع
                 </button>
+            </SecureAction>
 
-                <button onClick={() => {
-                    setDeleteAlert({
-                        isOpen: true,
-                        type: 'project',
-                        id: logic.selectedProject.id,
-                        title: 'حذف المشروع نهائياً',
-                        message: `هل أنت متأكد من حذف العقار "${logic.selectedProject.Property}" بكل بياناته وحساباته ومقايساته؟ هذا الإجراء لا يمكن التراجع عنه!`
-                    });
-                }} className="btn-main-glass red">
+                <SecureAction module="projects" action="delete">
+                <button onClick={() => { setDeleteAlert({ isOpen: true, type: 'project', id: logic.selectedProject.id, title: 'حذف المشروع نهائياً', message: `هل أنت متأكد من حذف العقار "${logic.selectedProject.Property}" بكل بياناته وحساباته ومقايساته؟ هذا الإجراء لا يمكن التراجع عنه!` }); }} className="btn-main-glass red">
                     🗑️ حذف المشروع نهائياً
                 </button>
+            </SecureAction>
 
                 {logic.activeTab === 'boq' && (
+                    <SecureAction module="boqbudget" action="create">
                     <button onClick={() => {
                         logic.setCurrentBoqRecord({ item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, estimated_labor_cost: 0, estimated_operational_cost: 0, start_date: '', end_date: '' });
                         logic.setIsBoqModalOpen(true);
                     }} className="btn-main-glass gold">
                         ➕ إضافة بند للمقايسة (WBS)
                     </button>
+                </SecureAction>
                 )}
 
                 <button onClick={logic.runDiagnostics} className="btn-main-glass white" style={{ borderColor: 'rgba(239, 68, 68, 0.5)' }}>
                     🔍 تشغيل فحص الداتا بيز
                 </button>
 
-                <div style={{ borderTop: '1px dashed rgba(255,255,255,0.2)', margin: '5px 0' }}></div>
-
-                <button onClick={() => logic.setSelectedProject(null)} className="btn-main-glass white">
-                    🔙 العودة لقائمة المشاريع
-                </button>
             </>
         )}
 
@@ -138,7 +129,7 @@ export default function AdvancedProjectsPage() {
 
     return (
       <div className="clean-page">
-        <MasterPage title="غرفة عمليات المشاريع المتقدمة" subtitle="إدارة الميزانيات، المقايسات، والتدفقات النقدية للمشروعات">
+        <MasterPage icon="🏗️" title="غرفة عمليات المشاريع المتقدمة" subtitle="إدارة الميزانيات، المقايسات، والتدفقات النقدية للمشروعات">
           
           <RawasiSidebarManager 
               summary={
@@ -176,7 +167,7 @@ export default function AdvancedProjectsPage() {
           `}</style>
 
           {logic.isLoading ? (
-               <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: THEME.goldAccent }}>⏳ جاري تحميل بيانات المشاريع...</div>
+               <LoadingScreen message="جاري تحميل بيانات المشاريع..." fullScreen={false} />
           ) : !logic.selectedProject ? (
                
                <div className="projects-grid" style={{ animation: 'fadeIn 0.5s ease-out' }}>
@@ -249,7 +240,7 @@ export default function AdvancedProjectsPage() {
                </div>
 
           ) : logic.isDetailsLoading ? (
-               <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: THEME.coffeeDark }}>⏳ جاري سحب الهيكل الهندسي والمالي للعقار...</div>
+               <LoadingScreen message="جاري سحب الهيكل الهندسي والمالي للعقار..." fullScreen={false} />
           ) : (
               <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
                 
@@ -266,6 +257,13 @@ export default function AdvancedProjectsPage() {
                     </div>
                     
                     <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <button 
+                            onClick={() => logic.setSelectedProject(null)} 
+                            style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', fontWeight: 900, backgroundColor: '#475569', color: 'white', cursor: 'pointer', boxShadow: '0 5px 15px rgba(0,0,0,0.1)', transition: '0.3s' }}
+                        >
+                            🔙 العودة لقائمة المشاريع
+                        </button>
+
                         <span style={{ fontSize: '13px', fontWeight: 900, color: '#64748b' }}>تغيير حالة المشروع:</span>
                         <select 
                             value={logic.selectedProject.status || 'قيد الدراسة'}

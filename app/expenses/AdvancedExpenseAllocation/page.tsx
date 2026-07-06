@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import RawasiSmartTable from '@/components/rawasismarttable';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function AdvancedExpenseAllocation() {
   const [allocations, setAllocations] = useState<any[]>([]);
@@ -316,9 +317,7 @@ export default function AdvancedExpenseAllocation() {
         </div>
 
         {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8', fontWeight: 900, fontSize: '15px' }}>
-            ⏳ جاري سحب وتصفية الداتا مباشرة من السيرفر وبدون تخطي الحدود...
-          </div>
+          <LoadingScreen message="جاري سحب وتصفية الداتا مباشرة من السيرفر وبدون تخطي الحدود..." fullScreen={false} />
         ) : filteredData.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8', fontWeight: 900 }}>
             📭 لا توجد سجلات توزيع متطابقة مع خيارات الفلترة الحالية.

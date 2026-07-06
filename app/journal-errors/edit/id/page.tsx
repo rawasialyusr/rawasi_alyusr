@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import LoadingScreen from '@/components/LoadingScreen';
 
 const THEME = {
   primary: '#0f172a',
@@ -22,7 +23,8 @@ export default function EditJournalEntryPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   
   // بيانات رأس القيد
-  const [header, setHeader] = useState({ entry_date: '', description: '' });
+  const [header, setHeader] = useState({ entry_date: '', description: '', status: '' });
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // بيانات أسطر القيد
   const [lines, setLines] = useState<any[]>([]);
@@ -32,14 +34,23 @@ export default function EditJournalEntryPage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // سحب شجرة الحسابات (الحسابات الفرعية فقط اللي بتقبل حركات)
+        
+        // سحب بيانات المستخدم (هل هو Admin؟)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+           const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+           setIsAdmin(profile?.role === 'super_admin' || profile?.role === 'admin');
+        }
+
+        // سحب شجرة الحسابات
+ (الحسابات الفرعية فقط اللي بتقبل حركات)
         const { data: accData } = await supabase.from('accounts').select('id, code, name').eq('is_transactional', true);
         if (accData) setAccounts(accData);
 
         // سحب رأس القيد
         const { data: headerData } = await supabase.from('journal_headers').select('*').eq('id', id).single();
         if (headerData) {
-          setHeader({ entry_date: headerData.entry_date, description: headerData.description || '' });
+          setHeader({ entry_date: headerData.entry_date, description: headerData.description || '', status: headerData.status });
         }
 
         // سحب أسطر القيد
@@ -138,7 +149,7 @@ export default function EditJournalEntryPage() {
     setIsSaving(false);
   };
 
-  if (isLoading) return <div style={{ color: 'white', textAlign: 'center', marginTop: '100px', fontFamily: 'Cairo' }}>⏳ جاري تحميل القيد...</div>;
+  if (isLoading) return <LoadingScreen message="جاري تحميل القيد..." fullScreen={false} />;
 
   return (
     <div className="page-wrapper">
@@ -240,7 +251,7 @@ export default function EditJournalEntryPage() {
                     <input type="number" className="standard-input" style={{ width: '100%', padding: '10px', textAlign: 'center', color: '#f87171' }} value={line.credit || ''} onChange={(e) => handleLineChange(index, 'credit', e.target.value)} min="0" />
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button type="button" className="btn-del" onClick={() => removeLine(index)}>🗑️</button>
+                    {!(header.status === 'معتمد' && !isAdmin) && <button type="button" className="btn-del" onClick={() => removeLine(index)}>🗑️</button>}
                   </td>
                 </tr>
               ))}
@@ -248,7 +259,7 @@ export default function EditJournalEntryPage() {
           </table>
         </div>
 
-        <button type="button" className="btn-action btn-add" onClick={addLine}>➕ إضافة طرف جديد للقيد</button>
+        {!(header.status === 'معتمد' && !isAdmin) && <button type="button" className="btn-action btn-add" onClick={addLine}>➕ إضافة طرف جديد للقيد</button>}
 
         {/* ملخص الاتزان */}
         <div className="summary-box">

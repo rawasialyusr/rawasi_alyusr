@@ -3,10 +3,12 @@ import { useState, useMemo, useCallback, useDeferredValue } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 /**
- * العقل المدبر لدفتر اليومية الشامل - رواسي V11
- * مطابق للباب الأول (تجريد المخرجات) والباب العاشر (لا وجود لحلقات تكرارية في الواجهة)
+ * العقل المدبر لدفتر اليومية الشامل - رواسي V12
+ * 🟢 سحب على مراحل (1000 × 1000) مع حماية من التكرار
+ * 🟢 فلترة شاملة حسب الفترة والحساب والشريك والمشروع ونوع القيد
  */
 export function useJournalLogic() {
     const queryClient = useQueryClient();
@@ -14,45 +16,49 @@ export function useJournalLogic() {
 
     // 1. إدارة الحالة (State Management)
     const [globalSearch, setGlobalSearch] = useState('');
-    const deferredSearch = useDeferredValue(globalSearch); // منع اختناق الـ DOM أثناء البحث السريع
+    const deferredSearch = useDeferredValue(globalSearch);
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [filterAccountId, setFilterAccountId] = useState<string | null>(null);
     const [filterPartnerId, setFilterPartnerId] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState('الكل'); 
-    const [fetchLimit, setFetchLimit] = useState<number>(100); // حماية الذاكرة من البيانات الضخمة
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    // 📥 2. محرك جلب البيانات (React Query - Offline First)
+    // 📥 2. محرك جلب البيانات - سحب على مراحل (React Query)
     const { data: journalMaster = [], isLoading, isError } = useQuery({
-        queryKey: ['journal_master_view', dateFrom, dateTo, filterAccountId, filterPartnerId, fetchLimit], 
+        queryKey: ['journal_master_view', dateFrom, dateTo, filterAccountId, filterPartnerId, filterStatus], 
         queryFn: async () => {
-            let query = supabase
-                .from('journal_master_view') 
-                .select('*')
-                .order('entry_date', { ascending: false })
-                .order('line_created_at', { ascending: false })
-                .limit(fetchLimit); // السحب الذكي المحدود
-            
-            if (dateFrom) query = query.gte('entry_date', dateFrom);
-            if (dateTo) query = query.lte('entry_date', dateTo);
-            if (filterAccountId) query = query.eq('account_id', filterAccountId);
-            if (filterPartnerId) query = query.eq('partner_id', filterPartnerId);
+            const buildQuery = () => {
+                let query = supabase
+                    .from('journal_master_view') 
+                    .select('*')
+                    .order('entry_date', { ascending: false })
+                    .order('line_created_at', { ascending: false })
+                    .order('line_id', { ascending: false });
+                
+                if (dateFrom) query = query.gte('entry_date', dateFrom);
+                if (dateTo) query = query.lte('entry_date', dateTo);
+                if (filterAccountId) query = query.eq('account_id', filterAccountId);
+                if (filterPartnerId) query = query.eq('partner_id', filterPartnerId);
+                
+                if (filterStatus === 'معتمد') query = query.eq('header_status', 'معتمد');
+                if (filterStatus === 'مسودة') query = query.eq('header_status', 'draft');
 
-            const { data, error } = await query;
-            if (error) throw new Error(error.message);
-            return data || [];
+                return query;
+            };
+
+            return await fetchPaginatedData(buildQuery, 'line_id');
         },
         staleTime: 60 * 1000 
     });
 
-    // 🔍 3. التصفية المتقدمة (Logic Filtering - حصراً داخل useMemo)
+    // 🔍 3. التصفية المتقدمة
     const displayedLines = useMemo(() => {
         if (!journalMaster || journalMaster.length === 0) return [];
         let result = journalMaster;
 
         if (filterStatus !== 'الكل') {
-            const targetStatus = filterStatus === 'مرحل' ? 'posted' : 'draft';
+            const targetStatus = filterStatus === 'معتمد' ? 'معتمد' : 'draft';
             result = result.filter(r => r.header_status === targetStatus);
         }
 
@@ -70,7 +76,7 @@ export function useJournalLogic() {
         return result;
     }, [journalMaster, deferredSearch, filterStatus]);
 
-    // 🧮 4. محرك الحسابات المالية (مدرع ضد الـ NaN والنصوص)
+    // 🧮 4. محرك الحسابات المالية
     const totals = useMemo(() => {
         let totalDebit = 0;
         let totalCredit = 0;
@@ -91,17 +97,26 @@ export function useJournalLogic() {
         };
     }, [displayedLines]);
 
-    // 🚀 5. محرك الحذف المجمع (Bulk Delete - متوافق مع الباب العاشر)
-    // يُمنع استخدام Loops، يتم تنفيذ العملية بـ Query واحد فقط للسرعة الفائقة
+    // 🚀 5. محرك الحذف المجمع
     const deleteHeadersMutation = useMutation({
         mutationFn: async () => {
             const selectedLines = journalMaster.filter(l => selectedIds.includes(String(l.line_id)));
-            // استخراج رؤوس القيود الفريدة (Unique Header IDs)
             const headerIds = [...new Set(selectedLines.map(l => l.header_id))];
+            
+            // 🛡️ حماية القيود المعتمدة
+            const { data: { session } } = await supabase.auth.getSession();
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session?.user?.id).single();
+            const isAdmin = profile?.role === 'super_admin' || profile?.role === 'admin';
+            
+            if (!isAdmin) {
+                const hasApproved = selectedLines.some(l => l.header_status === 'معتمد');
+                if (hasApproved) {
+                    throw new Error('عفواً، لا تملك صلاحية تعديل أو حذف القيود المعتمدة والمرحلة.');
+                }
+            }
 
             if (headerIds.length === 0) throw new Error('لم يتم تحديد أي قيود صالحة.');
 
-            // ⚡ طلبة واحدة (Single Bulk Request) تمسح كل القيود المحددة في جزء من الثانية
             const { error } = await supabase.from('journal_headers').delete().in('id', headerIds);
             if (error) throw new Error(error.message);
         },
@@ -119,12 +134,15 @@ export function useJournalLogic() {
         }
     }, [deleteHeadersMutation]);
 
-    // 💎 6. تجريد المخرجات (Pure Return - الباب الأول)
+    const isFiltered = !!(filterAccountId || filterPartnerId || dateFrom || dateTo || (filterStatus !== 'الكل'));
+
+    // 💎 6. تجريد المخرجات
     return {
         data: displayedLines,
         isLoading,
         isError,
         totals,
+        isFiltered,
         state: {
             globalSearch,
             dateFrom,
@@ -132,7 +150,6 @@ export function useJournalLogic() {
             filterAccountId,
             filterPartnerId,
             filterStatus,
-            fetchLimit,
             selectedIds
         },
         actions: {
@@ -142,7 +159,6 @@ export function useJournalLogic() {
             setFilterAccountId,
             setFilterPartnerId,
             setFilterStatus,
-            setFetchLimit,
             setSelectedIds,
             handleDeleteHeaders
         }

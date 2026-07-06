@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { supabase } from '@/lib/supabase'; 
-import { useRouter } from 'next/navigation'; 
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/lib/toast-context'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; 
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 export function useInvoicesLogic() {
     const router = useRouter();
@@ -47,7 +48,7 @@ export function useInvoicesLogic() {
                 
                 const userRole = String(profile?.role || '').toLowerCase();
                 setPermissions({ 
-                    isAdmin: userRole === 'admin' || profile?.is_admin === true, 
+                    isAdmin: (userRole === 'admin' || userRole === 'super_admin') || profile?.is_admin === true, 
                     ...profile?.permissions 
                 });
             }
@@ -58,12 +59,11 @@ export function useInvoicesLogic() {
     const { data: invoices = [], isLoading: isInvLoading } = useQuery({
         queryKey: ['invoices'],
         queryFn: async () => {
-            const { data, error } = await supabase
+            const buildQuery = () => supabase
                 .from('invoices')
                 .select('*, partners(*), debit_acc:accounts!invoices_debit_acc_fkey(name)')
                 .order('date', { ascending: false });
-            if (error) throw error;
-            return data || [];
+            return await fetchPaginatedData(buildQuery, 'id');
         }
     });
 
@@ -116,8 +116,8 @@ export function useInvoicesLogic() {
 
     const kpis = useMemo(() => ({
         total: allFiltered.length,
-        posted: allFiltered.filter((i: any) => i.status === 'مُعتمد').length,
-        pending: allFiltered.filter((i: any) => i.status !== 'مُعتمد').length
+        posted: allFiltered.filter((i: any) => i.status === 'معتمد').length,
+        pending: allFiltered.filter((i: any) => i.status !== 'معتمد').length
     }), [allFiltered]);
 
     const handleOpenPaymentModal = async (inv: any) => {
@@ -171,8 +171,8 @@ export function useInvoicesLogic() {
     };
 
     const handleEdit = (inv: any) => {
-        if (inv.is_posted || inv.status === 'مُعتمد' || inv.status === 'مرحل') {
-            showToast("⚠️ لا يمكن تعديل فاتورة مُرحلة! لتسجيل الدفعات استخدم زر (💰) الموجود بالجدول. ولتعديل بيانات الأصناف يجب فك الترحيل أولاً.", "error");
+        if (inv.is_posted || inv.status === 'معتمد' || inv.status === 'معتمد') {
+            showToast("⚠️ لا يمكن تعديل فاتورة معتمدة! لتسجيل الدفعات استخدم زر (💰) الموجود بالجدول. ولتعديل بيانات الأصناف يجب فك الترحيل أولاً.", "error");
             return;
         }
 
@@ -195,8 +195,8 @@ export function useInvoicesLogic() {
             
             if (record.id) {
                 const { data: currentInv } = await supabase.from('invoices').select('status').eq('id', record.id).single();
-                if (currentInv && (currentInv.status === 'مُعتمد' || currentInv.status === 'مرحل')) {
-                    throw new Error("لا يمكن حفظ التعديلات! الفاتورة مُرحلة بالفعل في النظام. يرجى فك الترحيل أولاً.");
+                if (currentInv && (currentInv.status === 'معتمد' || currentInv.status === 'معتمد')) {
+                    throw new Error("لا يمكن حفظ التعديلات! الفاتورة معتمدة بالفعل في النظام. يرجى فك الترحيل أولاً.");
                 }
             }
 

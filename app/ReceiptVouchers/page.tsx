@@ -12,10 +12,36 @@ import ReceiptVoucherModal from './ReceiptVoucherModal';
 import MasterPage from '@/components/MasterPage';
 import { useSidebar } from '@/lib/SidebarContext';
 import SmartCombo from '@/components/SmartCombo';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function ReceiptVouchersPage() {
     // 💎 نقطة الاستدعاء الواحدة (Single Source of Truth)
-    const logic = useReceiptVouchersLogic(); 
+    const logic = useReceiptVouchersLogic();
+
+  // 🚀 اختصار الحفظ (Ctrl + Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (logic.isModalOpen && e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!logic.isSaving) logic.handleSaveVoucher();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [logic.isModalOpen, logic.isSaving]);
+
+  // 🚀 اختصار إضافة جديد (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      if (!logic.isModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        logic.handleAddVoucher();
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [logic.isModalOpen]);
+ 
     const { setSidebarContent } = useSidebar();
     
     const [mounted, setMounted] = useState(false);
@@ -122,7 +148,7 @@ export default function ReceiptVouchersPage() {
             accessor: 'status',
             render: (row: any) => {
                 if (!row) return null;
-                const isPosted = row.status === 'مُعتمد' || row.status === 'مرحل';
+                const isPosted = row.status === 'معتمد' || row.status === 'معتمد';
                 const isRefunded = row.status === 'مسترجع';
                 return (
                     <div style={{
@@ -241,10 +267,10 @@ export default function ReceiptVouchersPage() {
     // 🎨 واجهة المستخدم (التغليف السيادي والجدول الذكي)
     // =========================================================================
     return (
-        <MasterPage title="سندات القبض والتحصيلات" subtitle="إدارة السندات، المراجعة، والترحيل المحاسبي">
+        <MasterPage icon="📥" title="سندات القبض والتحصيلات" subtitle="إدارة السندات، المراجعة، والترحيل المحاسبي">
             
             {logic.isLoading ? (
-                <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري تحميل السندات...</div>
+                <LoadingScreen message="جاري تحميل السندات..." fullScreen={false} />
             ) : (
                 <div className="clickable-rows" onKeyDown={logic.handleTableKeyDown} tabIndex={0} style={{ outline: 'none' }}>
                     <RawasiSmartTable 

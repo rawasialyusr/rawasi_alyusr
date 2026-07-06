@@ -249,7 +249,30 @@ export async function processExcelInBackend(formData: FormData) {
     let totalUploaded = 0;
     const CHUNK_SIZE = 100; 
 
-    for (const sheetName of workbook.SheetNames) {
+    // 🚀🚀 الترتيب المنطقي لضمان عدم تعارض الـ Foreign Keys 🚀🚀
+    const DEPENDENCY_ORDER = [
+      'system_settings', 'profiles', 'accounts', 'partners', 'projects', 
+      'project_stages', 'project_work_structure', 'boq_items', 'boq_budget', 
+      'job_orders', 'contractor_assignments', 'inventory', 'all_emp', 
+      'payroll_slips', 'violations', 'expenses', 'invoices', 
+      'material_receipts', 'material_receipt_lines', 'material_issues', 
+      'material_issue_lines', 'sub_claims', 'payment_vouchers', 
+      'receipt_vouchers', 'labor_daily_logs', 'journal_headers', 
+      'journal_lines', 'journal_errors', 'sys_financial_reports', 
+      'user_requests', 'user_tasks', 'notifications'
+    ];
+
+    // ترتيب الشيتات الموجودة في الملف بناءً على ترتيب الاعتمادية
+    const sortedSheetNames = workbook.SheetNames.sort((a, b) => {
+      const indexA = DEPENDENCY_ORDER.indexOf(a);
+      const indexB = DEPENDENCY_ORDER.indexOf(b);
+      // لو مش موجود في القائمة نخليه في الأخر
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+
+    for (const sheetName of sortedSheetNames) {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 

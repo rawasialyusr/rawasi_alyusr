@@ -113,6 +113,27 @@ export default function TeamPage() {
         alert("✅ تم نسخ رابط الدعوة الرقمية!\nأرسله الآن للموظف أو العميل للتسجيل.");
     };
 
+    const handleBulkToggle = async (action: 'activate_all' | 'suspend_all') => {
+        const isSuspending = action === 'suspend_all';
+        if (!confirm(`هل أنت متأكد من ${isSuspending ? 'إيقاف' : 'تنشيط'} جميع المستخدمين (ما عدا الإدارة العليا)؟`)) return;
+
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            alert(result.message);
+            fetchProfiles();
+        } catch (error: any) {
+            alert(`❌ فشل التحديث: ${error.message}`);
+            setIsLoading(false);
+        }
+    };
+
     // ==========================================
     // 5. Sidebar Integration
     // ==========================================
@@ -120,9 +141,20 @@ export default function TeamPage() {
         setSidebarContent({
             actions: (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-                    <button onClick={handleCopyInvite} className="btn-main-glass gold" style={{ background: THEME.brand.gold, color: THEME.brand.coffee, border: 'none', fontWeight: 900, padding: '15px' }}>
-                        🔗 نسخ رابط دعوة جديد
+                    <button onClick={() => { setSelectedProfile(null); setIsModalOpen(true); }} className="btn-main-glass gold" style={{ background: THEME.brand.gold, color: THEME.brand.coffee, border: 'none', fontWeight: 900, padding: '15px' }}>
+                        ➕ إضافة مستخدم جديد
                     </button>
+                    <button onClick={handleCopyInvite} className="btn-main-glass white">
+                        🔗 نسخ رابط دعوة للتسجيل
+                    </button>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => handleBulkToggle('suspend_all')} style={{ flex: 1, padding: '10px', background: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '12px', fontWeight: 900, cursor: 'pointer' }}>
+                            🚫 إيقاف الكل
+                        </button>
+                        <button onClick={() => handleBulkToggle('activate_all')} style={{ flex: 1, padding: '10px', background: '#dcfce7', color: '#22c55e', border: '1px solid #bbf7d0', borderRadius: '12px', fontWeight: 900, cursor: 'pointer' }}>
+                            ✅ تنشيط الكل
+                        </button>
+                    </div>
                     <button onClick={fetchProfiles} className="btn-main-glass white">
                         🔄 تحديث القائمة
                     </button>
@@ -155,7 +187,7 @@ export default function TeamPage() {
     // 6. UI Render
     // ==========================================
     return (
-        <MasterPage title="إدارة الفريق والشركاء" subtitle="تحديد الرتب وتوزيع صلاحيات الوصول للمنصة بأمان">
+        <MasterPage icon="👥" title="إدارة الفريق والشركاء" subtitle="تحديد الرتب وتوزيع صلاحيات الوصول للمنصة بأمان">
             
             {/* 🎨 Clean CSS Styles */}
             <style>{`
@@ -245,6 +277,9 @@ export default function TeamPage() {
                             }}>
                                 {user.role === 'admin' ? '👑 مدير نظام' : user.role === 'staff' ? '💼 موظف' : user.role === 'contractor' ? '👷 مقاول' : '👤 عميل'}
                             </div>
+
+                            {/* مؤشر حالة الحساب */}
+                            <div style={{ position: 'absolute', top: 15, right: 15, width: 12, height: 12, borderRadius: '50%', background: user.is_active === false ? '#ef4444' : '#22c55e', boxShadow: `0 0 10px ${user.is_active === false ? '#ef4444' : '#22c55e'}`, border: '2px solid white' }} title={user.is_active === false ? 'حساب موقوف' : 'حساب نشط'} />
 
                             {user.partners?.name && (
                                 <div style={{ marginTop: '18px', fontSize: '11px', fontWeight: 900, color: THEME.brand.gold, background: `${THEME.brand.gold}15`, padding: '8px 12px', borderRadius: '10px' }}>

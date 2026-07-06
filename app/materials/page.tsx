@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import SecureAction from '@/components/SecureAction';
 import * as XLSX from 'xlsx'; // 🚀 استدعاء مكتبة الإكسل
 import { useMaterialsLogic } from './materials_logic';
 import MasterPage from '@/components/MasterPage';
@@ -13,6 +14,7 @@ import DispenseMaterialModal from '../material_issues/DispenseMaterialModal';
 import { useConfirm } from '@/components/ConfirmContext'; 
 // 🚀 استدعاء مودال الصرف المجمع الجديد
 import BulkDispenseModal from './BulkDispenseModal'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 // =========================================================================
 // 🧩 مكون القائمة المنسدلة متعددة الاختيارات مع بحث (Custom Dropdown)
@@ -226,7 +228,7 @@ export default function MaterialsPage() {
                     "الوحدة": item.unit,
                     "سعر الوحدة": Number(item.unit_price || 0),
                     "إجمالي السطر": Number(item.total_price || 0),
-                    "الحالة المحاسبية": group.is_posted ? 'مرحل' : 'مسودة'
+                    "الحالة المحاسبية": group.is_posted ? 'معتمد' : 'مسودة'
                 });
             });
         });
@@ -254,7 +256,7 @@ export default function MaterialsPage() {
 
     return (
         <div className="clean-page print-container">
-            <MasterPage title="مركز توريد خامات المشاريع" subtitle="إصدار فواتير الخامات، توجيهها للمشاريع، وربطها بحسابات الموردين والعملاء للخصم التلقائي">
+            <MasterPage icon="🧱" title="مركز توريد خامات المشاريع" subtitle="إصدار فواتير الخامات، توجيهها للمشاريع، وربطها بحسابات الموردين والعملاء للخصم التلقائي">
                 
                 <RawasiSidebarManager 
                     actions={
@@ -485,7 +487,7 @@ export default function MaterialsPage() {
                 {/* 🌳 جدول الشجرة التجميعي الذكي بناءً على الفاتورة */}
                 <div>
                     {logic.isLoading ? (
-                        <div style={{ textAlign: 'center', padding: '20px', fontWeight: 900, color: '#64748b' }}>⏳ جاري تحميل فواتير التوريد...</div>
+                        <LoadingScreen message="جاري تحميل فواتير التوريد..." fullScreen={false} />
                     ) : (
                         <table className="tree-table">
                             <thead className="tree-thead">
@@ -548,7 +550,7 @@ export default function MaterialsPage() {
                                                             {group.account?.name || '---'}
                                                         </span>
                                                         <span style={{ background: group.is_posted ? '#dcfce7' : '#fef2f2', color: group.is_posted ? '#166534' : '#dc2626', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>
-                                                            {group.is_posted ? 'مُرحل ✅' : 'مسودة ⏳'}
+                                                            {group.is_posted ? 'معتمد ✅' : 'مسودة ⏳'}
                                                         </span>
                                                     </div>
                                                 </td>

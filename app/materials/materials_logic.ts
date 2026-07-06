@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 import { usePermissions } from '@/lib/PermissionsContext';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
-// 🚀 1. الحساسية القصوى لتنظيف الـ IDs (تتعامل مع النصوص، الـ Null، وحتى الكائنات Objects)
+// 🚀 1. الحساسية القصوى لتنظيف الـ IDs
 const cleanId = (val: any) => {
     if (!val) return null;
     if (typeof val === 'object') return val.id ? String(val.id).trim() : null;
@@ -13,7 +14,7 @@ const cleanId = (val: any) => {
     return str === '' || str === 'undefined' || str === 'null' ? null : str;
 };
 
-// 🚀 2. الحساسية القصوى للأرقام (لمنع أي NaN من تدمير الداتابيز)
+// 🚀 2. الحساسية القصوى للأرقام
 const cleanNum = (val: any, fallback = 0) => {
     const num = Number(val);
     return isNaN(num) ? fallback : num;
@@ -40,9 +41,6 @@ export function useMaterialsLogic() {
     const [isDispenseModalOpen, setIsDispenseModalOpen] = useState(false);
     const [selectedInvoiceItem, setSelectedInvoiceItem] = useState<any>(null);
 
-    // =========================================================================
-    // 📦 الصرف المجمع (Bulk Dispense)
-    // =========================================================================
     const [selectedLineItems, setSelectedLineItems] = useState<any[]>([]);
     const [isBulkDispenseModalOpen, setIsBulkDispenseModalOpen] = useState(false);
 
@@ -88,7 +86,7 @@ export function useMaterialsLogic() {
                 unit_price: cleanNum(item.unit_price),
                 total_price: cleanNum(item.dispense_qty, 1) * cleanNum(item.unit_price),
                 boq_id: cleanId(item.boq_id), 
-                boq_item_id: null // 🎯 إجبار السيستم على التجاهل عشان إيرور הـ FK
+                boq_item_id: cleanId(item.boq_item_id) 
             }));
 
             const { error: lineError } = await supabase.from('material_issue_lines').insert(linesPayload);
@@ -103,7 +101,6 @@ export function useMaterialsLogic() {
         },
         onError: (err: any) => showToast(`خطأ في الحفظ المجمع: ${err.message}`, "error")
     });
-    // =========================================================================
 
     const initialInvoiceState = {
         id: null, 
@@ -141,10 +138,12 @@ export function useMaterialsLogic() {
             const { data: balData } = await supabase.rpc('rpc_get_inventory_balances');
             const balances = balData || [];
 
-            const { data, error } = await supabase
+            const buildQuery = () => supabase
                 .from('material_receipt_lines')
                 .select(`
                     id, 
+                    receipt_id,
+                    project_id,
                     item_id, 
                     item_name, 
                     quantity, 
@@ -153,12 +152,11 @@ export function useMaterialsLogic() {
                     total_price,
                     boq_id,
                     boq_item_id, 
-                    boq:boq_budget!fk_receipt_lines_boq_budget(work_item), 
+                    boq:boq_budget(work_item), 
                     receipt:material_receipts (
-                        id, 
+                        id,
                         receipt_number,
                         receipt_date, 
-                        project_id, 
                         notes, 
                         status, 
                         receipt_type, 
@@ -166,16 +164,15 @@ export function useMaterialsLogic() {
                         jv_id, 
                         created_at,
                         project:projects(Property), 
-                        supplier:partners!supplier_id(id, name), 
-                        account:accounts!account_id(id, name)
+                        supplier:partners(id, name), 
+                        account:accounts(id, name)
                     )
                 `)
-                .order('created_at', { ascending: false })
-                .limit(100000); 
+                .order('created_at', { ascending: false });
 
-            if (error) throw error;
+            const allRecords = await fetchPaginatedData(buildQuery, 'id');
 
-            return (data || []).map((line: any) => {
+            return allRecords.map((line: any) => {
                 const currentBalance = balances.find((inv: any) => 
                     (inv.item_id && line.item_id && inv.item_id === line.item_id) || 
                     (inv.item_name && line.item_name && inv.item_name.trim() === line.item_name.trim())
@@ -184,10 +181,13 @@ export function useMaterialsLogic() {
                 const globalBalance = currentBalance ? cleanNum(currentBalance.available_quantity) : 0;
                 const finalSafeQty = Math.max(0, Math.min(cleanNum(line.quantity), globalBalance));
 
+                const rec = Array.isArray(line.receipt) ? line.receipt[0] : line.receipt;
+                const isStrictlyPosted = rec?.is_posted === true || String(rec?.is_posted).toLowerCase() === 'true' || rec?.is_posted === 1;
+
                 return {
                     id: line.id,
-                    receipt_id: line.receipt?.id,
-                    receipt_no: line.receipt?.receipt_number, 
+                    receipt_id: line.receipt_id, // 🎯 رجعنا نسحب הـ ID صراحة عشان التجميع
+                    receipt_no: rec?.receipt_number, 
                     item_id: line.item_id,
                     work_item: line.item_name,
                     item_name: line.item_name,
@@ -199,17 +199,17 @@ export function useMaterialsLogic() {
                     boq_id: line.boq_id,
                     boq_item_id: line.boq_item_id, 
                     boq_item: line.boq?.work_item,   
-                    exp_date: line.receipt?.receipt_date,
-                    created_at: line.receipt?.created_at,
-                    project_id: line.receipt?.project_id,
-                    project: line.receipt?.project,
-                    supplier: line.receipt?.supplier,
-                    account: line.receipt?.account,
-                    status: line.receipt?.status,
-                    notes: line.receipt?.notes,
-                    receipt_type: line.receipt?.receipt_type, 
-                    is_posted: line.receipt?.is_posted,
-                    jv_id: line.receipt?.jv_id 
+                    exp_date: rec?.receipt_date,
+                    created_at: rec?.created_at,
+                    project_id: line.project_id, // 🎯 رجعنا نسحب הـ Project صراحة
+                    project: rec?.project,
+                    supplier: rec?.supplier,
+                    account: rec?.account,
+                    status: rec?.status,
+                    notes: rec?.notes,
+                    receipt_type: rec?.receipt_type, 
+                    is_posted: isStrictlyPosted, 
+                    jv_id: rec?.jv_id 
                 };
             });
         }
@@ -218,10 +218,11 @@ export function useMaterialsLogic() {
     const { data: projects = [] } = useQuery({
         queryKey: ['active_projects_materials'],
         queryFn: async () => {
-            const { data } = await supabase
+            const buildQuery = () => supabase
                 .from('projects')
                 .select('id, Property, project_code')
                 .neq('status', 'منتهي');
+            const data = await fetchPaginatedData(buildQuery, 'id');
             return data || [];
         }
     });
@@ -316,7 +317,7 @@ export function useMaterialsLogic() {
                         receipt_type: String(invoiceData.receipt_type || 'توريد شركة').trim(),
                         total_amount: cleanNum(grandTotal),
                         notes: String(invoiceData.notes || 'توريد خامات').trim(),
-                        status: 'مُعتمد',
+                        status: 'معتمد',
                         is_posted: false 
                     })
                     .eq('id', receiptId);
@@ -336,7 +337,7 @@ export function useMaterialsLogic() {
                         receipt_type: String(invoiceData.receipt_type || 'توريد شركة').trim(),
                         total_amount: cleanNum(grandTotal),
                         notes: String(invoiceData.notes || 'توريد خامات').trim(),
-                        status: 'مُعتمد',
+                        status: 'معتمد',
                         is_posted: false 
                     }])
                     .select('id').single();
@@ -355,7 +356,7 @@ export function useMaterialsLogic() {
                 unit_price: cleanNum(item.unit_price),
                 total_price: cleanNum(item.total_price),
                 boq_id: cleanId(item.boq_id),  
-                boq_item_id: null // 🎯🎯 إجبار السيستم على null عشان مستحيل يضرب معاك FK 🎯🎯
+                boq_item_id: cleanId(item.boq_item_id) 
             }));
 
             const { error: linesError } = await supabase.from('material_receipt_lines').insert(linesPayload);
@@ -425,7 +426,7 @@ export function useMaterialsLogic() {
                 unit_price: cleanNum(data.item.unit_price),
                 total_price: cleanNum(data.quantity, 1) * cleanNum(data.item.unit_price),
                 boq_id: cleanId(data.boq_id), 
-                boq_item_id: null // 🎯 إجبار السيستم على التجاهل
+                boq_item_id: cleanId(data.boq_item_id)
             };
     
             const { error: lineError } = await supabase.from('material_issue_lines').insert([linePayload]);

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import SecureAction from '@/components/SecureAction';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
@@ -131,7 +132,7 @@ export default function MaterialIssuesPage() {
             const isPosted = issue.is_posted === true;
             const matchesStatus = filterStatus === 'all' 
                 ? true 
-                : filterStatus === 'posted' ? isPosted 
+                : filterStatus === 'معتمد' ? isPosted 
                 : !isPosted;
 
             const issueType = issue.issue_type || 'صرف لمقاول';
@@ -168,7 +169,7 @@ export default function MaterialIssuesPage() {
             'سعر الوحدة': Number(issue.unit_price || 0),
             'الإجمالي': Number(issue.total_price || 0),
             'مربوط ببند (BOQ)': issue.boq_item || '---',
-            'الحالة المحاسبية': issue.is_posted ? 'مرحل ومقيد' : 'مسودة'
+            'الحالة المحاسبية': issue.is_posted ? 'معتمد ومقيد' : 'مسودة'
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -306,7 +307,7 @@ export default function MaterialIssuesPage() {
             header: 'الحالة المحاسبية', 
             render: (row: any) => (
                  <span style={{ background: row.is_posted === true ? '#dcfce7' : '#fef2f2', color: row.is_posted === true ? '#166534' : '#dc2626', padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 900 }}>
-                    {row.is_posted === true ? 'مُرحل ومقيد ✅' : 'مسودة ⏳'}
+                    {row.is_posted === true ? 'معتمد ✅' : 'مسودة ⏳'}
                 </span>
             )
         }
@@ -314,7 +315,7 @@ export default function MaterialIssuesPage() {
 
     return (
         <div className="clean-page print-container">
-            <MasterPage title="صرف الخامات للمواقع" subtitle="إدارة مسحوبات المقاولين واستهلاك المواد وتوجيه التكاليف للبنود">
+            <MasterPage icon="🚚" title="صرف الخامات للمواقع" subtitle="إدارة مسحوبات المقاولين واستهلاك المواد وتوجيه التكاليف للبنود">
                 
                 <RawasiSidebarManager 
                     actions={
@@ -468,7 +469,7 @@ export default function MaterialIssuesPage() {
                             style={{ width: '100%', padding: '10px 15px', borderRadius: '8px', border: `2px solid ${THEME.sandDark || '#e2e8f0'}`, outline: 'none', fontWeight: 800, color: THEME.coffeeDark || '#1e293b' }}
                         >
                             <option value="all">كل الحالات المحاسبية</option>
-                            <option value="posted">مُرحل ومقيد ✅</option>
+                            <option value="posted">معتمد ✅</option>
                             <option value="draft">مسودة قيد المراجعة ⏳</option>
                         </select>
                     </div>

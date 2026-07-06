@@ -43,7 +43,7 @@ export default function AccountLedger() {
   ];
 
   return (
-    <MasterPage title="كشف حساب تفصيلي" subtitle="استعراض حركات الأستاذ العام والتحليل المالي">
+    <MasterPage icon="📖" title="كشف حساب تفصيلي" subtitle="استعراض حركات الأستاذ العام والتحليل المالي">
       
       <RawasiSidebarManager 
         summary={

@@ -146,12 +146,13 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
 
                     {/* المشروع والبند */}
                     <div style={{ gridColumn: 'span 1' }}>
+                        {/* 🚀 تم تعديل الـ SmartCombo هنا ليعتمد على Property بدلاً من project_name */}
                         <SmartCombo 
-                            label="المشروع المرتبط" 
+                            label="العقار / الفيلا المرتبطة" 
                             icon="🏢"
                             table="projects" 
-                            searchCols="project_name,project_code" displayCol="project_name"
-                            initialDisplay={record.projects?.project_name || ''}
+                            searchCols="Property,project_name,project_code" displayCol="Property"
+                            initialDisplay={record.projects?.Property || record.projects?.project_name || ''}
                             onSelect={(p: any) => setRecord({...record, project_id: p?.id || null, boq_budget_id: null})} 
                         />
                     </div>
@@ -165,7 +166,7 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                             style={{ appearance: 'auto', background: !record.project_id ? 'rgba(226, 232, 240, 0.6)' : 'rgba(255, 255, 255, 0.65)' }}
                             disabled={!record.project_id}
                         >
-                            <option value="">{record.project_id ? '🔍 اختر البند...' : '⚠️ يرجى اختيار المشروع أولاً لعرض البنود'}</option>
+                            <option value="">{record.project_id ? '🔍 اختر البند...' : '⚠️ يرجى اختيار العقار أولاً لعرض البنود'}</option>
                             {boqItems.map(b => <option key={b.id} value={b.id}>{b.work_item} ({b.unit})</option>)}
                         </select>
                     </div>

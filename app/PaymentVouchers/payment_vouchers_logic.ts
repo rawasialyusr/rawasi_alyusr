@@ -3,6 +3,7 @@ import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 import { useUniversalPosting } from '@/lib/accounting_engine'; 
 
 export function usePaymentVouchersLogic() {
@@ -56,35 +57,17 @@ export function usePaymentVouchersLogic() {
     const { data: vouchers = [], isLoading: isFetching } = useQuery({
         queryKey: ['payment_vouchers'],
         queryFn: async () => {
-            let allData: any[] = [];
-            let step = 1000;
-            let from = 0;
-            let to = step - 1;
-            let hasMore = true;
+            const buildQuery = () => supabase
+                .from('payment_vouchers')
+                .select(`
+                    *,
+                    payee:partners!partner_id(name),
+                    credit_account:accounts!credit_account_id(name),
+                    debit_account:accounts!debit_account_id(name)
+                `)
+                .order('created_at', { ascending: false });
 
-            while (hasMore) {
-                const { data, error } = await supabase
-                    .from('payment_vouchers')
-                    .select(`
-                        *,
-                        payee:partners!partner_id(name),
-                        credit_account:accounts!credit_account_id(name),
-                        debit_account:accounts!debit_account_id(name)
-                    `)
-                    .order('created_at', { ascending: false })
-                    .range(from, to);
-                
-                if (error) throw error;
-                
-                if (data && data.length > 0) {
-                    allData = [...allData, ...data];
-                    from += step;
-                    to += step;
-                    if (data.length < step) hasMore = false; 
-                } else {
-                    hasMore = false;
-                }
-            }
+            const allData = await fetchPaginatedData(buildQuery, 'id');
             
             return allData.map(v => ({ ...v, payee_id: v.partner_id }));
         }
@@ -117,7 +100,7 @@ export function usePaymentVouchersLogic() {
         if (dateRange.end) result = result.filter(v => new Date(v.date) <= new Date(dateRange.end));
 
         if (filterStatus !== 'الكل') {
-            const isPostedTarget = filterStatus === 'مرحل';
+            const isPostedTarget = filterStatus === 'معتمد';
             result = result.filter(v => v.is_posted === isPostedTarget);
         }
 
@@ -212,7 +195,7 @@ export function usePaymentVouchersLogic() {
     const deleteMutation = useMutation({
         mutationFn: async () => {
             const postedVouchers = vouchers.filter(v => selectedIds.includes(v.id) && v.is_posted);
-            if (postedVouchers.length > 0) throw new Error('لا يمكن حذف سندات مُرحلة. قم بفك الترحيل أولاً.');
+            if (postedVouchers.length > 0) throw new Error('لا يمكن حذف سندات معتمدة. قم بفك الترحيل أولاً.');
 
             const CHUNK_SIZE = 20;
             for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {

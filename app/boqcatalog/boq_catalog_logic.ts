@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function useBoqCatalogLogic() {
     const { showToast } = useToast();
@@ -22,13 +23,8 @@ export function useBoqCatalogLogic() {
     const { data: catalogItems = [], isLoading } = useQuery({
         queryKey: ['boq_items_catalog'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('boq_items')
-                .select('*')
-                .order('main_category')
-                .order('sub_category')
-                .order('item_name');
-            if (error) throw error;
+            const data = await fetchAllSupabaseData(supabase, 'boq_items', '*', 'main_category', true);
+            // Sorting can be refined on client-side if needed since fetchAll orders by one column
             return data || [];
         }
     });
@@ -70,8 +66,7 @@ export function useBoqCatalogLogic() {
         else if (mainStr.includes('ادار') || mainStr.includes('إدار') || mainStr.includes('اشراف') || mainStr.includes('إشراف') || mainStr.includes('تصميم') || mainStr.includes('هندس')) prefix = 'MGT';
         else if (mainStr.includes('موقع') || mainStr.includes('تجهيز') || mainStr.includes('تمهيد') || mainStr.includes('سور')) prefix = 'SIT';
 
-        const { data: existingItems } = await supabase.from('boq_items').select('item_code, main_category, sub_category');
-        const items = existingItems || [];
+        const items = await fetchAllSupabaseData(supabase, 'boq_items', 'item_code, main_category, sub_category', 'main_category', true);
 
         // تسلسل القسم الفرعي
         const itemsInMain = items.filter(i => i.main_category === mainCat);

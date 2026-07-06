@@ -3,15 +3,18 @@ import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { useRouter } from 'next/navigation'; // 🛡️ استدعاء التوجيه للحماية
+import { useRouter, useSearchParams } from 'next/navigation'; // 🛡️ استدعاء التوجيه للحماية
 import { parseDbError } from '@/lib/helpers'; // 🛡️ مترجم الأخطاء الذكي
 
 export function useProfileLogic() {
     const queryClient = useQueryClient();
     const router = useRouter(); // 🛡️ لعمل الطرد التلقائي لو مفيش جلسة
+    const searchParams = useSearchParams();
+    const partnerId = searchParams ? searchParams.get('partner_id') : null;
+    const isKpiOnly = searchParams ? searchParams.get('view') === 'kpi_only' : false;
 
     // 🎛️ 1. حالات الواجهة والفلاتر (UI States & Filters)
-    const [activeTab, setActiveTab] = useState('tasks');
+    const [activeTab, setActiveTab] = useState(isKpiOnly ? 'kpi' : 'tasks');
     const [searchFilters, setSearchFilters] = useState({
         term: '',
         site: 'all',
@@ -22,7 +25,7 @@ export function useProfileLogic() {
 
     // 🧠 2. المحرك الأساسي: جلب البيانات الذكي المربوط (Joined Query)
     const { data, isLoading } = useQuery({
-        queryKey: ['employeeProfileData'],
+        queryKey: ['employeeProfileData', partnerId],
         queryFn: async () => {
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             
@@ -32,55 +35,85 @@ export function useProfileLogic() {
                 throw new Error('الجلسة منتهية، جاري تحويلك...');
             }
 
-            // 🚀 الربط الذكي: جلب البروفايل ودمجه مع بيانات الشريك (الموظف) في استعلام واحد
-            const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select(`
-                    *,
-                    partners (
-                        id,
-                        name,
-                        phone,
-                        job_role,
-                        identity_image_url
-                    )
-                `)
-                .eq('id', session.user.id)
-                .single();
+            let profile = null;
+            let partner = null;
+            let targetUserId = session.user.id; // الافتراضي هو المستخدم الحالي
 
-            if (profileError) throw profileError;
+            if (partnerId) {
+                // المدير يريد عرض بروفايل شريك معين
+                const { data: partnerData } = await supabase.from('partners').select('*').eq('id', partnerId).single();
+                partner = partnerData;
+
+                // محاولة البحث عن بروفايل مرتبط بهذا الشريك
+                const { data: profileData } = await supabase.from('profiles').select('*').eq('linked_partner_id', partnerId).maybeSingle();
+                
+                if (profileData) {
+                    profile = profileData;
+                    targetUserId = profile.id; // لتحميل المهام والطلبات الخاصة به
+                } else {
+                    // إذا لم يكن للشريك حساب في النظام (عامل مثلاً)، ننشئ بروفايل افتراضي للعرض فقط
+                    profile = {
+                        id: partnerId,
+                        linked_partner_id: partnerId,
+                        nickname: partner?.name || 'مستخدم غير مسجل',
+                        username: partner?.phone || '---',
+                        avatar_url: partner?.identity_image_url || null
+                    };
+                }
+            } else {
+                // 🚀 الربط الذكي: جلب البروفايل ودمجه مع بيانات الشريك للمستخدم الحالي
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select(`
+                        *,
+                        partners (
+                            id,
+                            name,
+                            phone,
+                            job_role,
+                            identity_image_url
+                        )
+                    `)
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profileError) throw profileError;
+                profile = profileData;
+                partner = profile?.partners || null;
+            }
 
             // 🚀 تجهيز البيانات للواجهة: سحب البيانات الأساسية من جدول الشركاء كأولوية
-            const partner = profile?.partners || null;
             const enhancedProfile = {
                 ...profile,
                 display_name: partner?.name || profile.nickname || 'موظف رواسي',
                 username: partner?.phone || profile.username || '---', // 📱 الجوال هو اليوزر نيم
-                profession: partner?.job_role || 'موظف',               // 👔 المهنة
+                profession: partner?.job_role || partner?.role || 'موظف',               // 👔 المهنة
                 avatar: profile.avatar_url || partner?.identity_image_url // 📸 الصورة
             };
 
             // جلب المهام والإشعارات والطلبات بالتوازي (Performance Boost)
+            // إذا كان البروفايل وهمياً (ليس له حساب)، ستعود قوائم فارغة وهذا مطلوب
             const [tasksRes, notesRes, requestsRes] = await Promise.all([
-                supabase.from('user_tasks').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false }),
-                supabase.from('notifications').select('*').eq('user_id', session.user.id).eq('is_read', false).order('created_at', { ascending: false }),
-                supabase.from('user_requests').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false })
+                supabase.from('user_tasks').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false }),
+                supabase.from('notifications').select('*').eq('user_id', targetUserId).eq('is_read', false).order('created_at', { ascending: false }),
+                supabase.from('user_requests').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false })
             ]);
 
             let advData = [], dedData = [], logsData = [], payrollData = null;
 
-            // جلب البيانات المالية لو الموظف مربوط بـ partner_id
-            if (profile?.partner_id) {
-                const [advRes, dedRes, payrollRes, logsRes] = await Promise.all([
-                    supabase.from('emp_adv').select('*').eq('partner_id', profile.partner_id).eq('is_deleted', false).order('created_at', { ascending: false }),
-                    supabase.from('emp_ded').select('*').eq('partner_id', profile.partner_id).eq('is_deleted', false).order('created_at', { ascending: false }),
-                    supabase.from('payroll_slips').select('net_salary').eq('emp_id', profile.partner_id).order('created_at', { ascending: false }).limit(1),
-                    // سحب يوميات العامل بناءً على اسمه المربوط في جدول الشركاء
+            // جلب البيانات المالية لو الموظف مربوط بـ linked_partner_id
+            const searchPartnerId = profile?.linked_partner_id || partnerId;
+            if (searchPartnerId) {
+                const [statementRes, payrollRes, logsRes] = await Promise.all([
+                    // سحب كشف الحساب من الدفتر المجمع (نفس شكل شاشة الشركاء)
+                    supabase.from('partner_statement_ledger').select('*').eq('partner_id', searchPartnerId).order('transaction_date', { ascending: false }).limit(500),
+                    supabase.from('payroll_slips').select('net_salary').eq('emp_id', searchPartnerId).order('created_at', { ascending: false }).limit(1),
+                    // سحب يوميات العامل
                     supabase.from('labor_daily_logs').select('*').eq('worker_name', partner?.name).order('work_date', { ascending: false })
                 ]);
                 
-                advData = advRes.data || [];
-                dedData = dedRes.data || [];
+                advData = statementRes.data || []; // هنستخدم نفس المتغير ده عشان نبعت كشف الحساب كامل
+                dedData = []; // مش هنحتاجه خلاص بس بنسيبه عشان التوافق
                 logsData = logsRes.data || [];
                 payrollData = payrollRes.data?.[0] || null;
             }
@@ -158,13 +191,105 @@ export function useProfileLogic() {
 
     const monthlyKPIs = useMemo(() => {
         const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const thisMonthLogs = recentLogs.filter(log => (log.work_date || log.Date) >= startOfMonth);
-        const daysWorked = thisMonthLogs.filter(l => l.attendance_value === '1' || l.Att === '1').length;
-        const totalProduction = thisMonthLogs.reduce((sum, l) => sum + (Number(l.daily_production || l.Prod) || 0), 0);
-        const totalEarnings = thisMonthLogs.reduce((sum, l) => sum + (Number(l.daily_wage || l.D_W) || 0), 0);
-        const attendanceRate = Math.min(100, (daysWorked / 26) * 100).toFixed(0);
-        return { daysWorked, attendanceRate, totalProduction, totalEarnings, monthName: now.toLocaleString('ar-EG', { month: 'long' }) };
+        
+        // 1. حساب نسبة الحضور (حتى آخر شهر عمل فيه، مع تجاهل التواريخ الخاطئة والقديمة جداً مثل 1970)
+        let attendanceRate = 0;
+        let expectedDays = 0;
+        let daysWorked = 0;
+        
+        // تجميع الحضور بالشهور فقط
+        const monthlyAttendance: Record<string, { daysWorked: number, expectedDays: number, percentage: number, isAccumulated: boolean }> = {};
+        
+        recentLogs.forEach(log => {
+            const dateStr = log.work_date || log.Date;
+            // إذا لم يكن هناك تاريخ صالح، نفترض أنه قيد افتتاحي/تجميعي
+            let date = new Date(dateStr);
+            let monthName = "";
+            let isAccumulated = false;
+
+            if (!dateStr || isNaN(date.getTime()) || date.getFullYear() < 2020) {
+                monthName = "أرصدة وفترات سابقة";
+                isAccumulated = true;
+            } else {
+                monthName = date.toLocaleString('ar-EG', { month: 'long', year: 'numeric' });
+            }
+
+            if (!monthlyAttendance[monthName]) {
+                monthlyAttendance[monthName] = { daysWorked: 0, expectedDays: 26, percentage: 0, isAccumulated };
+            }
+            monthlyAttendance[monthName].daysWorked += (Number(log.attendance_value) || 1);
+            daysWorked += (Number(log.attendance_value) || 1);
+        });
+
+        // تصحيح الأيام المتوقعة للقيود التجميعية (إذا تجاوزت 26 يوم)
+        for (const [month, data] of Object.entries(monthlyAttendance)) {
+            if (data.daysWorked > 26) {
+                // حساب كم شهر يمثل هذا الرقم التجميعي (مثلا 43 يوم = شهرين متوقعين)
+                const monthsCount = Math.ceil(data.daysWorked / 26);
+                data.expectedDays = monthsCount * 26;
+            }
+            expectedDays += data.expectedDays;
+        }
+
+        if (expectedDays > 0) {
+            attendanceRate = Math.min(100, Math.round((daysWorked / expectedDays) * 100));
+        }
+
+        const attendanceBreakdown = Object.entries(monthlyAttendance).map(([month, data]) => ({
+            month,
+            ...data,
+            percentage: Math.min(100, Math.round((data.daysWorked / data.expectedDays) * 100))
+        }));
+
+        // 2. حساب الإنتاجية مفصلة حسب البند (مع مراعاة التريحة)
+        const techLogs = recentLogs.filter(l => l.skill_level !== 'عامل');
+        const itemPerformance: Record<string, { totalProd: number, totalTareeha: number, logsCount: number }> = {};
+        
+        techLogs.forEach(log => {
+            const tareeha = Number(log.tareeha) || 0;
+            const prod = Number(log.daily_production || log.productivity || log.Prod) || 0;
+            
+            // نأخذ فقط السجلات التي لها تريحة محددة في الموازنة لحساب التقييم بدقة
+            if (tareeha > 0) {
+                const item = (log.work_item || log.Item || 'أخرى').trim();
+                if (!itemPerformance[item]) itemPerformance[item] = { totalProd: 0, totalTareeha: 0, logsCount: 0 };
+                
+                itemPerformance[item].totalProd += prod;
+                itemPerformance[item].totalTareeha += tareeha;
+                itemPerformance[item].logsCount += 1;
+            }
+        });
+
+        let totalPercentageSum = 0;
+        let validItemsCount = 0;
+        const itemBreakdown = [];
+
+        for (const [item, data] of Object.entries(itemPerformance)) {
+            if (data.totalTareeha > 0) {
+                const itemPercent = Math.round((data.totalProd / data.totalTareeha) * 100);
+                totalPercentageSum += itemPercent;
+                validItemsCount++;
+                itemBreakdown.push({ item, ...data, percentage: itemPercent });
+            }
+        }
+
+        const performanceRate = validItemsCount > 0 ? Math.round(totalPercentageSum / validItemsCount) : (techLogs.length > 0 ? 100 : 0);
+        
+        // المتغيرات القديمة للتوافق
+        const totalProduction = techLogs.reduce((sum, l) => sum + (Number(l.daily_production || l.productivity || l.Prod) || 0), 0);
+        const totalEarnings = recentLogs.reduce((sum, l) => sum + (Number(l.daily_wage || l.D_W) || 0), 0);
+        
+        return { 
+            daysWorked, 
+            attendanceRate, 
+            totalProduction, 
+            performanceRate, 
+            totalEarnings, 
+            itemBreakdown,
+            attendanceBreakdown,
+            expectedDays,
+            monthName: now.toLocaleString('ar-EG', { month: 'long' }) 
+        };
     }, [recentLogs]);
 
     const taskGroups = useMemo(() => {

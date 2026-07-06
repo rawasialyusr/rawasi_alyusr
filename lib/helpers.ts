@@ -128,6 +128,28 @@ export const filterData = (
   });
 };
 
+export const deleteItem = async (table: string, id: number | string) => {
+  const { error } = await supabase.from(table).delete().eq('id', id);
+  if (error) throw error;
+};
+
+// 🛡️ حماية السجلات المعتمدة من التعديل والحذف لغير المديرين
+export const checkAdminApprovalPrivilege = async (
+  records: any[], 
+  action: 'تعديل' | 'حذف' = 'حذف'
+) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', session?.user?.id).single();
+  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'admin';
+  
+  if (!isAdmin) {
+    const hasApproved = records.some(r => r.is_posted === true || r.header_status === 'معتمد' || r.status === 'معتمد');
+    if (hasApproved) {
+      throw new Error(`عفواً، لا تملك صلاحية ${action} السجلات المعتمدة والمرحلة.`);
+    }
+  }
+};
+
 export const formatCurrency = (amount: number | string | null | undefined): string => {
   const num = Number(amount) || 0;
   return new Intl.NumberFormat('ar-SA', {
@@ -141,6 +163,7 @@ export const formatCurrency = (amount: number | string | null | undefined): stri
 export const formatDate = (dateString: string, showTime: boolean = false): string => {
   if (!dateString) return '---';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '---'; // الحماية من التواريخ غير الصالحة
   
   const options: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -416,9 +439,12 @@ export const getSingleInvoiceStatus = (invoiceDate: string, isPaid: boolean) => 
 export const fetchAllSupabaseData = async (
   supabase: any,
   tableName: string,
-  orderByColumn?: string // 🚀 الإضافة هنا: خلينا حقل الترتيب اختياري
+  selectFields: string = '*',
+  orderByColumn?: string,
+  ascending: boolean = false
 ) => {
   let allData: any[] = [];
+  const seenIds = new Set<string>(); // 🛡️ حماية من التكرار
   let currentOffset = 0;
   const limit = 1000;
   let keepFetching = true;
@@ -426,22 +452,27 @@ export const fetchAllSupabaseData = async (
   console.log(`📡 جاري بدء سحب بيانات جدول: [${tableName}]...`);
 
   while (keepFetching) {
-    // 🚀 التعديل هنا: لو بعتوله حقل ترتيب هيرتب بيه، لو لأ هيسحب عادي من غير ترتيب عشان ميضربش Error
-    let query = supabase.from(tableName).select('*').range(currentOffset, currentOffset + limit - 1);
+    let query = supabase.from(tableName).select(selectFields).range(currentOffset, currentOffset + limit - 1);
     
     if (orderByColumn) {
-      query = query.order(orderByColumn, { ascending: false });
+      query = query.order(orderByColumn, { ascending });
     }
 
     const { data, error } = await query;
 
     if (error) {
       console.error(`❌ خطأ في سحب [${tableName}]:`, error.message);
-      break; // نوقف السحب للجدول ده لو فيه خطأ ونكمل للي بعده
+      break; 
     }
 
     if (data && data.length > 0) {
-      allData = [...allData, ...data];
+      for (const row of data) {
+          const id = String(row.id || row.line_id || row.code || JSON.stringify(row));
+          if (!seenIds.has(id)) {
+              seenIds.add(id);
+              allData.push(row);
+          }
+      }
       currentOffset += limit;
       console.log(`✅ تم سحب ${allData.length} صف من جدول [${tableName}] حتى الآن...`);
       

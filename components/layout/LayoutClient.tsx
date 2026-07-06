@@ -145,7 +145,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   if (pathname === '/login') return <>{children}</>;
 
   if (loading && !isInitialized) {
-      return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl', fontWeight: 900 }}>⏳ جاري تحميل الصلاحيات...</div>;
+      return <LoadingScreen message="جاري تهيئة النظام..." subMessage="يتم الآن تجميع صلاحياتك الخاصة وتأمين الواجهة" fullScreen={true} />;
   }
 
   const currentPageTitle = menuGroups.flatMap(g => g.items).find(i => i.path === pathname)?.title || "إدارة النظام";

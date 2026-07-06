@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { useTrialBalanceLogic } from './trial_balance_logic';
 import MasterPage from '@/components/MasterPage';
+import LoadingScreen from '@/components/LoadingScreen';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import { formatCurrency } from '@/lib/helpers';
 
@@ -41,7 +42,7 @@ export default function TrialBalancePage() {
   ], [logic.exportToExcel]);
 
   return (
-    <MasterPage 
+    <MasterPage icon="⚖️" 
       title="ميزان المراجعة (Trial Balance)" 
       description="عرض الأرصدة الافتتاحية، حركات الفترة، والأرصدة الختامية لجميع الحسابات"
     >
@@ -106,9 +107,7 @@ export default function TrialBalancePage() {
 
           {/* الجدول والشاشة */}
           {logic.isLoading ? (
-            <div style={{ textAlign: 'center', padding: '50px', background: '#ffffff', borderRadius: '12px', border: `1px solid ${THEME.border}` }}>
-              <div style={{ fontSize: '20px', fontWeight: '900', color: THEME.primary }}>⏳ جاري إعداد ميزان المراجعة وتجميع القيود...</div>
-            </div>
+            <LoadingScreen message="جاري إعداد ميزان المراجعة وتجميع القيود..." fullScreen={false} />
           ) : (
             <>
               <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1px solid ${THEME.border}` }}>
@@ -183,7 +182,7 @@ export default function TrialBalancePage() {
       <div className="print-area" style={{ display: 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `4px solid ${THEME.primary}`, paddingBottom: '15px', marginBottom: '20px' }}>
             <div>
-                <h1 style={{ margin: 0, color: '#000000', fontSize: '22px', fontWeight: 900 }}>ميزان المراجعة (Trial Balance)</h1>
+                
                 <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '14px', color: '#000000' }}>شركة رواسي اليسر للمقاولات</p>
                 <p style={{ margin: '4px 0 0 0', fontWeight: 900, fontSize: '13px', color: '#000000' }}>عن الفترة من {logic.startDate} إلى {logic.endDate}</p>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function DetailedAuditPage() {
     const [brokenEntries, setBrokenEntries] = useState<any[]>([]);
@@ -43,7 +44,7 @@ export default function DetailedAuditPage() {
             <p>الصفحة دي بتعرضلك الـ ID الحقيقي عشان تنسخه وتروح للـ Database</p>
 
             {loading ? (
-                <div style={{ textAlign: 'center', padding: '50px' }}>⏳ جاري الفحص...</div>
+                <LoadingScreen message="جاري الفحص..." fullScreen={false} />
             ) : (
                 brokenEntries.map((e, i) => (
                     <div key={i} style={{ background: 'white', padding: '20px', borderRadius: '15px', marginBottom: '25px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>

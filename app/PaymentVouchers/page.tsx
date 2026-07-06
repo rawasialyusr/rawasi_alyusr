@@ -15,12 +15,38 @@ import { useConfirm } from '@/components/ConfirmContext';
 
 import PaymentVoucherModal from './PaymentVoucherModal'; 
 import PaymentPrintModal from './PaymentPrintModal'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function PaymentVouchersPage() {
   const { showConfirm } = useConfirm();
 
     
   const logic = usePaymentVouchersLogic();
+
+  // 🚀 اختصار الحفظ (Ctrl + Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (logic.isModalOpen && e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!logic.isSaving) logic.handleSaveVoucher();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [logic.isModalOpen, logic.isSaving]);
+
+  // 🚀 اختصار إضافة جديد (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      if (!logic.isModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        logic.handleAddVoucher();
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [logic.isModalOpen]);
+
   const [mounted, setMounted] = useState(false); 
   const { can, loading: permsLoading } = usePermissions();
 
@@ -112,7 +138,7 @@ export default function PaymentVouchersPage() {
       render: (row: any) => {
         if (!row) return null;
         return row.is_posted ? 
-          <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>مُرحل ✅</span> : 
+          <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معتمد ✅</span> : 
           <span style={{ display: 'inline-block', background: '#fff7ed', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معلق ⏳</span>;
       }
     },
@@ -197,12 +223,12 @@ export default function PaymentVouchersPage() {
   return (
     <>
       <div className="clean-page">
-        <MasterPage title="سندات الصرف" subtitle="إدارة المدفوعات والتحويلات المالية والتوجيه المحاسبي الدقيق">
+        <MasterPage icon="📤" title="سندات الصرف" subtitle="إدارة المدفوعات والتحويلات المالية والتوجيه المحاسبي الدقيق">
             <RawasiSidebarManager 
               summary={
                 <div className="summary-glass-card">
                   <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>
-                    {logic.state.filterStatus === 'مرحل' ? 'إجمالي السندات المرحلة 📉' : 
+                    {logic.state.filterStatus === 'معتمد' ? 'إجمالي السندات المعتمدة 📉' : 
                      logic.state.filterStatus === 'معلق' ? 'إجمالي السندات المعلقة ⏳' : 
                      'إجمالي المدفوعات 🏦'}
                   </span>
@@ -219,7 +245,7 @@ export default function PaymentVouchersPage() {
                   <div>
                     <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>تصفية حسب الحالة:</label>
                     <div style={{ display: 'flex', gap: '5px' }}>
-                      {['الكل', 'مرحل', 'معلق'].map(type => (
+                      {['الكل', 'معتمد', 'معلق'].map(type => (
                         <button 
                           key={type} 
                           onClick={() => logic.actions.setFilterStatus(type)} 
@@ -251,7 +277,7 @@ export default function PaymentVouchersPage() {
             `}</style>
 
             {(logic.isLoading || permsLoading) ? (
-              <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
+              <LoadingScreen message="جاري المزامنة..." fullScreen={false} />
             ) : (
               <RawasiSmartTable 
                 data={logic.data}

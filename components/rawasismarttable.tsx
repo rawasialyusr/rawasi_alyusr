@@ -41,6 +41,13 @@ interface RawasiSmartTableProps {
     rowsPerPage?: number;
     onPageChange?: (page: number) => void;
     onRowsChange?: (rows: number) => void;
+    
+    // 🚀 خصائص إضافية مفقودة
+    isLoading?: boolean;
+    enableExport?: boolean;
+    onRefresh?: (options?: any) => Promise<any> | void;
+    onSearch?: (term: string) => void;
+    searchPlaceholder?: string;
 }
 
 export default function RawasiSmartTable({ 
@@ -163,8 +170,7 @@ export default function RawasiSmartTable({
         }}>
             
             {/* 🛠️ شريط أدوات الجدول (أزرار التصدير والعنوان) */}
-            <div className="table-toolbar hide-on-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                <h3 style={{ margin: 0, color: THEME.coffeeDark, fontWeight: 900 }}>{title || 'البيانات'}</h3>
+            <div className="table-toolbar hide-on-print" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={exportToExcel} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#10b981', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontWeight: 900, fontSize: '12px', transition: '0.2s', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)' }}>📥 Excel</button>
                     <button onClick={exportToPDF} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontWeight: 900, fontSize: '12px', transition: '0.2s', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.3)' }}>📄 PDF</button>

@@ -6,6 +6,7 @@ import RawasiSmartTable from '@/components/rawasismarttable';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiMultiSelect from '@/components/RawasiMultiSelect';
 import { tafqeet, formatCurrency } from '@/lib/helpers';
+import LoadingScreen from '@/components/LoadingScreen';
 
 const THEME = {
   primary: '#0f172a',    
@@ -230,9 +231,7 @@ export default function PayrollPage() {
   if (logic.isLoading) {
     return (
       <MasterPage title="مسير الرواتب والأجور">
-        <div style={{ padding: '100px', textAlign: 'center', fontWeight: '900', color: THEME.primary, fontSize: '18px' }}>
-          ⏳ جاري تهيئة مسير الرواتب وحساب الأرصدة المتأخرة...
-        </div>
+        <LoadingScreen message="جاري تهيئة مسير الرواتب وحساب الأرصدة المتأخرة..." fullScreen={false} />
       </MasterPage>
     );
   }
@@ -334,7 +333,7 @@ export default function PayrollPage() {
       <div className="print-area" style={{ display: 'none' }}>
          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `4px solid ${THEME.primary}`, paddingBottom: '20px', marginBottom: '25px' }}>
             <div>
-               <h1 style={{ margin: 0, color: THEME.primary, fontSize: '24px', fontWeight: 900 }}>مسير الرواتب والأجور (Payroll Sheet)</h1>
+               
                <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '14px', color: THEME.textMuted }}>شركة رواسي اليسر للمقاولات | عن شهر ({logic.selectedMonth} / {logic.selectedYear})</p>
                <p style={{ margin: '4px 0 0 0', fontWeight: 600, fontSize: '12px', color: THEME.ruby }}>تاريخ القطع للمسحوبات: {logic.cutoffDate}</p>
             </div>

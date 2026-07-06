@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import { supabase } from '@/lib/supabase';
+import LoadingScreen from '@/components/LoadingScreen';
 
 // =========================================================================
 // 🔍 مكون البحث الذكي المطور (مع دعم السحب الآلي initialDisplay) 💎
@@ -97,7 +98,7 @@ const SmartCombo = ({ label, table, onSelect, placeholder, searchCols = 'name,co
                     <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }} />
                     <div ref={listRef} className="cinematic-scroll glass-dropdown" style={{ zIndex: 2000 }}>
                         {isLoading ? (
-                            <div style={{ padding: '15px', textAlign: 'center', fontSize: '12px', color: '#94a3b8', fontWeight: 900 }}>⏳ جاري البحث...</div>
+                            <LoadingScreen message="جاري البحث..." fullScreen={false} />
                         ) : results.length > 0 ? (
                             results.map((item: any, index: number) => {
                                 const isSelected = multi ? selectedValues.some((v: any) => v.id === item.id) : false;

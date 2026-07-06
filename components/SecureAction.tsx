@@ -1,6 +1,7 @@
 "use client";
-import React from 'react';
-import { usePermissions } from '@/lib/PermissionsContext'; // 👈 ده السطر اللي كان ناقص وعمل المشكلة
+import React, { useState } from 'react';
+import { usePermissions } from '@/lib/PermissionsContext';
+import { THEME } from '@/lib/theme';
 
 interface SecureActionProps {
     module: string;
@@ -11,20 +12,139 @@ interface SecureActionProps {
 
 export default function SecureAction({ module, action, children, fallback = null }: SecureActionProps) {
     const { can, loading, role } = usePermissions();
+    const [showDeniedModal, setShowDeniedModal] = useState(false);
+    
+    // لحالة تأكيد الحذف
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [pendingEvent, setPendingEvent] = useState<any>(null);
+    const [originalOnClick, setOriginalOnClick] = useState<((e: any) => void) | null>(null);
 
-    // 1. وقت التحميل منظهرش حاجة عشان الزرار ميرعش
     if (loading) return null; 
 
-    // 2. الإدارة العليا بتشوف كل حاجة
-    if (role === 'super_admin' || role === 'admin') {
-        return <>{children}</>;
+    // 🛠️ دالة مساعدة لتغليف أزرار الحذف برسالة تأكيد كوميدية
+    const renderWithDeleteConfirmation = (content: React.ReactNode) => {
+        if (action !== 'delete') return <>{content}</>;
+        
+        return (
+            <>
+                {React.Children.map(content, child => {
+                    if (React.isValidElement(child)) {
+                        return React.cloneElement(child as any, {
+                            onClick: (e: any) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // نحفظ الدالة الأصلية والحدث لنمررهم لاحقاً
+                                setOriginalOnClick(() => child.props.onClick);
+                                setPendingEvent(e);
+                                setShowDeleteConfirm(true);
+                            }
+                        });
+                    }
+                    return child;
+                })}
+
+                {showDeleteConfirm && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(5px)', zIndex: 999999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <div style={{ background: '#f8fafc', padding: '30px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', animation: 'scaleUp 0.3s ease-out', maxWidth: '400px', width: '90%', border: `2px solid ${THEME.danger || '#ef4444'}` }}>
+                            <div style={{ pointerEvents: 'none', marginBottom: '20px' }}>
+                                <iframe 
+                                    src="https://tenor.com/embed/10821622" 
+                                    width="100%" 
+                                    height="200" 
+                                    frameBorder="0" 
+                                    scrolling="no" 
+                                    style={{ borderRadius: '16px' }}
+                                ></iframe>
+                            </div>
+                            <h2 style={{ color: THEME.danger || '#ef4444', fontWeight: 900, marginBottom: '10px', fontSize: '24px' }}>
+                                هل أنت متأكد من الحذف؟
+                            </h2>
+                            <p style={{ color: '#64748b', fontSize: '14px', fontWeight: 700, marginBottom: '25px' }}>
+                                لا يمكن التراجع عن هذه العملية بعد إتمامها.
+                            </p>
+                            <div style={{ display: 'flex', gap: '15px' }}>
+                                <button 
+                                    onClick={() => {
+                                        setShowDeleteConfirm(false);
+                                        if (originalOnClick) {
+                                            originalOnClick(pendingEvent);
+                                        }
+                                    }}
+                                    style={{ flex: 1, padding: '12px', background: THEME.danger || '#ef4444', color: 'white', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 900, fontSize: '15px', transition: '0.3s' }}
+                                >
+                                    نعم
+                                </button>
+                                <button 
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    style={{ flex: 1, padding: '12px', background: '#e2e8f0', color: '#475569', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 900, fontSize: '15px', transition: '0.3s' }}
+                                >
+                                    لا
+                                </button>
+                            </div>
+                        </div>
+                        <style>{`
+                            @keyframes scaleUp {
+                                from { transform: scale(0.5); opacity: 0; }
+                                to { transform: scale(1); opacity: 1; }
+                            }
+                        `}</style>
+                    </div>
+                )}
+            </>
+        );
+    };
+
+    const hasAccess = role === 'super_admin' || role === 'admin' || can(module, action);
+
+    if (hasAccess) {
+        return renderWithDeleteConfirmation(children);
     }
     
-    // 3. لو الموظف عنده الصلاحية، نعرض الزرار
-    if (can(module, action)) {
-        return <>{children}</>;
+    // 🎭 حركة فكاهية: إذا كان الأكشن "post" (ترحيل) ومفيش صلاحية، نظهر الزر، ولما يضغط تطلع له رسالة حسن حسني!
+    if (action === 'post') {
+        return (
+            <>
+                {React.Children.map(children, child => {
+                    if (React.isValidElement(child)) {
+                        return React.cloneElement(child as any, {
+                            onClick: (e: any) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowDeniedModal(true);
+                            }
+                        });
+                    }
+                    return child;
+                })}
+
+                {showDeniedModal && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(5px)', zIndex: 999999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <div style={{ background: '#f8fafc', padding: '30px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', animation: 'scaleUp 0.3s ease-out', maxWidth: '400px', width: '90%' }}>
+                            <div style={{ pointerEvents: 'none', marginBottom: '20px' }}>
+                                <iframe 
+                                    src="https://tenor.com/embed/12812068" 
+                                    width="100%" 
+                                    height="300" 
+                                    frameBorder="0" 
+                                    scrolling="no" 
+                                    style={{ borderRadius: '16px' }}
+                                ></iframe>
+                            </div>
+                            <h2 style={{ color: '#dc2626', fontWeight: 900, marginBottom: '10px', fontSize: '24px' }}>
+                                معندكش صلاحية للترحيل! 😅
+                            </h2>
+                            <button 
+                                onClick={() => setShowDeniedModal(false)}
+                                style={{ marginTop: '15px', padding: '12px 30px', background: '#0f172a', color: 'white', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 900, width: '100%', fontSize: '16px' }}
+                            >
+                                خلاص حقك عليا 🏃
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </>
+        );
     }
-    
-    // 4. لو معندوش الصلاحية، نعرض الفولباك (أو نلغيه تماماً لو مفيش فولباك)
+
     return <>{fallback}</>;
 }

@@ -7,6 +7,7 @@ import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
 import SmartCombo from '@/components/SmartCombo'; 
 import BOQModal from './BOQModal';
+import LoadingScreen from '@/components/LoadingScreen';
 
 const CellWrapper = ({ row, children, justify = 'center' }: { row: any, children: React.ReactNode, justify?: string }) => (
     <div style={{ 
@@ -284,7 +285,7 @@ export default function BOQBudgetPage() {
       `}</style>
 
       {(logic.isLoading && logic.allFiltered.length === 0) ? (
-        <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري تحميل المقايسات...</div>
+        <LoadingScreen message="جاري تحميل المقايسات..." fullScreen={false} />
       ) : (
         <div 
             className="boq-table-scroller cinematic-scroll"

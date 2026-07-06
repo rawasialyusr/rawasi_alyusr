@@ -9,6 +9,8 @@ import SmartCombo from '@/components/SmartCombo';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
+import { supabase } from '@/lib/supabase';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function LaborLogsDirectory() {
   const logic = useLaborLogsLogic();
@@ -16,6 +18,33 @@ export default function LaborLogsDirectory() {
   const { can, loading: permsLoading } = usePermissions();
 
   useEffect(() => { setMounted(true); }, []);
+
+  // إضافة اختصار الحفظ (Ctrl + Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (logic.isAddModalOpen && e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!logic.isSaving) logic.handleSaveLog();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [logic.isAddModalOpen, logic.isSaving, logic]);
+
+  // اختصار لإضافة يومية جديدة (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      // Use e.code === 'KeyN' so it works even if the keyboard is in Arabic (where N is 'ى')
+      if (!logic.isAddModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        logic.setEditingId(null);
+        logic.setCurrentLog(logic.defaultLog);
+        logic.setIsAddModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [logic.isAddModalOpen, logic]);
 
   const isOneSelected = logic.selectedIds.length === 1;
 
@@ -111,7 +140,7 @@ export default function LaborLogsDirectory() {
         if (!row) return null;
         return (
           <span className="glass-badge" style={{ backgroundColor: row.is_posted ? '#ecfdf5' : '#fff7ed', color: row.is_posted ? '#059669' : '#d97706' }}>
-            {row.is_posted ? 'مرحل ✅' : 'معلق ⏳'}
+            {row.is_posted ? 'معتمد ✅' : 'معلق ⏳'}
           </span>
         );
       }
@@ -157,7 +186,7 @@ export default function LaborLogsDirectory() {
   
   return (
     <>
-      <MasterPage title="يوميات العمالة" subtitle="إدارة الحضور والأجور والإنتاجية الميدانية">
+      <MasterPage icon="👷‍♂️" title="يوميات العمالة" subtitle="إدارة الحضور والأجور والإنتاجية الميدانية">
         <RawasiSidebarManager 
           summary={
             <div className="summary-glass-card">
@@ -187,7 +216,7 @@ export default function LaborLogsDirectory() {
               <div>
                 <label className="glass-label">تصفية حسب الحالة:</label>
                 <div style={{ display: 'flex', gap: '5px' }}>
-                  {['الكل', 'مرحل', 'معلق'].map(type => (
+                  {['الكل', 'معتمد', 'معلق'].map(type => (
                     <button 
                       key={type} 
                       onClick={() => logic.setFilterStatus(type)} 
@@ -234,7 +263,7 @@ export default function LaborLogsDirectory() {
 
         <div className="no-print">
           {logic.isLoading ? (
-            <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة مع رواسي...</div>
+            <LoadingScreen message="جاري المزامنة مع رواسي..." fullScreen={false} />
           ) : (
             <RawasiSmartTable 
               columns={columns} 
@@ -269,7 +298,7 @@ export default function LaborLogsDirectory() {
                </div>
 
                {/* الصف الثاني المطور 🚀 */}
-               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr', gap: '20px', zIndex: 90 }}>
+               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1.5fr 1fr', gap: '20px', zIndex: 90 }}>
                  <SmartCombo 
                      label="📍 الموقع / العمارة" 
                      table="projects" 
@@ -282,6 +311,7 @@ export default function LaborLogsDirectory() {
                          ...logic.currentLog, 
                          site_ref: v?.Property || '', 
                          project_id: v?.id || null,
+                         job_order_id: null,
                          work_item: '',
                          work_item_id: null,
                          unit: ''
@@ -290,27 +320,58 @@ export default function LaborLogsDirectory() {
 
                  <div style={{ position: 'relative' }}>
                      <SmartCombo 
-                         label="🔨 البند (من المقايسة)" 
-                         table="boq_budget_distinct" // 🚀 تم ربطه بالـ View النظيف لمنع أي تكرار
-                         searchCols="work_item" 
-                         displayCol="work_item" 
+                         label="📝 أمر الشغل (ربط الميزانية) *" 
+                         table="job_orders" 
+                         displayCol="order_number" 
+                         searchCols="order_number,notes" 
                          freeText={false} 
                          strict={true} 
-                         filterColumn="project_id" // الفلترة الذكية برقم الفيلا
+                         filterColumn="project_id" 
                          filterValue={logic.currentLog.project_id}
-                         key={logic.currentLog.project_id || 'empty-project'} 
-                         initialDisplay={logic.currentLog.work_item || ''} 
-                         onSelect={(v:any) => logic.setCurrentLog({
-                             ...logic.currentLog, 
-                             work_item: v?.work_item || '',
-                             work_item_id: v?.boq_item_id || null, 
-                             unit: v?.unit || '',                   
-                             tareeha: v?.tareeha ? String(v.tareeha) : logic.currentLog.tareeha // 🚀 سحب الطريحة أوتوماتيكياً
-                         })} 
+                         customQuery={(q: any) => q.select('*, boq_budget:boq_budget_id(work_item)')}
+                         displayFormat={(item: any) => `${item.order_number} - ${item.boq_budget?.work_item || 'بدون بند'}`}
+                         key={(logic.currentLog.project_id || 'empty-jo') + '_job_order'} 
+                         initialDisplay={logic.currentLog.job_order_id ? `أمر شغل مرتبط` : ''} 
+                         onSelect={async (v:any) => {
+                             let updates: any = { job_order_id: v?.id || null };
+                             
+                             if (v?.boq_budget_id) {
+                                 // Fetch the work item details from boq_budget_distinct to auto-fill
+                                 const { data } = await supabase
+                                     .from('boq_budget_distinct')
+                                     .select('*')
+                                     .eq('id', v.boq_budget_id)
+                                     .single();
+                                     
+                                 if (data) {
+                                     updates.work_item = data.work_item;
+                                     updates.work_item_id = data.boq_item_id;
+                                     updates.unit = data.unit;
+                                     updates.tareeha = data.tareeha ? String(data.tareeha) : logic.currentLog.tareeha;
+                                 }
+                             }
+                             
+                             logic.setCurrentLog({
+                                 ...logic.currentLog, 
+                                 ...updates
+                             });
+                         }} 
                      />
                      {!logic.currentLog.project_id && (
                          <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(255,255,255,0.5)', cursor: 'not-allowed' }} title="يرجى اختيار الموقع أولاً"></div>
                      )}
+                 </div>
+
+                 <div>
+                    <label className="modal-label">🔨 البند (من المقايسة)</label>
+                    <input 
+                        type="text" 
+                        placeholder="يسحب تلقائياً من أمر الشغل" 
+                        readOnly 
+                        value={logic.currentLog.work_item || ''} 
+                        className="modal-input" 
+                        style={{ background: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
+                    />
                  </div>
 
                  <div>
@@ -385,7 +446,7 @@ export default function LaborLogsDirectory() {
 
                {/* أزرار الحفظ */}
                <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-                 <button onClick={logic.handleSaveLog} disabled={logic.isSaving} className="save-btn">
+                 <button onClick={logic.handleSaveLog} disabled={logic.isSaving} className="save-btn" title="يمكنك أيضاً استخدام Ctrl + Enter للحفظ">
                    {logic.isSaving ? '⏳ جاري الحفظ...' : '💾 اعتماد السجل'}
                  </button>
                  <button onClick={() => logic.setIsAddModalOpen(false)} className="cancel-btn">إلغاء</button>

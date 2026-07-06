@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
 import RawasiSmartTable from '@/components/rawasismarttable';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 // 🎨 مكون تغليف الخلية لضغط المساحات وعرض الجدول بشكل سينمائي مريح للعين
 const CompactCell = ({ children, justify = 'flex-start', isBold = false }: { children: React.ReactNode, justify?: string, isBold?: boolean }) => (
@@ -31,50 +32,63 @@ export default function CostAllocationPage() {
             render: (row: any) => <CompactCell justify="center"><span className="badge-month">{row["شهر التحميل المالي"]}</span></CompactCell> 
         },
         { 
-            key: 'villa', label: 'اسم الفيلا المحمل عليها', 
-            render: (row: any) => <CompactCell isBold={true}>🏢 {row["اسم الفيلا المحمل عليها"] || 'عام/غير موزع'}</CompactCell> 
+            key: 'villa_boq', label: 'المشروع وبند الموازنة المتأثر', 
+            // 🎯 تم دمج الفيلا والبند هنا بشكل احترافي
+            render: (row: any) => (
+                <CompactCell justify="flex-start">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <span style={{ fontWeight: 900, color: '#1e293b', fontSize: '12px' }}>
+                            🏢 {row["اسم الفيلا المحمل عليها"] || 'عام/غير موزع'}
+                        </span>
+                        <span style={{ fontSize: '10.5px', color: '#ca8a04', fontWeight: 800 }}>
+                            📋 بند: {row["البند المحمل عليه"] || 'مصروف عام (لم يوجه لبند)'}
+                        </span>
+                    </div>
+                </CompactCell>
+            )
         },
         { 
             key: 'category', label: 'التصنيف الرئيسي', 
             render: (row: any) => <CompactCell><span style={{color: THEME.primary}}>{row["التصنيف الرئيسي"]}</span></CompactCell> 
         },
         { 
-            key: 'desc', label: 'وصف المصروف التلقائي', 
-            render: (row: any) => <CompactCell><span style={{color: '#475569', fontSize:'10.5px'}}>{row["وصف المصروف التلقائي"]}</span></CompactCell> 
+            key: 'desc', label: 'وصف المصروف', 
+            render: (row: any) => <CompactCell><span style={{color: '#475569', fontSize:'10.5px'}}>{row["البيان / الوصف"]}</span></CompactCell> 
         },
         { 
-            key: 'amount', label: 'المبلغ المحمل', 
+            key: 'percentage', label: 'نسبة الاستهلاك', 
+            // 🎯 عرض النسبة المئوية لتحميل التكلفة على البند
+            render: (row: any) => <CompactCell justify="center"><span style={{ fontWeight: 900, color: '#64748b' }}>{row["نسبة التحميل (%)"]}%</span></CompactCell> 
+        },
+        { 
+            key: 'amount', label: 'التكلفة المحملة للبند', 
             render: (row: any) => (
                 <CompactCell justify="center">
-                    <strong style={{color: '#16a34a', background: 'rgba(22,163,74,0.08)', padding: '2px 8px', borderRadius: '6px', fontSize:'12px'}}>
+                    <strong style={{color: '#16a34a', background: 'rgba(22,163,74,0.08)', padding: '4px 10px', borderRadius: '6px', fontSize:'13px'}}>
                         {formatCurrency(row["المبلغ المحمل (جنيه)"])}
                     </strong>
                 </CompactCell>
             ) 
         },
         { 
-            key: 'date', label: 'تاريخ المصروف الأصلي', 
-            render: (row: any) => <CompactCell justify="center"><span style={{color: '#64748b', fontSize:'10px'}}>{row["تاريخ المصروف الأصلي"] || '-'}</span></CompactCell> 
-        },
-        { 
-            key: 'mechanism', label: 'آلية التوزيع الهندسية والمحاسبية', 
-            render: (row: any) => <CompactCell><span className="badge-mechanism">{row["آلية التوزيع الهندسية"]}</span></CompactCell> 
+            key: 'mechanism', label: 'آلية التوزيع (حسب التواجد)', 
+            render: (row: any) => <CompactCell><span className="badge-mechanism">{row["آلية التوزيع"]}</span></CompactCell> 
         }
     ], []);
 
     return (
-        <MasterPage title="شاشة توزيع المصروفات غير المباشرة" subtitle="عرض وتحليل تكاليف الشركة العمومية المحملة تلقائياً على الفلل والمشاريع">
+        <MasterPage title="شاشة توزيع المصروفات والتكاليف (ABC)" subtitle="توزيع تلقائي لتكاليف الشركة والمشاريع على بنود الموازنة بناءً على حجم تواجد العمالة">
             
             <RawasiSidebarManager 
                 summary={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div className="summary-glass-box">
-                            <span style={{fontSize:'11px', fontWeight:800, color:'#64748b'}}>إجمالي المبالغ الموزعة المعروضة 💰</span>
+                            <span style={{fontSize:'11px', fontWeight:800, color:'#64748b'}}>إجمالي المبالغ الموزعة 💰</span>
                             <div style={{fontSize:'20px', fontWeight:900, color: '#16a34a', marginTop:'4px'}}>{formatCurrency(logic.totalAllocatedAmount)}</div>
                         </div>
                         <div className="summary-glass-box">
                             <span style={{fontSize:'11px', fontWeight:800, color:'#64748b'}}>عدد القيود المحملة 📊</span>
-                            <div style={{fontSize:'22px', fontWeight:900, color: THEME.primary, marginTop:'4px'}}>{logic.filteredData.length}</div>
+                            <div style={{fontSize:'22px', fontWeight:900, color: THEME.primary, marginTop:'4px'}}>{logic.filteredData.length} قيد</div>
                         </div>
                     </div>
                 }
@@ -92,7 +106,7 @@ export default function CostAllocationPage() {
                     </div>
                 }
                 onSearch={logic.setGlobalSearch}
-                placeholder="ابحث باسم الفيلا، التصنيف أو الوصف..."
+                placeholder="ابحث باسم الفيلا، البند، أو الوصف..."
                 watchDeps={[logic.filteredData.length, logic.selectedMonth, logic.totalAllocatedAmount]}
             />
 
@@ -108,16 +122,16 @@ export default function CostAllocationPage() {
                     border: 1px solid rgba(255,255,255,0.3); color: #1e293b; font-weight: 700; font-size: 13px; outline: none; cursor: pointer;
                 }
                 .glass-dropdown option { background: white; color: #1e293b; }
-                .badge-month { background: #f1f5f9; color: #334155; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 10px; border: 1px solid #cbd5e1; }
-                .badge-mechanism { background: #eff6ff; color: #2563eb; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; border: 1px solid #bfdbfe; word-break: break-all; }
+                .badge-month { background: #f1f5f9; color: #334155; padding: 2px 6px; border-radius: 4px; font-weight: 900; font-size: 11px; border: 1px solid #cbd5e1; }
+                .badge-mechanism { background: #eff6ff; color: #2563eb; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 11px; border: 1px solid #bfdbfe; word-break: break-all; }
             `}</style>
 
             {logic.isLoading ? (
-                <div style={{textAlign:'center', padding:'100px', color:'#94a3b8', fontWeight:900}}>⏳ جاري تشغيل محرك التوزيع وسحب كشف الحساب...</div>
+                <LoadingScreen message="جاري تشغيل محرك التوزيع وسحب كشف الحساب..." fullScreen={false} />
             ) : (
                 <div className="compact-table-holder cinematic-scroll">
                     <RawasiSmartTable 
-                        data={logic.paginatedItems}
+                        data={logic.filteredData} /* 🎯 التعديل هنا: نبعت الداتا كلها للجدول بدل الداتا المقصوصة */
                         columns={tableColumns}
                         enablePagination={true}
                         currentPage={logic.currentPage}

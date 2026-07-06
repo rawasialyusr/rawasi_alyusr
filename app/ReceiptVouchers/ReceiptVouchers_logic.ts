@@ -3,6 +3,7 @@ import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 export function useReceiptVouchersLogic() {
     const queryClient = useQueryClient();
@@ -33,7 +34,7 @@ export function useReceiptVouchersLogic() {
     const [permissions] = useState({ canAdd: true, canEdit: true, canDelete: true, canPost: true, canUnpost: true });
 
     const canUserEdit = (record: any) => {
-        if (!record || record.status === 'مُعتمد') return false; 
+        if (!record || record.status === 'معتمد') return false; 
         return permissions.canEdit;
     };
 
@@ -43,12 +44,12 @@ export function useReceiptVouchersLogic() {
     const { data: allData = [], isLoading } = useQuery({
         queryKey: ['receipt_vouchers'],
         queryFn: async () => {
-            const { data: rec, error } = await supabase
+            const buildQuery = () => supabase
                 .from('receipt_vouchers')
                 .select(`*, partners(name), invoices(invoice_number)`)
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
+            const rec = await fetchPaginatedData(buildQuery, 'id');
             const { data: allProjects } = await supabase.from('projects').select('id, "Property"');
 
             return rec?.map(voucher => ({
@@ -86,8 +87,8 @@ export function useReceiptVouchersLogic() {
     const kpis = useMemo(() => {
         return {
             total: allFiltered.length,
-            posted: allFiltered.filter(i => i.status === 'مُعتمد').length,
-            pending: allFiltered.filter(i => i.status !== 'مُعتمد').length,
+            posted: allFiltered.filter(i => i.status === 'معتمد').length,
+            pending: allFiltered.filter(i => i.status !== 'معتمد').length,
             totalAmount: allFiltered.reduce((sum, r) => sum + Number(r.amount || 0), 0)
         };
     }, [allFiltered]);
@@ -139,7 +140,7 @@ export function useReceiptVouchersLogic() {
         mutationFn: async () => {
             if (!selectedIds.length) return;
             const previousData = queryClient.getQueryData(['receipt_vouchers']);
-            updateRowsInCache(selectedIds, { status: 'مُعتمد' });
+            updateRowsInCache(selectedIds, { status: 'معتمد' });
 
             const { error } = await supabase.rpc('post_receipts_bulk', { p_ids: selectedIds });
             if (error) {
@@ -252,7 +253,7 @@ export function useReceiptVouchersLogic() {
         }, 
         handleEdit: (rec: any) => { 
             if (canUserEdit(rec)) { setCurrentRecord(rec); setIsEditModalOpen(true); }
-            else showToast("لا يمكن تعديل سند مُعتمد", "warning");
+            else showToast("لا يمكن تعديل سند معتمد", "warning");
         }, 
         
         handleSave: (record: any) => saveMutation.mutate(record), 

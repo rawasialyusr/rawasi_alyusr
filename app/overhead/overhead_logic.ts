@@ -13,7 +13,7 @@ export function useOverheadAllocationsLogic() {
 
     // 📡 سحب البيانات على دفعات (Pagination Loop) مع منع التكرار والانحراف
     const { data: allocationsData = [], isLoading } = useQuery({
-        queryKey: ['vw_project_overhead_allocations'],
+        queryKey: ['advanced_cost_allocation_view'],
         queryFn: async () => {
             let allFetchedData: any[] = [];
             let from = 0;
@@ -23,9 +23,9 @@ export function useOverheadAllocationsLogic() {
             // 1. السحب المتتالي لحد ما السيرفر يرجع داتا أقل من 1000
             while (hasMoreData) {
                 const { data, error } = await supabase
-                    .from('vw_project_overhead_allocations')
+                    .from('advanced_cost_allocation_view')
                     .select('*')
-                    .order('تاريخ المصروف', { ascending: false }) // الترتيب الأساسي
+                    .order('تاريخ المصروف الأصلي', { ascending: false }) // الترتيب الأساسي
                     .order('id', { ascending: true }) // 🚀 الترتيب المزدوج (Stable Sort) لمنع انحراف الترقيم نهائياً
                     .range(from, from + step - 1);
                 
@@ -70,7 +70,7 @@ export function useOverheadAllocationsLogic() {
     }, [allocationsData]);
 
     const uniqueProjects = useMemo(() => {
-        const projects = allocationsData.map((item: any) => item["اسم المشروع"]).filter(Boolean);
+        const projects = allocationsData.map((item: any) => item["اسم الفيلا المحمل عليها"]).filter(Boolean);
         return [...new Set(projects)].sort();
     }, [allocationsData]);
 
@@ -79,13 +79,13 @@ export function useOverheadAllocationsLogic() {
         return allocationsData.filter((item: any) => {
             const searchLower = deferredSearch.toLowerCase();
             const matchSearch = deferredSearch ? (
-                item["اسم المشروع"]?.toLowerCase().includes(searchLower) ||
-                item["البيان والوصف"]?.toLowerCase().includes(searchLower) ||
-                item["التصنيف"]?.toLowerCase().includes(searchLower)
+                item["اسم الفيلا المحمل عليها"]?.toLowerCase().includes(searchLower) ||
+                item["البيان / الوصف"]?.toLowerCase().includes(searchLower) ||
+                item["التصنيف الرئيسي"]?.toLowerCase().includes(searchLower)
             ) : true;
             
             const matchMonth = selectedMonth ? item["شهر التحميل المالي"] === selectedMonth : true;
-            const matchProject = selectedProject ? item["اسم المشروع"] === selectedProject : true;
+            const matchProject = selectedProject ? item["اسم الفيلا المحمل عليها"] === selectedProject : true;
 
             return matchSearch && matchMonth && matchProject;
         });
@@ -96,12 +96,12 @@ export function useOverheadAllocationsLogic() {
         const groups: Record<string, { projectName: string, totalAmount: number, items: any[] }> = {};
         
         filteredData.forEach((item: any) => {
-            const pName = item["اسم المشروع"] || 'عام / غير موزع';
+            const pName = item["اسم الفيلا المحمل عليها"] || 'عام / غير موزع';
             if (!groups[pName]) {
                 groups[pName] = { projectName: pName, totalAmount: 0, items: [] };
             }
             groups[pName].items.push(item);
-            groups[pName].totalAmount += Number(item["نصيب المشروع (المبلغ المحمل)"] || 0);
+            groups[pName].totalAmount += Number(item["المبلغ المحمل (ر.س)"] || 0);
         });
         
         // ترتيب المشاريع من الأعلى تحميلاً للأقل

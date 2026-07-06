@@ -13,7 +13,8 @@ import SmartCombo from '@/components/SmartCombo';
 
 // 🎬 المودالات
 import JobOrderModal from './JobOrderModal';
-import JobOrderLedgerModal from './JobOrderLedgerModal'; // 🚀 تم تصحيح المسار هنا ليقرأ الملف الصحيح
+import JobOrderLedgerModal from './JobOrderLedgerModal'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function JobOrdersPage() {
   const logic = useJobOrdersLogic(); 
@@ -81,7 +82,7 @@ export default function JobOrdersPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <b style={{ color: '#8b5cf6', textShadow: '0 0 10px rgba(139, 92, 246, 0.3)', fontSize: '14px' }}>#{row.order_number}</b>
           <span style={{ fontSize: '10px', color: '#64748b' }}>
-             📅 البدء: {row.start_date ? new Date(row.start_date).toLocaleDateString('ar-EG') : '---'}
+              📅 البدء: {row.start_date ? new Date(row.start_date).toLocaleDateString('ar-EG') : '---'}
           </span>
         </div>
       ) 
@@ -91,17 +92,18 @@ export default function JobOrdersPage() {
       label: 'العقار والبند المستهدف', 
       render: (row: any) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '250px' }}>
-          {row.job_order_name ? (
-             <span style={{fontWeight: 900, color: '#1e293b', fontSize: '12px', lineHeight: '1.4'}}>{row.job_order_name}</span>
-          ) : (
-            <>
-              <span style={{fontWeight: 900, color: '#1e293b'}}>{row.projects?.project_name || '---'}</span>
-              {row.boq_budget?.work_item && (
-                 <span style={{ fontSize: '10px', color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', width: 'fit-content', border: '1px solid #e2e8f0' }}>
-                   🛠️ {row.boq_budget.work_item}
-                 </span>
-              )}
-            </>
+          {row.job_order_name && (
+             <span style={{fontWeight: 900, color: '#1e293b', fontSize: '12px', lineHeight: '1.4'}}>
+                 {row.job_order_name}
+             </span>
+          )}
+          <span style={{fontWeight: 900, color: row.job_order_name ? '#64748b' : '#1e293b', fontSize: row.job_order_name ? '11px' : '13px'}}>
+              {row.projects?.Property || row.projects?.project_name || 'العقار غير محدد'}
+          </span>
+          {row.boq_budget?.work_item && (
+             <span style={{ fontSize: '10px', color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', width: 'fit-content', border: '1px solid #e2e8f0' }}>
+               🛠️ {row.boq_budget.work_item}
+             </span>
           )}
         </div>
       ) 
@@ -138,37 +140,73 @@ export default function JobOrdersPage() {
       key: 'performance',
       label: 'الأداء والربحية 📊',
       render: (row: any) => {
-        // سحب الأرقام الديناميكية الجديدة من الفيو
-        const isSubcontractor = row.executor_type === 'مقاول باطن';
-        const targetBudget = Number(row.boq_total_budget || 0);
-        const effectiveCost = Number(row.effective_cost || 0);
-        const profit = Number(row.total_profit_or_loss || 0);
+        // 🚀 المعادلة المحاسبية الدقيقة والصريحة جداً
         
-        let profitColor = '#10b981'; // أخضر (مكسب)
+        // 1. أصل الموازنة (قيمة البند الأساسية في المقايسة)
+        const targetBudget = Number(row.boq_budget?.total_price || row.boq_total_budget || 0); 
+        
+        // 2. المنصرف الفعلي (مواد وخامات وعمالة يوميات ومصروفات)
+        const materialsAndExpenses = Number(row.effective_cost || 0); 
+        
+        // 3. المنصرف للمقاول (من المستخلصات)
+        const subcontractorPaid = Number(row.subcontractor_paid || 0); 
+        
+        // إجمالي التكلفة الحقيقية = المنصرف (خامات/عمالة/مصاريف) + اللي خده المقاول
+        const finalCost = row.executor_type === 'مقاول باطن' 
+            ? materialsAndExpenses + subcontractorPaid 
+            : materialsAndExpenses;
+        
+        // صافي الربح = أصل قيمة البند - إجمالي المنصرف
+        const calculatedProfit = targetBudget - finalCost;
+        
+        let profitColor = '#10b981'; 
         let profitBg = 'rgba(16, 185, 129, 0.1)';
+        let profitLabel = 'الربح الصافي:';
         
-        if (profit < 0) {
-            profitColor = '#ef4444'; // أحمر (خسارة)
+        if (calculatedProfit < 0) {
+            profitColor = '#ef4444'; 
             profitBg = 'rgba(239, 68, 68, 0.1)';
-        } else if (profit === 0 && effectiveCost === 0) {
-            profitColor = '#94a3b8'; // رمادي (لم يبدأ)
+            profitLabel = 'الخسارة:';
+        } else if (calculatedProfit === 0 && finalCost === 0) {
+            profitColor = '#94a3b8'; 
             profitBg = '#f1f5f9';
-        } else if (profit === 0 && effectiveCost > 0) {
-            profitColor = '#f59e0b'; // أصفر (تعادل)
+            profitLabel = 'لم يبدأ:';
+        } else if (calculatedProfit === 0 && finalCost > 0) {
+            profitColor = '#f59e0b'; 
             profitBg = 'rgba(245, 158, 11, 0.1)';
+            profitLabel = 'تعادل:';
         }
 
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 800 }}>
-             <span style={{ color: '#0ea5e9' }}>الميزانية: {targetBudget.toLocaleString()} ر.س</span>
-             <span style={{ color: '#475569' }}>
-                 {isSubcontractor ? 'عقد المقاول:' : 'تكلفة الموقع:'} {effectiveCost.toLocaleString()} ر.س
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 800, minWidth: '200px' }}>
+             <span style={{ color: '#0ea5e9', display: 'flex', justifyContent: 'space-between' }}>
+                 <span>أصل الموازنة:</span> <span>{targetBudget.toLocaleString()} ر.س</span>
              </span>
+             
+             {row.executor_type === 'مقاول باطن' ? (
+                <>
+                    <span style={{ color: '#f59e0b', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>خامات ومصروفات:</span> <span dir="ltr"> - {materialsAndExpenses.toLocaleString()}</span>
+                    </span>
+                    <span style={{ color: '#8b5cf6', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>مسدد للمقاول:</span> <span dir="ltr"> - {subcontractorPaid.toLocaleString()}</span>
+                    </span>
+                </>
+             ) : (
+                <span style={{ color: '#ef4444', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>منصرف (عمالة/خامات):</span> <span dir="ltr"> - {materialsAndExpenses.toLocaleString()}</span>
+                </span>
+             )}
+             
+             <span style={{ color: '#1e293b', borderTop: '1px dashed #cbd5e1', paddingTop: '4px', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
+                 <span>إجمالي التكلفة:</span> <span>{finalCost.toLocaleString()} ر.س</span>
+             </span>
+             
              <span style={{ 
                  color: profitColor, background: profitBg, 
-                 padding: '2px 6px', borderRadius: '4px', width: 'fit-content', border: `1px solid ${profitColor}40`
+                 padding: '4px 8px', borderRadius: '6px', border: `1px solid ${profitColor}40`, marginTop: '4px', display: 'flex', justifyContent: 'space-between'
              }}>
-               {profit > 0 ? 'ربح:' : profit < 0 ? 'خسارة:' : 'الصافي:'} {Math.abs(profit).toLocaleString()} ر.س
+               <span>{profitLabel}</span> <span>{Math.abs(calculatedProfit).toLocaleString()} ر.س</span>
              </span>
           </div>
         );
@@ -200,10 +238,8 @@ export default function JobOrdersPage() {
       label: 'الإجراءات',
       render: (row: any) => (
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-          {/* زر التعديل */}
           <button onClick={(e) => { e.stopPropagation(); logic.handleEdit(row); }} className="btn-glass-pay" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }} title="تعديل الأمر">📝</button>
           
-          {/* 🚀 زر السجل التحليلي الجديد */}
           <button onClick={(e) => { 
               e.stopPropagation(); 
               logic.setLedgerRecord(row); 
@@ -309,7 +345,7 @@ export default function JobOrdersPage() {
       `}</style>
 
       {(logic.isLoading && logic.allFiltered.length === 0) ? (
-        <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري تحميل أوامر التشغيل...</div>
+        <LoadingScreen message="جاري تحميل أوامر التشغيل..." fullScreen={false} />
       ) : (
         <div className="clickable-rows cinematic-scroll" style={{ background: 'white', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
           <RawasiSmartTable 

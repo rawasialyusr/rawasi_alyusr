@@ -9,12 +9,13 @@ import SmartCombo from '@/components/SmartCombo';
 import SecureAction from '@/components/SecureAction';
 import { formatCurrency, formatDate } from '@/lib/helpers';
 import StatementPrintModal from './StatementPrintModal'; 
+import ExportLoadingModal from '@/components/ExportLoadingModal'; 
 
 export default function PartnerStatementPage() {
     const logic = useStatementLogic();
     const [mounted, setMounted] = useState(false);
     
-    // 🚀 حالة التحكم في المودال (الطباعة)
+    // 🚀 حالة التحكم في المودال (الطباعة الفردية)
     const [isPrintOpen, setIsPrintOpen] = useState(false);
     const [selectedPartnerName, setSelectedPartnerName] = useState('');
 
@@ -83,18 +84,12 @@ export default function PartnerStatementPage() {
                 if (!row) return null; 
                 return (
                     <div style={{
-                        background: 'rgba(197, 160, 89, 0.1)', 
-                        border: '1px solid rgba(197, 160, 89, 0.2)',
-                        padding: '5px 10px', 
-                        borderRadius: '8px', 
-                        fontWeight: 900,
-                        textAlign: 'center',
+                        background: 'rgba(197, 160, 89, 0.1)', border: '1px solid rgba(197, 160, 89, 0.2)',
+                        padding: '5px 10px', borderRadius: '8px', fontWeight: 900, textAlign: 'center',
                         color: row.balance >= 0 ? THEME.success : THEME.danger
                     }}>
                         {formatCurrency(Math.abs(row.balance))}
-                        <small style={{marginRight: '5px', fontSize: '10px', color: '#8a7a6b'}}>
-                            {row.balance >= 0 ? '(له)' : '(عليه)'}
-                        </small>
+                        <small style={{marginRight: '5px', fontSize: '10px', color: '#8a7a6b'}}>{row.balance >= 0 ? '(له)' : '(عليه)'}</small>
                     </div>
                 );
             }
@@ -104,107 +99,77 @@ export default function PartnerStatementPage() {
     const tableData = useMemo(() => {
         if (!logic.partnerId || logic.isLoading) return [];
         const openingRow = { 
-            id: 'opening', 
-            date: logic.dateFrom || '---', 
-            description: '🔹 رصيد افتتاحي للمبالغ السابقة (ما قبل الفترة المختارة)', 
-            v_type: 'رصيد سابق', 
+            id: 'opening', date: logic.dateFrom || '---', 
+            description: '🔹 رصيد افتتاحي للمبالغ السابقة (ما قبل الفترة المختارة)', v_type: 'رصيد سابق', 
             debit: logic.openingBalance < 0 ? Math.abs(logic.openingBalance) : 0, 
-            credit: logic.openingBalance > 0 ? logic.openingBalance : 0, 
-            balance: logic.openingBalance 
+            credit: logic.openingBalance > 0 ? logic.openingBalance : 0, balance: logic.openingBalance 
         };
         return [openingRow, ...(logic.statementLines ?? [])];
     }, [logic.statementLines, logic.openingBalance, logic.isLoading, logic.partnerId, logic.dateFrom]);
 
     const sidebarActions = useMemo(() => (
         <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-            <button 
-                type="button" 
-                onClick={() => setIsPrintOpen(true)} 
-                className="btn-main-glass white" 
-                disabled={!logic.partnerId}
-            >
+            <button type="button" onClick={() => setIsPrintOpen(true)} className="btn-main-glass white" disabled={!logic.partnerId}>
                 🖨️ معاينة وطباعة الكشف
             </button>
             <SecureAction module="statements" action="export">
+                <button type="button" onClick={() => logic.exportToExcel(selectedPartnerName)} className="btn-main-glass gold" disabled={!logic.partnerId}>
+                    📥 تصدير Excel للشريك
+                </button>
+            </SecureAction>
+
+            <hr style={{ borderColor: 'rgba(197, 160, 89, 0.2)', margin: '5px 0' }} />
+
+            {/* 🚀 تم التحديث للدالة الجديدة downloadIndividualWorkerPDFs اللي بتضغط في ملف ZIP */}
+            <SecureAction module="statements" action="export">
                 <button 
                     type="button" 
-                    onClick={() => logic.exportToExcel(selectedPartnerName)} 
-                    className="btn-main-glass gold" 
-                    disabled={!logic.partnerId}
+                    onClick={logic.downloadIndividualWorkerPDFs} 
+                    className="btn-main-glass" 
+                    style={{ background: '#0284C7', color: 'white', borderColor: '#0369A1' }}
+                    disabled={logic.isExportingAll}
                 >
-                    📥 تصدير Excel
+                    {logic.isExportingAll ? '⏳ جاري المعالجة...' : '📦 تحميل جميع الكشوفات (ملف ZIP)'}
                 </button>
             </SecureAction>
         </div>
-    ), [logic.partnerId, selectedPartnerName, logic.exportToExcel]); 
+    ), [logic.partnerId, selectedPartnerName, logic.exportToExcel, logic.downloadIndividualWorkerPDFs, logic.isExportingAll]); 
 
     if (!mounted) return null;
 
     return (
         <div className="clean-page">
-            <MasterPage title="كشف حساب الشركاء" subtitle="تحليل مالي ملكي بنظام رواسي اليسر الماسي">
+            <MasterPage icon="📑" title="كشف حساب الشركاء" subtitle="تحليل مالي ملكي بنظام رواسي اليسر الماسي">
                 
-                <RawasiSidebarManager 
-                    actions={sidebarActions} 
-                    watchDeps={[logic.partnerId]} 
-                />
+                <RawasiSidebarManager actions={sidebarActions} watchDeps={[logic.partnerId, logic.isExportingAll]} />
 
                 <div className="main-content-flow">
-                    
-                    {/* 1️⃣ أدوات البحث والتصفية (تم التعديل لتكون في المقدمة المطلقة) */}
                     <div className="filter-dashboard-glass" style={{ position: 'relative', zIndex: 50 }}>
-                        <div className="filter-header">
-                            <span className="filter-title">🔍 أدوات البحث والتصفية المتقدمة</span>
-                        </div>
+                        <div className="filter-header"><span className="filter-title">🔍 أدوات البحث والتصفية المتقدمة</span></div>
                         <div className="filters-grid">
-                            {/* 🚀 السر هنا: position relative مع z-index يخلي القائمة تفرش فوق أي حاجة تحتها */}
                             <div className="filter-col" style={{ position: 'relative', zIndex: 100 }}>
                                 <label>👤 الشريك (عامل / مقاول / مورد)</label>
                                 <SmartCombo 
-                                    label="" 
-                                    table="partners" 
-                                    displayCol="name" 
-                                    initialDisplay={logic.partnerName || logic.partnerId} 
-                                    onSelect={(v: any) => { 
-                                        logic.setPartnerId(v?.id || ''); 
-                                        setSelectedPartnerName(v?.name || ''); 
-                                    }} 
+                                    label="" table="partners" displayCol="name" initialDisplay={logic.partnerName || logic.partnerId} 
+                                    onSelect={(v: any) => { logic.setPartnerId(v?.id || ''); setSelectedPartnerName(v?.name || ''); }} 
                                 />
                             </div>
-                            <div className="filter-col">
-                                <label>📅 من تاريخ</label>
-                                <input type="date" className="glass-input" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />
-                            </div>
-                            <div className="filter-col">
-                                <label>📅 إلى تاريخ</label>
-                                <input type="date" className="glass-input" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} />
-                            </div>
-                            <div className="filter-col">
-                                <label>🔎 بحث في الكشف</label>
-                                <input type="text" className="glass-input search-input" placeholder="ابحث في البيان..." value={logic.globalSearch || ''} onChange={e => logic.setGlobalSearch(e.target.value)} />
-                            </div>
+                            <div className="filter-col"><label>📅 من تاريخ</label><input type="date" className="glass-input" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} /></div>
+                            <div className="filter-col"><label>📅 إلى تاريخ</label><input type="date" className="glass-input" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} /></div>
+                            <div className="filter-col"><label>🔎 بحث في الكشف</label><input type="text" className="glass-input search-input" placeholder="ابحث في البيان..." value={logic.globalSearch || ''} onChange={e => logic.setGlobalSearch(e.target.value)} /></div>
                         </div>
                     </div>
 
-                    {/* 2️⃣ لوحة الملخص المالي المبسطة (السامري) */}
                     {logic.partnerId && (
                         <div className="glass-panel summary-container">
                             <div className="balances-grid" style={{ gridTemplateColumns: '1fr 1fr 1.5fr' }}>
-                                <div className="grid-box green">
-                                    <small>كل الدائن (له) {summarySuffix}</small>
-                                    <span>{formatCurrency(logic.totalCredit)}</span>
-                                </div>
-                                <div className="grid-box red">
-                                    <small>كل المدين (عليه) {summarySuffix}</small>
-                                    <span>{formatCurrency(logic.totalDebit)}</span>
-                                </div>
+                                <div className="grid-box green"><small>كل الدائن (له) {summarySuffix}</small><span>{formatCurrency(logic.totalCredit)}</span></div>
+                                <div className="grid-box red"><small>كل المدين (عليه) {summarySuffix}</small><span>{formatCurrency(logic.totalDebit)}</span></div>
                                 <div className="grid-box blue final-balance">
                                     <small>{netTitle}</small>
                                     <span style={{ color: logic.periodNet >= 0 ? '#4ade80' : '#f87171' }}>
-                                        {formatCurrency(Math.abs(logic.periodNet))}
-                                        <small style={{fontSize: '14px', marginLeft: '5px'}}>{logic.periodNet >= 0 ? '(له)' : '(عليه)'}</small>
+                                        {formatCurrency(Math.abs(logic.periodNet))}<small style={{fontSize: '14px', marginLeft: '5px'}}>{logic.periodNet >= 0 ? '(له)' : '(عليه)'}</small>
                                     </span>
-                                    {/* 🚀 إظهار الرصيد التراكمي النهائي تحت الصافي إذا كنا نبحث في فترة معينة */}
                                     {isPeriodSelected && (
                                         <div style={{ marginTop: '8px', fontSize: '12px', color: '#d4c4a8', fontWeight: 800, borderTop: '1px dashed rgba(197, 160, 89, 0.2)', paddingTop: '8px' }}>
                                             الرصيد التراكمي (النهائي): {formatCurrency(Math.abs(logic.currentBalance))} <span style={{fontSize: '10px'}}>{logic.currentBalance >= 0 ? '(له)' : '(عليه)'}</span>
@@ -212,53 +177,33 @@ export default function PartnerStatementPage() {
                                     )}
                                 </div>
                             </div>
-                            
                             <hr className="glass-divider" />
-                            
-                            {/* 🚀 قسم الأيام والغرامات */}
                             <div className="dashboard-stats-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                                <div className="stat-box cyan-outline">
-                                    <small>🗓️ عدد أيام الحضور</small>
-                                    <span style={{ fontSize: '24px' }}>{logic.attendanceCount} <small style={{fontSize:'14px', opacity:0.8}}>يوم</small></span>
-                                </div>
-                                <div className="stat-box dark-red">
-                                    <small>⚠️ إجمالي الغرامات (عليه)</small>
-                                    <span style={{ fontSize: '24px', color: '#fca5a5' }}>{formatCurrency(logic.totalViolations)}</span>
-                                </div>
+                                <div className="stat-box cyan-outline"><small>🗓️ عدد أيام الحضور</small><span style={{ fontSize: '24px' }}>{logic.attendanceCount} <small style={{fontSize:'14px', opacity:0.8}}>يوم</small></span></div>
+                                <div className="stat-box dark-red"><small>⚠️ إجمالي الغرامات (عليه)</small><span style={{ fontSize: '24px', color: '#fca5a5' }}>{formatCurrency(logic.totalViolations)}</span></div>
                             </div>
                         </div>
                     )}
 
-                    {/* 3️⃣ الجدول أو رسالة الترحيب */}
                     {!logic.partnerId ? (
-                        <div className="welcome-placeholder">
-                            <div className="icon">🧾</div>
-                            <h3>يرجى اختيار شريك لعرض كشف الحساب</h3>
-                        </div>
+                        <div className="welcome-placeholder"><div className="icon">🧾</div><h3>يرجى اختيار شريك لعرض كشف الحساب</h3></div>
                     ) : (
-                        <div className="table-wrapper-glass">
-                            <RawasiSmartTable data={tableData} columns={columns} isLoading={logic.isLoading} enablePagination={false} />
-                        </div>
+                        <div className="table-wrapper-glass"><RawasiSmartTable data={tableData} columns={columns} isLoading={logic.isLoading} enablePagination={false} /></div>
                     )}
                 </div>
             </MasterPage>
 
-            {/* 🚀 المودال */}
             <StatementPrintModal 
-                isOpen={isPrintOpen} 
-                onClose={() => setIsPrintOpen(false)} 
-                partnerName={logic.partnerName || selectedPartnerName}
-                dateFrom={logic.dateFrom} 
-                dateTo={logic.dateTo} 
-                openingBalance={logic.openingBalance}
-                currentBalance={logic.currentBalance} 
-                totalDebit={logic.totalDebit} 
-                totalCredit={logic.totalCredit}
-                attendanceCount={logic.attendanceCount} 
-                totalLaborAmount={logic.totalLaborAmount}
-                totalPayments={logic.totalPayments}       
-                totalViolations={logic.totalViolations}   
-                statementLines={logic.statementLines} 
+                isOpen={isPrintOpen} onClose={() => setIsPrintOpen(false)} partnerName={logic.partnerName || selectedPartnerName}
+                dateFrom={logic.dateFrom} dateTo={logic.dateTo} openingBalance={logic.openingBalance}
+                currentBalance={logic.currentBalance} totalDebit={logic.totalDebit} totalCredit={logic.totalCredit}
+                attendanceCount={logic.attendanceCount} totalLaborAmount={logic.totalLaborAmount}
+                totalPayments={logic.totalPayments} totalViolations={logic.totalViolations} statementLines={logic.statementLines} 
+            />
+
+            <ExportLoadingModal 
+                isOpen={logic.isExportingAll} 
+                progressText={logic.exportProgress} 
             />
 
             <style>{`
@@ -297,10 +242,7 @@ export default function PartnerStatementPage() {
                 .btn-main-glass:disabled { opacity: 0.5; cursor: not-allowed; }
                 .welcome-placeholder { text-align: center; padding: 100px; color: #bba58f; background: rgba(44, 34, 27, 0.4); border-radius: 20px; border: 1px dashed rgba(197, 160, 89, 0.3); }
                 .welcome-placeholder .icon { font-size: 64px; margin-bottom: 20px; color: ${THEME.goldAccent}; }
-                
-                /* 🚀 تم إضافة الدعم الكافي لكلاس الحاوية الزجاجية للجدول */
                 .table-wrapper-glass { background: rgba(255, 255, 255, 0.95); border-radius: 20px; overflow: hidden; padding: 10px; border: 1px solid rgba(197, 160, 89, 0.2); box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
-                .table-container-wrapper { background: rgba(255,255,255,0.95); border-radius: 20px; overflow: hidden; padding: 10px; border: 1px solid rgba(197, 160, 89, 0.2); box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
             `}</style>
         </div>
     );

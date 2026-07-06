@@ -1,10 +1,12 @@
 "use client";
 import React from 'react';
+import SecureAction from '@/components/SecureAction';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import { THEME } from '@/lib/theme';
 import { useBoqCatalogLogic } from './boq_catalog_logic';
 import CatalogItemModal from './CatalogItemModal';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function BoqCatalogPage() {
     const logic = useBoqCatalogLogic();
@@ -78,7 +80,7 @@ export default function BoqCatalogPage() {
                 `}</style>
 
                 {logic.isLoading ? (
-                    <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: THEME.goldAccent }}>⏳ جاري تحميل الدليل...</div>
+                    <LoadingScreen message="جاري تحميل الدليل..." fullScreen={false} />
                 ) : (
                     <div style={{ animation: 'fadeIn 0.4s' }}>
                         {Object.keys(logic.treeData).length === 0 ? (
@@ -99,8 +101,8 @@ export default function BoqCatalogPage() {
                                                 {mainCat}
                                             </div>
                                             <div style={{ display: 'flex', gap: '5px' }}>
-                                                <button onClick={(e) => { e.stopPropagation(); logic.setCategoryModal({ isOpen: true, oldName: mainCat, newName: mainCat, type: 'main' }); }} className="action-icon" title="تعديل اسم القسم">✏️</button>
-                                                <button onClick={(e) => { e.stopPropagation(); if(confirm(`هل أنت متأكد من حذف قسم "${mainCat}" بجميع بنوده نهائياً؟`)) logic.handleDeleteCategory({ name: mainCat, type: 'main' }); }} className="action-icon" title="حذف القسم بالكامل">🗑️</button>
+                                                <SecureAction module="boqcatalog" action="edit"><button onClick={(e) => { e.stopPropagation(); logic.setCategoryModal({ isOpen: true, oldName: mainCat, newName: mainCat, type: 'main' }); }} className="action-icon" title="تعديل اسم القسم">✏️</button></SecureAction>
+                                                <SecureAction module="boqcatalog" action="delete"><button onClick={(e) => { e.stopPropagation(); if(confirm(`هل أنت متأكد من حذف قسم "${mainCat}" بجميع بنوده نهائياً؟`)) logic.handleDeleteCategory({ name: mainCat, type: 'main' }); }} className="action-icon" title="حذف القسم بالكامل">🗑️</button></SecureAction>
                                             </div>
                                         </div>
 
@@ -119,8 +121,8 @@ export default function BoqCatalogPage() {
                                                             {subCat} <span style={{ fontSize: '11px', color: '#94a3b8', marginRight: '8px' }}>({items.length} بنود)</span>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '5px' }}>
-                                                            <button onClick={(e) => { e.stopPropagation(); logic.setCategoryModal({ isOpen: true, oldName: subCat, newName: subCat, type: 'sub', parentMain: mainCat }); }} className="action-icon" title="تعديل اسم القسم الفرعي">✏️</button>
-                                                            <button onClick={(e) => { e.stopPropagation(); if(confirm(`هل أنت متأكد من حذف "${subCat}" بجميع بنوده؟`)) logic.handleDeleteCategory({ name: subCat, type: 'sub', parentMain: mainCat }); }} className="action-icon" title="حذف القسم الفرعي">🗑️</button>
+                                                            <SecureAction module="boqcatalog" action="edit"><button onClick={(e) => { e.stopPropagation(); logic.setCategoryModal({ isOpen: true, oldName: subCat, newName: subCat, type: 'sub', parentMain: mainCat }); }} className="action-icon" title="تعديل اسم القسم الفرعي">✏️</button></SecureAction>
+                                                            <SecureAction module="boqcatalog" action="delete"><button onClick={(e) => { e.stopPropagation(); if(confirm(`هل أنت متأكد من حذف "${subCat}" بجميع بنوده؟`)) logic.handleDeleteCategory({ name: subCat, type: 'sub', parentMain: mainCat }); }} className="action-icon" title="حذف القسم الفرعي">🗑️</button></SecureAction>
                                                         </div>
                                                     </div>
 
@@ -136,8 +138,8 @@ export default function BoqCatalogPage() {
                                                                     {item.unit_of_measure}
                                                                 </span>
                                                                 <div>
-                                                                    <button onClick={() => { logic.setCurrentRecord(item); logic.setIsModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }} title="تعديل البند">✏️</button>
-                                                                    <button onClick={() => logic.handleDeleteItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }} title="حذف البند">🗑️</button>
+                                                                    <SecureAction module="boqcatalog" action="edit"><button onClick={() => { logic.setCurrentRecord(item); logic.setIsModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }} title="تعديل البند">✏️</button></SecureAction>
+                                                                    <SecureAction module="boqcatalog" action="delete"><button onClick={() => logic.handleDeleteItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }} title="حذف البند">🗑️</button></SecureAction>
                                                                 </div>
                                                             </div>
                                                         </div>

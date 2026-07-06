@@ -5,7 +5,7 @@ export function StatusBadge({ status }: { status: string }) {
   let color = '#555'; let bg = '#eee';
   if (!status) return null;
   if (status.includes('تجهيز') || status.includes('دراسة')) { color = '#CA8A04'; bg = '#FEF9C3'; }
-  else if (status.includes('تنفيذ') || status.includes('جاري') || status.includes('مُعتمد')) { color = '#166534'; bg = '#DCFCE7'; }
+  else if (status.includes('تنفيذ') || status.includes('جاري') || status.includes('معتمد')) { color = '#166534'; bg = '#DCFCE7'; }
   else if (status.includes('مؤقتا')) { color = '#9a3412'; bg = '#ffedd5'; }
   else if (status.includes('توقف') || status.includes('مرفوض') || status.includes('خطأ')) { color = '#991B1B'; bg = '#FEE2E2'; } 
   else if (status.includes('منتهي') || status.includes('مكتمل')) { color = '#1e40af'; bg = '#dbeafe'; }

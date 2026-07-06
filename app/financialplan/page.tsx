@@ -4,6 +4,7 @@ import { useFinancialPlanLogic } from './financial_plan_logic';
 import MasterPage from '@/components/MasterPage';
 import { formatCurrency } from '@/lib/helpers';
 import * as XLSX from 'xlsx-js-style';
+import LoadingScreen from '@/components/LoadingScreen';
 
 const THEME = {
   primary: '#0f172a',    
@@ -354,7 +355,7 @@ export default function FinancialPlanPage() {
         </div>
 
         {logic.isLoading ? (
-          <div style={{ textAlign: 'center', padding: '60px', fontWeight: 'bold', color: THEME.primary, fontSize: '16px' }}>⏳ جاري تحميل بنود الخطة من النظام...</div>
+          <LoadingScreen message="جاري تحميل بنود الخطة من النظام..." fullScreen={false} />
         ) : (
           <div style={{ display: 'flex', gap: '25px', alignItems: 'flex-start' }}>
             
@@ -404,7 +405,7 @@ export default function FinancialPlanPage() {
       <div className="print-area" style={{ display: 'none' }}>
          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `4px solid ${THEME.primary}`, paddingBottom: '12px', marginBottom: '25px' }}>
             <div>
-               <h1 style={{ margin: 0, color: THEME.primary, fontSize: '22px', fontWeight: 900 }}>تقرير الخطة المالية والموازنة التقديرية</h1>
+               
                <p style={{ margin: '6px 0 0 0', fontWeight: 800, fontSize: '14px', color: THEME.textMain }}>شركة رواسي اليسر للمقاولات | كشف تفصيلي لشهر: ({monthNameArabic} / {logic.selectedYear})</p>
             </div>
             <img src="/RYC_Logo.png" alt=" RY Logo" style={{ height: '55px', objectFit: 'contain' }} />

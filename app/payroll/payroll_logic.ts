@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx-js-style';
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function usePayrollLogic() {
     const [employees, setEmployees] = useState<any[]>([]);
@@ -39,13 +40,9 @@ export function usePayrollLogic() {
         
         const targetMonthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
         try {
-            const { data: empData, error: empError } = await supabase
-                .from('partners')
-                .select('id, name, partner_type, job_role, identity_number')
-                .in('partner_type', ['موظف', 'عامل', 'عامل يومية'])
-                .order('name');
-                
-            if (empError) throw empError;
+            const empData = await fetchAllSupabaseData(supabase, 'partners', 'id, name, partner_type, job_role, identity_number', 'name');
+            // We need to filter empData in memory since fetchAllSupabaseData currently doesn't accept complex filters
+            const filteredEmpData = empData.filter((p: any) => ['موظف', 'عامل', 'عامل يومية'].includes(p.partner_type));
 
             const { data: balData, error: balError } = await supabase.rpc('get_payroll_balances_with_cutoff', {
                 p_month: selectedMonth, p_year: selectedYear, p_cutoff_date: cutoffDate
@@ -57,21 +54,18 @@ export function usePayrollLogic() {
             });
             if (syncError) throw syncError;
 
-            const { data: savedSlips, error: slipsError } = await supabase
-                .from('payroll_slips')
-                .select('*')
-                .eq('month', targetMonthStr);
-            if (slipsError) throw slipsError;
+            const savedSlips = await fetchAllSupabaseData(supabase, 'payroll_slips');
+            const targetMonthSlips = savedSlips.filter((s: any) => s.month === targetMonthStr);
 
-            setEmployees(empData || []);
+            setEmployees(filteredEmpData || []);
 
-            const initialPayroll = (empData || []).map(emp => {
+            const initialPayroll = (filteredEmpData || []).map(emp => {
                 const balanceObj = (balData || []).find((b: any) => b.partner_id === emp.id);
                 // الرصيد الحي من قاعدة البيانات
                 const livePrevUnpaid = balanceObj ? Number(balanceObj.previous_unpaid_balance) : 0;
 
                 const moduleData = (syncData || []).find((d: any) => d.partner_id === emp.id);
-                const savedSlipObj = (savedSlips || []).find((s: any) => s.emp_id === emp.id);
+                const savedSlipObj = (targetMonthSlips || []).find((s: any) => s.emp_id === emp.id);
                 
                 let baseRate = 0;
                 let daysWorked = moduleData ? Number(moduleData.days_worked || 0) : 0;

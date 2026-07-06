@@ -30,7 +30,7 @@ export function useRevenueLogic() {
                 const { data, error } = await supabase
                     .from('invoices')
                     .select('*, partners(name)')
-                    .eq('status', 'مُعتمد') // الميثاق: الإيراد يُحسب فقط للفواتير المعتمدة
+                    .eq('status', 'معتمد') // الميثاق: الإيراد يُحسب فقط للفواتير المعتمدة
                     .range(start, start + step - 1)
                     .order('date', { ascending: false });
 

@@ -5,6 +5,7 @@ import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import { useFieldOpsLogic } from './field_ops_logic';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function FieldOperationsPage() {
     const logic = useFieldOpsLogic();
@@ -45,7 +46,7 @@ export default function FieldOperationsPage() {
                 `}</style>
 
                 {logic.isLoading ? (
-                    <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: THEME.goldAccent }}>⏳ جاري مسح المواقع...</div>
+                    <LoadingScreen message="جاري مسح المواقع..." fullScreen={false} />
                 ) : (
                     <div className="field-grid">
                         {logic.projectStats.map(site => (

@@ -20,7 +20,7 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
 
     const handleSave = () => {
         if (!record.project_id) return alert("⚠️ يرجى اختيار المشروع العقاري أولاً.");
-        if (!record.job_order_id) return alert("⚠️ يرجى اختيار أمر التشغيل."); // التغيير هنا لأمر التشغيل
+        if (!record.job_order_id) return alert("⚠️ يرجى اختيار أمر التشغيل."); 
         if (Number(record.assigned_qty) <= 0 || Number(record.unit_price) <= 0) return alert("⚠️ يرجى إدخال كمية وسعر صحيحين أكبر من الصفر.");
         
         onSave(record);
@@ -65,7 +65,7 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
                                 setRecord({
                                     ...record, 
                                     job_order_id: selectedJobOrder?.id, 
-                                    boq_budget_id: selectedJobOrder?.boq_budget_id, // بنحفظ الـ ID بتاع الموازنة كمان كمرجع
+                                    boq_budget_id: selectedJobOrder?.boq_budget_id, 
                                     unit: selectedJobOrder?.boq_budget?.unit,
                                     assigned_qty: selectedJobOrder?.assigned_qty || 1, 
                                     unit_price: selectedJobOrder?.unit_price || 0 
@@ -76,7 +76,8 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
                             <option value="">{record.project_id ? '-- يرجى اختيار أمر التشغيل --' : '-- اختر الفيلا أولاً لعرض أوامر التشغيل --'}</option>
                             {logic.projectJobOrders.map((jo: any) => (
                                 <option key={jo.id} value={jo.id}>
-                                    {jo.job_order_name || jo.order_number} ({jo.assigned_qty} {jo.boq_budget?.unit})
+                                    {/* 🚀 التحديث هنا: عرض واضح للاسم ورقم الأمر والكمية والوحدة */}
+                                    {`[${jo.order_number}] - ${jo.boq_budget?.work_item || 'بند غير محدد'} | الكمية: ${jo.assigned_qty} ${jo.boq_budget?.unit || ''}`}
                                 </option>
                             ))}
                         </select>

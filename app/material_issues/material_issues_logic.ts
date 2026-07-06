@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 export function useMaterialIssuesLogic() {
     const queryClient = useQueryClient();
@@ -51,7 +52,7 @@ export function useMaterialIssuesLogic() {
     const { data: issues = [], isLoading } = useQuery({
         queryKey: ['material_issues_list'],
         queryFn: async () => {
-            const { data, error } = await supabase
+            const buildQuery = () => supabase
                 .from('material_issue_lines')
                 .select(`
                     id, boq_item_id, item_name, quantity, unit, unit_price, total_price, boq_id,
@@ -63,7 +64,7 @@ export function useMaterialIssuesLogic() {
                     )
                 `).order('created_at', { foreignTable: 'material_issues', ascending: false });
             
-            if (error) throw error;
+            const data = await fetchPaginatedData(buildQuery, 'id');
             
             return data.map((line: any) => ({
                 id: line.id, 
@@ -216,7 +217,8 @@ export function useMaterialIssuesLogic() {
                 unit_price: Number(i.unit_price) || 0,
                 total_price: Number(i.total_price) || 0,
                 boq_id: i.boq_id || null,
-                boq_item_id: i.boq_item_id || null // 🚀
+                boq_item_id: i.boq_item_id || null, // 🚀
+                job_order_id: i.job_order_id || null
             }));
             const { error: lErr } = await supabase.from('material_issue_lines').insert(lines);
             if (lErr) throw lErr;

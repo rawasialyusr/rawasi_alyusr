@@ -1,5 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import { useToast } from '@/lib/toast-context';
+import LoadingScreen from '@/components/LoadingScreen';
 import { supabase } from '@/lib/supabase';
 import { fetchAllSupabaseData, formatCurrency } from '@/lib/helpers';
 import GlassContainer from '@/components/GlassContainer';
@@ -62,7 +64,7 @@ export default function MasterDashboard() {
         loadMasterData();
     }, []);
 
-    if (loading) return <div style={{ padding: '100px', textAlign: 'center' }}>⏳ جاري استدعاء البيانات من كافة الأقسام...</div>;
+    if (loading) return <LoadingScreen message="جاري استدعاء الإحصائيات المركزية..." subMessage="نقوم بتجميع بيانات الأقسام بدقة لحظية" />;
 
     return (
         <div style={{ padding: '25px', direction: 'rtl', maxWidth: '1600px', margin: '0 auto' }}>

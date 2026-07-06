@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase';
 // 🎬 المودالز
 import ExpenseFormModal from './ExpenseFormModal'; 
 import ExpensePrintModal from './ExpensePrintModal'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 const MAIN_CATEGORIES = [
   "إعاشة وتغذية", "محروقات وانتقالات", "عدد ومعدات", "مستهلكات ومواد تشغيل", 
@@ -28,6 +29,31 @@ const MAIN_CATEGORIES = [
 export default function ExpensesPage() {
   const queryClient = useQueryClient(); 
   const logic = useExpensesLogic();
+
+  // 🚀 اختصار الحفظ (Ctrl + Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (logic.isModalOpen && e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!logic.isSaving) logic.handleSaveExpense();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [logic.isModalOpen, logic.isSaving]);
+
+  // 🚀 اختصار إضافة جديد (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      if (!logic.isModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        logic.handleAddNew();
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [logic.isModalOpen]);
+
   const pvLogic = usePaymentVouchersLogic();
   
   const [mounted, setMounted] = useState(false); 
@@ -301,10 +327,10 @@ export default function ExpensesPage() {
       render: (row: any) => {
         if (!row) return null;
         return row.is_posted ? 
-          <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>مُرحل ✅</span> : 
+          <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معتمد ✅</span> : 
           <span style={{ display: 'inline-block', background: '#fff7ed', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معلق ⏳</span>;
       },
-      exportValue: (row: any) => row.is_posted ? 'مُرحل ✅' : 'معلق ⏳'
+      exportValue: (row: any) => row.is_posted ? 'معتمد ✅' : 'معلق ⏳'
     },
     {
       header: 'الإجراءات',
@@ -445,7 +471,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="clean-page">
-      <MasterPage title="سجل المصروفات الموحد" subtitle="إدارة التكاليف والمشتريات وتوزيع بنود العمل">
+      <MasterPage icon="💸" title="سجل المصروفات الموحد" subtitle="إدارة التكاليف والمشتريات وتوزيع بنود العمل">
           <RawasiSidebarManager 
             summary={
               <div className="summary-glass-card">
@@ -488,7 +514,7 @@ export default function ExpensesPage() {
                 <div>
                   <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>تصفية حسب الحالة:</label>
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    {['الكل', 'مرحل', 'معلق'].map(type => (
+                    {['الكل', 'معتمد', 'معلق'].map(type => (
                       <button 
                         key={type} 
                         onClick={() => logic.setFilterStatus(type)} 
@@ -539,7 +565,7 @@ export default function ExpensesPage() {
           `}</style>
 
           {(logic.isLoading || permsLoading) ? (
-            <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري المزامنة...</div>
+            <LoadingScreen message="جاري المزامنة..." fullScreen={false} />
           ) : (
             <div className="table-glass-wrapper cinematic-scroll" style={{ overflowX: 'auto' }}>
               <RawasiSmartTable 

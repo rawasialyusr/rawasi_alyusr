@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import * as XLSX from 'xlsx';
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function useEmployeesLogic() {
     const [records, setRecords] = useState<any[]>([]);
@@ -29,13 +30,15 @@ export function useEmployeesLogic() {
 
     const fetchRecords = async () => {
         setIsLoading(true);
-        const { data, error } = await supabase
-            .from('partners')
-            .select('*')
-            .in('partner_type', ['موظف', 'عامل', 'عامل يومية'])
-            .order('created_at', { ascending: false });
-            
-        if (!error && data) setRecords(data);
+        try {
+            const data = await fetchAllSupabaseData(supabase, 'partners', '*', 'created_at', false);
+            if (data) {
+                const filtered = data.filter((p: any) => ['موظف', 'عامل', 'عامل يومية'].includes(p.partner_type));
+                setRecords(filtered);
+            }
+        } catch (error) {
+            console.error(error);
+        }
         setIsLoading(false);
     };
 

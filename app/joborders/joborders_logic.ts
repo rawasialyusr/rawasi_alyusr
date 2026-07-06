@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import { useToast } from '@/lib/toast-context'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; 
+import { fetchAllSupabaseData } from '@/lib/helpers';
 
 export function useJobOrdersLogic() {
     const { showToast } = useToast(); 
@@ -25,46 +26,37 @@ export function useJobOrdersLogic() {
 
     // ================= Fetching Data (React Query) =================
     
-    // 1. جلب البيانات الأساسية 
+    // 1. جلب البيانات الأساسية مع الإسناد والمستخلصات
     const { data: baseJobOrders = [], isLoading: isJoLoading } = useQuery({
         queryKey: ['job_orders'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('job_orders')
-                // 🚀 الحل السحري هنا: توجيه الـ Supabase صراحة لاسم القيد عشان نتخطى مشكلة الكاش والتضارب
-                .select('*, projects:project_id(project_name), partners!job_orders_contractor_id_fkey(name), boq_budget:boq_budget_id(work_item, budget_code, Property)')
-                .order('created_at', { ascending: false });
-            
-            if (error) {
-                console.error("Error fetching job orders:", error);
-                throw error;
-            }
+            const data = await fetchAllSupabaseData(supabase, 'job_orders', `
+                *, 
+                projects:project_id(project_name, Property), 
+                partners!job_orders_contractor_id_fkey(name), 
+                boq_budget:boq_budget_id(work_item, budget_code, Property),
+                contractor_assignments(
+                    assigned_qty,
+                    unit_price,
+                    sub_claims ( id, total_amount, net_amount, paid_amount, materials_deduction, other_deductions, advance_payment, retention_amount )
+                )
+            `, 'created_at', false);
             return data || [];
         }
     });
 
-    // 2. جلب الأداء المالي
+    // 2. جلب الأداء المالي (بأمان لمنع الكراش)
     const { data: joPerformance = [], isLoading: isPerfLoading } = useQuery({
         queryKey: ['job_order_performance'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('job_order_performance')
-                .select('*');
-            
-            if (error) {
-                console.error("Error fetching performance:", error);
-                throw error;
-            }
-            return data || [];
+            return await fetchAllSupabaseData(supabase, 'job_order_performance', '*') || [];
         }
     });
 
     const { data: projects = [], isLoading: isProjLoading } = useQuery({
         queryKey: ['projects'],
         queryFn: async () => {
-            const { data, error } = await supabase.from('projects').select('id, project_name');
-            if (error) throw error;
-            return data || [];
+            return await fetchAllSupabaseData(supabase, 'projects', 'id, project_name, Property') || [];
         }
     });
 
@@ -72,9 +64,63 @@ export function useJobOrdersLogic() {
     
     const mergedJobOrders = useMemo(() => {
         if (!baseJobOrders.length) return [];
+        
         return baseJobOrders.map(jo => {
             const perf = joPerformance.find((p: any) => p.job_order_id === jo.id) || {};
-            return { ...jo, ...perf }; 
+            const effectiveCost = Number(perf.effective_cost || 0); // التكلفة المسحوبة (خامات، مصروفات، عمالة)
+            
+            let subPaidTotal = 0;
+            
+            // 🚀 التطابق التام مع طريقة السجل (JobOrderLedgerModal)
+            if (jo.executor_type === 'مقاول باطن') {
+                
+                // 1. حساب إجمالي الأعمال المقدرة من الإسنادات
+                let joGross = 0;
+                if (jo.contractor_assignments && jo.contractor_assignments.length > 0) {
+                    jo.contractor_assignments.forEach((a: any) => {
+                        joGross += Number(a.assigned_qty || 0) * Number(a.unit_price || 0);
+                    });
+                } else {
+                    joGross = Number(jo.assigned_qty || 0) * Number(jo.unit_price || 0);
+                }
+
+                // 2. فلترة ومعالجة المستخلصات واستخراج نصيب الفيلا من السداد
+                if (jo.contractor_assignments && jo.contractor_assignments.length > 0) {
+                    const uniqueClaims = new Map();
+                    jo.contractor_assignments.forEach((ca: any) => {
+                        const claimsArray = Array.isArray(ca.sub_claims) ? ca.sub_claims : [ca.sub_claims];
+                        claimsArray.forEach((claim: any) => {
+                            if (claim && !uniqueClaims.has(claim.id)) {
+                                uniqueClaims.set(claim.id, claim);
+                            }
+                        });
+                    });
+
+                    uniqueClaims.forEach((claim: any) => {
+                        const claimTotalGross = Number(claim.total_amount || 0);
+                        
+                        let ratio = 0;
+                        // المعادلة الدقيقة: قيمة أمر التشغيل / إجمالي المستخلص المجمع
+                        if (claimTotalGross > 0 && joGross > 0) {
+                            ratio = joGross / claimTotalGross; 
+                        }
+                        
+                        // تأمين النسبة (لا تتعدى 100% ولا تقل عن صفر)
+                        if (ratio > 1) ratio = 1;
+                        if (ratio < 0) ratio = 0;
+
+                        // تجميع المسدد للمقاول بناءً على نصيب الفيلا من السداد
+                        subPaidTotal += Number(claim.paid_amount || 0) * ratio; 
+                    });
+                }
+            }
+
+            return { 
+                ...jo, 
+                ...perf,
+                subcontractor_paid: subPaidTotal, // المبالغ النقدية للمقاول بعد التوزيع الدقيق للفيلا
+                final_effective_cost: effectiveCost + subPaidTotal // إجمالي المنصرف الحقيقي
+            }; 
         });
     }, [baseJobOrders, joPerformance]);
 
@@ -84,7 +130,7 @@ export function useJobOrdersLogic() {
             const searchLower = String(deferredSearch || '').toLowerCase();
             
             const orderNum = String(jo.order_number || '').toLowerCase();
-            const projName = String(jo.projects?.project_name || '').toLowerCase();
+            const projName = String(jo.projects?.project_name || jo.projects?.Property || '').toLowerCase();
             const partnerName = String(jo.partners?.name || '').toLowerCase();
             const propName = String(jo.boq_budget?.Property || '').toLowerCase();
             const combName = String(jo.job_order_name || '').toLowerCase();

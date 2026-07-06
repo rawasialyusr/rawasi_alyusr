@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import SecureAction from '@/components/SecureAction';
+import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom'; // 🚀 استدعاء الـ Portal لحل مشكلة التمركز
 import { usePartnersLogic } from './partners_logic';
 import SmartCombo from '@/components/SmartCombo';
@@ -18,6 +20,7 @@ const THEME = {
 };
 
 export default function PartnersDirectory() {
+  const router = useRouter();
   const {
     isLoading, searchTerm, setSearchTerm, filterType, setFilterType,
     isAddModalOpen, setIsAddModalOpen, openAddModal, newPartner, setNewPartner,
@@ -206,7 +209,7 @@ export default function PartnersDirectory() {
                   <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={() => toggleSelectRow(p.id)} style={{ transform: 'scale(1.2)', cursor: 'pointer' }} />
                   <div className="data-text" style={{ color: THEME.goldAccent }}>{p.code}</div>
                   <div>
-                    <div className="data-text">{p.name}</div>
+                    <div className="data-text" style={{ cursor: 'pointer', color: THEME.primary, textDecoration: 'underline' }} onClick={() => router.push(`/performance?partner_id=${p.id}`)}>{p.name}</div>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>{p.role}</div>
                   </div>
                   <div><span className="category-badge" style={{ backgroundColor: badge.bg, color: badge.color }}>{p.type}</span></div>

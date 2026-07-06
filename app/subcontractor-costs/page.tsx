@@ -5,6 +5,7 @@ import RawasiSmartTable from '@/components/rawasismarttable';
 import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import { useSubcontractorCostsLogic } from './subcontractor_costs_logic';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function SubcontractorCostsPage() {
   const logic = useSubcontractorCostsLogic();
@@ -35,10 +36,10 @@ export default function SubcontractorCostsPage() {
 
   return (
     <div className="clean-page">
-      <MasterPage title="تحليل تكاليف الفلل والبنود" subtitle="حساب صافي تكلفة المقاولين بعد خصم الخامات المسحوبة لكل فيلا وبند">
+      <MasterPage icon="💵" title="تحليل تكاليف الفلل والبنود" subtitle="حساب صافي تكلفة المقاولين بعد خصم الخامات المسحوبة لكل فيلا وبند">
         
         {logic.isLoading ? (
-           <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: THEME.goldAccent }}>⏳ جاري حساب الأعمال وخصومات الخامات...</div>
+           <LoadingScreen message="جاري حساب الأعمال وخصومات الخامات..." fullScreen={false} />
         ) : (
           <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
             

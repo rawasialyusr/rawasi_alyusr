@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 export function useSubClaimsLogic() {
     const { showToast } = useToast();
@@ -31,21 +32,23 @@ export function useSubClaimsLogic() {
     const [printAssignments, setPrintAssignments] = useState<any[]>([]); 
     const [printDeductions, setPrintDeductions] = useState<any[]>([]);
 
-    // 🚀 1. جلب أوامر التشغيل المتاحة للمشروع (بدلاً من البنود الخام)
     const [projectJobOrders, setProjectJobOrders] = useState<any[]>([]);
+    
+    // 🚀 1. سحب اسم البند (work_item)
     const fetchProjectJobOrders = async (projectId: string) => {
         if (!projectId) { setProjectJobOrders([]); return; }
         const { data } = await supabase.from('job_orders')
-            .select('*, boq_budget(unit)')
+            .select('*, boq_budget(unit, work_item)') 
             .eq('project_id', projectId)
-            .is('contractor_id', null); // نجيب اللي لسه متأسندوش
+            .is('contractor_id', null); 
         setProjectJobOrders(data || []);
     };
 
     const { data: contractors = [], isLoading } = useQuery({
         queryKey: ['sub_contractors_list'],
         queryFn: async () => {
-            const { data } = await supabase.from('partners').select('*').eq('partner_type', 'مقاول');
+            const buildQuery = () => supabase.from('partners').select('*').eq('partner_type', 'مقاول');
+            const data = await fetchPaginatedData(buildQuery, 'id');
             return data || [];
         }
     });
@@ -57,19 +60,30 @@ export function useSubClaimsLogic() {
         );
     }, [contractors, searchTerm]);
 
-    // 🚀 2. جلب الأعمال من الفيو المجمع اللي بيحسب الخصومات أوتوماتيك
     const { data: assignments = [], isLoading: isAssignLoading } = useQuery({
         queryKey: ['contractor_tasks', selectedContractor?.id],
         enabled: !!selectedContractor,
         queryFn: async () => {
-            const { data, error } = await supabase.from('subcontractor_claim_engine_view')
+            const buildQuery = () => supabase.from('subcontractor_claim_engine_view')
                 .select('*, projects:project_id(Property)')
-                .eq('contractor_id', selectedContractor.id)
-                .is('claim_id', null)
-                .eq('assignment_status', 'جاري التنفيذ'); 
+                .eq('contractor_id', selectedContractor.id);
+                
+            const data = await fetchPaginatedData(buildQuery, 'id');
             
-            if (error) throw new Error(error.message);
-            return data || [];
+            return (data || []).map((item: any) => ({
+                ...item,
+                // 🚀 تحديد الحالة بذكاء بناءً على وجود رقم مستخلص من عدمه
+                assignment_status: item.claim_id ? 'مفوتر' : 'جاري التنفيذ', 
+                total_materials: Number(item.materials_deduction || 0),
+                total_expenses: Number(item.expenses_deduction || 0),
+                executed_qty: Number(item.executed_qty || 0),
+                assigned_qty: Number(item.assigned_qty || 0),
+                unit_price: Number(item.contract_unit_price || 0),
+                gross_total_amount: Number(item.gross_total_amount || 0),
+                materials_deduction: Number(item.materials_deduction || 0),
+                expenses_deduction: Number(item.expenses_deduction || 0),
+                net_before_financial_deductions: Number(item.net_before_financial_deductions || 0)
+            }));
         }
     });
 
@@ -77,11 +91,12 @@ export function useSubClaimsLogic() {
         queryKey: ['contractor_claims_history', selectedContractor?.id],
         enabled: !!selectedContractor,
         queryFn: async () => {
-            const { data, error } = await supabase.from('sub_claims')
+            const buildQuery = () => supabase.from('sub_claims')
                 .select('*, projects(Property)')
                 .eq('contractor_id', selectedContractor.id)
                 .order('created_at', { ascending: false });
-            if (error) throw error; 
+            
+            const data = await fetchPaginatedData(buildQuery, 'id');
 
             return (data || []).map((claim: any) => {
                 const net = Number(claim.net_amount || 0);
@@ -99,19 +114,20 @@ export function useSubClaimsLogic() {
         }
     });
 
-    // 🚀 3. تجهيز بيانات المستخلص من الفيو مباشرة 
     const handleOpenClaimModal = () => {
-        if (!selectedAssignments || selectedAssignments.length === 0) {
-            showToast("⚠️ يرجى تحديد أمر تشغيل واحد على الأقل.", "error");
+        // 🚀 تصفية ذكية: منع عمل مستخلص لمهام مفوترة بالفعل
+        const selectedObjects = (assignments || []).filter((a: any) => 
+            (selectedAssignments.includes(a.assignment_id) || selectedAssignments.includes(a.id)) && !a.claim_id
+        );
+
+        if (selectedObjects.length === 0) {
+            showToast("⚠️ يرجى تحديد أعمال (جاري التنفيذ) ولم تصدر لها مستخلصات بعد.", "error");
             return;
         }
 
-        // هنا بنطابق بالـ assignment_id لأننا بنقرأ من الفيو
-        const selectedObjects = (assignments || []).filter((a: any) => selectedAssignments.includes(a.assignment_id));
-        const projectIds = Array.from(new Set(selectedObjects.map((a: any) => a.project_id)));
-        const jobOrderIds = selectedObjects.map((a: any) => a.job_order_id);
+        const projectIds = Array.from(new Set(selectedObjects.map((a: any) => a.project_id).filter(Boolean)));
+        const jobOrderIds = selectedObjects.map((a: any) => a.job_order_id).filter(Boolean);
         
-        // تجميع القيم الجاهزة من الفيو
         const totalGross = selectedObjects.reduce((sum, a) => sum + Number(a.gross_total_amount || 0), 0);
         const totalMatDed = selectedObjects.reduce((sum, a) => sum + Number(a.materials_deduction || 0), 0);
         const totalExpDed = selectedObjects.reduce((sum, a) => sum + Number(a.expenses_deduction || 0), 0);
@@ -122,7 +138,7 @@ export function useSubClaimsLogic() {
             tax_percent: 15,
             payment_period_days: 14,
             project_ids: projectIds, 
-            job_order_ids: jobOrderIds, // 👈 مهم لربط الخصومات بالمستخلص لاحقاً
+            job_order_ids: jobOrderIds, 
             
             total_amount: totalGross,
             materials_deduction: totalMatDed,
@@ -135,18 +151,18 @@ export function useSubClaimsLogic() {
         setIsClaimModalOpen(true);
     };
 
-    // 🚀 4. حفظ المستخلص وربط الخصومات أوتوماتيك
     const saveClaimMutation = useMutation({
         mutationFn: async (claimData: any) => {
             if (!claimData.project_ids || claimData.project_ids.length === 0) {
                 throw new Error("يرجى تحديد العقار / المشروع أولاً.");
             }
 
-            // أ. إنشاء المستخلص
             const { data: claim, error } = await supabase.from('sub_claims').insert([{
                 claim_number: `CLM-${Date.now().toString().slice(-6)}`,
                 contractor_id: selectedContractor.id,
-                project_id: claimData.project_ids[0], 
+                project_id: claimData.project_ids[0],             
+                project_ids: claimData.project_ids,               
+                project_names_text: claimData.project_names_text, 
                 date: claimData.date,
                 payment_period_days: claimData.payment_period_days || 14,
                 total_amount: claimData.total_amount, 
@@ -162,31 +178,25 @@ export function useSubClaimsLogic() {
 
             if (error) throw new Error(error.message);
 
-            // ب. تحديث حالة الإسنادات
-            const assignmentIds = claimData.assignments_data?.map((a:any) => a.assignment_id) || [];
+            const assignmentIds = claimData.assignments_data?.map((a:any) => a.assignment_id || a.id) || [];
             if (assignmentIds.length > 0) {
                 await supabase.from('contractor_assignments')
                     .update({ status: 'مفوتر', claim_id: claim.id })
                     .in('id', assignmentIds);
             }
 
-            // ج. ربط الخامات المخصومة بهذا المستخلص عشان متتخصمش تاني
-            if (claimData.job_order_ids?.length > 0) {
+            if (claimData.material_ids && claimData.material_ids.length > 0) {
                 await supabase.from('material_issue_lines')
                     .update({ claim_id: claim.id })
-                    .in('job_order_id', claimData.job_order_ids)
-                    .eq('is_deducted_from_contractor', true)
-                    .is('claim_id', null);
-
-                // د. ربط النثريات المخصومة
-                await supabase.from('expenses')
-                    .update({ claim_id: claim.id })
-                    .in('job_order_id', claimData.job_order_ids)
-                    .eq('is_deducted_from_contractor', true)
-                    .is('claim_id', null);
+                    .in('id', claimData.material_ids);
             }
 
-            // هـ. استدعاء دالة الترحيل المحاسبي
+            if (claimData.expense_ids && claimData.expense_ids.length > 0) {
+                await supabase.from('expenses')
+                    .update({ claim_id: claim.id, is_deducted_in_claim: true })
+                    .in('id', claimData.expense_ids);
+            }
+
             const { error: rpcError } = await supabase.rpc('post_sub_claim', { p_id: claim.id });
             if (rpcError) throw new Error(rpcError.message);
 
@@ -205,7 +215,6 @@ export function useSubClaimsLogic() {
         }
     });
 
-    // 🚀 5. الإسناد وتحديث أمر التشغيل
     const assignWorkMutation = useMutation({
         mutationFn: async (record: any) => {
             const payload = {
@@ -218,7 +227,6 @@ export function useSubClaimsLogic() {
                 status: 'جاري التنفيذ'
             };
 
-            // تحديث أمر التشغيل بالمقاول
             await supabase.from('job_orders')
                 .update({ executor_type: 'مقاول باطن', contractor_id: selectedContractor?.id })
                 .eq('id', record.job_order_id);
@@ -239,17 +247,13 @@ export function useSubClaimsLogic() {
         }
     });
 
-    // 🚀 6. فك الإسناد وإرجاع أمر التشغيل
     const deleteAssignmentMutation = useMutation({
         mutationFn: async (id: string) => {
-            // جلب الـ job_order_id قبل المسح
             const { data: assignment } = await supabase.from('contractor_assignments').select('job_order_id').eq('id', id).single();
             
-            // مسح التكليف من عند المقاول
             const { error } = await supabase.from('contractor_assignments').delete().eq('id', id);
             if (error) throw new Error(error.message);
 
-            // إرجاع أمر التشغيل لـ "تنفيذ ذاتي"
             if(assignment?.job_order_id) {
                  await supabase.from('job_orders')
                     .update({ executor_type: 'تنفيذ ذاتي', contractor_id: null })
@@ -264,17 +268,16 @@ export function useSubClaimsLogic() {
 
     const handleEditAssignment = (assignmentRow: any) => {
         setAssignRecord({
-            id: assignmentRow.assignment_id,
+            id: assignmentRow.assignment_id || assignmentRow.id,
             project_id: assignmentRow.project_id,
             job_order_id: assignmentRow.job_order_id,
             boq_budget_id: assignmentRow.boq_budget_id,
-            assigned_qty: assignmentRow.executed_qty,
-            unit_price: assignmentRow.contract_unit_price
+            assigned_qty: assignmentRow.executed_qty || assignmentRow.assigned_qty,
+            unit_price: assignmentRow.contract_unit_price || assignmentRow.unit_price
         });
         setIsAssignModalOpen(true);
     };
 
-    // --- (باقي الدوال كما هي الخاصة بفك الترحيل والصرف) ---
     const actionMutation = useMutation({
         mutationFn: async ({ action, id, claimNumber }: { action: string, id: string, claimNumber?: string }) => {
             let rpcName = '';
@@ -282,17 +285,37 @@ export function useSubClaimsLogic() {
             if (action === 'unpost') rpcName = 'rpc_unpost_claim';
             if (action === 'delete') rpcName = 'rpc_delete_claim';
 
-            if (action === 'unpost') {
-                const { error: updateError } = await supabase.from('sub_claims')
-                    .update({ paid_amount: 0, status: 'مسودة', is_posted: false })
-                    .eq('id', id);
-                if (updateError) throw new Error(updateError.message);
+            if (action === 'unpost' || action === 'delete') {
+                if (action === 'unpost') {
+                    const { error: updateError } = await supabase.from('sub_claims')
+                        .update({ paid_amount: 0, status: 'مسودة', is_posted: false })
+                        .eq('id', id);
+                    if (updateError) throw new Error(updateError.message);
+                }
 
                 if (claimNumber) {
-                    await supabase.from('payment_vouchers')
-                        .delete()
+                    const { data: vouchers } = await supabase.from('payment_vouchers')
+                        .select('id')
                         .ilike('description', `%${claimNumber}%`);
+                        
+                    if (vouchers && vouchers.length > 0) {
+                        const vIds = vouchers.map(v => v.id);
+                        await supabase.rpc('unpost_payment_vouchers_bulk', { p_ids: vIds });
+                        await supabase.from('payment_vouchers').delete().in('id', vIds);
+                    }
                 }
+
+                await supabase.from('contractor_assignments')
+                    .update({ status: 'جاري التنفيذ', claim_id: null })
+                    .eq('claim_id', id);
+
+                await supabase.from('material_issue_lines')
+                    .update({ claim_id: null })
+                    .eq('claim_id', id);
+
+                await supabase.from('expenses')
+                    .update({ claim_id: null, is_deducted_in_claim: false })
+                    .eq('claim_id', id);
             }
 
             const { error } = await supabase.rpc(rpcName, { p_id: id });
@@ -301,10 +324,15 @@ export function useSubClaimsLogic() {
         onSuccess: (_, variables) => {
             let msg = "تم الترحيل بنجاح 🚀";
             if (variables.action === 'unpost') msg = "تم فك الترحيل ومسح سندات الصرف بنجاح 🔓";
-            if (variables.action === 'delete') msg = "تم حذف المستخلص نهائياً 🗑️";
+            if (variables.action === 'delete') msg = "تم حذف المستخلص وارجاع الأعمال بنجاح 🗑️";
             showToast(msg, "success");
+            
             queryClient.invalidateQueries({ queryKey: ['contractor_claims_history'] });
-            if (variables.action === 'delete') queryClient.invalidateQueries({ queryKey: ['contractor_tasks'] });
+            queryClient.invalidateQueries({ queryKey: ['contractor_tasks', selectedContractor?.id] });
+            
+            if (variables.action === 'delete' || variables.action === 'unpost') {
+                setActiveTab('assignments'); 
+            }
         },
         onError: (err: any) => {
             showToast(`فشلت العملية: ${err.message}`, "error");
@@ -345,6 +373,8 @@ export function useSubClaimsLogic() {
         const remainingAmount = Number(claimRow.net_amount || 0) - Number(claimRow.paid_amount || 0);
         setPartnerBalance(remainingAmount > 0 ? remainingAmount : 0); 
         
+        const allProjectIds = claimRow.project_ids || (claimRow.project_id ? [claimRow.project_id] : []);
+
         setPaymentRecord({
             date: new Date().toISOString().split('T')[0],
             amount: remainingAmount > 0 ? remainingAmount : 0,
@@ -354,7 +384,10 @@ export function useSubClaimsLogic() {
             debit_account_name: 'التزام مقاولي الباطن',
             credit_account_id: '21b8a1db-bc9f-4cf8-b741-1efeded0963c', 
             credit_account_name: 'الخزينة الرئيسية',
-            site_ref: claimRow.projects?.Property || 'مجمع مشاريع',
+            
+            project_ids: allProjectIds,
+            
+            site_ref: claimRow.project_names_text || claimRow.projects?.Property || 'مجمع مشاريع',
             description: `سداد قيمة مستخلص مقاول باطن رقم ${claimRow.claim_number} - ${selectedContractor?.name}`,
             payment_method: 'نقدي',
             linked_claim_id: claimRow.id 
@@ -372,16 +405,26 @@ export function useSubClaimsLogic() {
                 amount: record.amount,
                 partner_id: record.payee_id, 
                 payment_method: record.payment_method,
+                project_ids: record.project_ids,
                 site_ref: record.site_ref,
                 description: record.description,
                 status: 'مسودة',
                 debit_account_id: record.debit_account_id,
                 credit_account_id: record.credit_account_id,
-                notes: `حساب المدين: ${record.debit_account_name} | حساب الدائن: ${record.credit_account_name}`
+                notes: `حساب المدين: ${record.debit_account_name} | حساب الدائن: ${record.credit_account_name}`,
+                sub_claim_id: record.linked_claim_id 
             };
 
-            const { error: voucherError } = await supabase.from('payment_vouchers').insert([voucherPayload]);
+            const { data: voucher, error: voucherError } = await supabase
+                .from('payment_vouchers')
+                .insert([voucherPayload])
+                .select('id')
+                .single();
+
             if (voucherError) throw new Error(voucherError.message);
+
+            const { error: postError } = await supabase.rpc('post_payment_vouchers_bulk', { p_ids: [voucher.id] });
+            if (postError) throw new Error(`تم الحفظ ولكن فشل الترحيل المحاسبي: ${postError.message}`);
 
             if (record.linked_claim_id) {
                 const { data: currentClaim, error: fetchError } = await supabase
@@ -406,7 +449,7 @@ export function useSubClaimsLogic() {
             }
         },
         onSuccess: () => {
-            showToast("تم إنشاء السند وتحديث المبلغ المدفوع للمستخلص ✅", "success");
+            showToast("تم إنشاء السند وترحيله بنجاح ✅", "success");
             setIsPaymentModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['contractor_claims_history'] });
         },
@@ -439,7 +482,7 @@ export function useSubClaimsLogic() {
         handleEditAssignment, 
         deleteAssignment: (id: string) => deleteAssignmentMutation.mutate(id),
         
-        projectJobOrders, fetchProjectJobOrders, // 👈 دي اللي اتغيرت عشان نقرأ أوامر التشغيل
+        projectJobOrders, fetchProjectJobOrders,
 
         isPaymentModalOpen, setIsPaymentModalOpen,
         paymentRecord, setPaymentRecord,

@@ -94,7 +94,7 @@ export function useLaborLogsLogic() {
                                   (log.notes || '').toLowerCase().includes(search);
             
             const matchesStatus = filterStatus === 'الكل' || 
-                                  (filterStatus === 'مرحل' && log.is_posted === true) || 
+                                  (filterStatus === 'معتمد' && log.is_posted === true) || 
                                   (filterStatus === 'معلق' && (log.is_posted === false || log.is_posted === null));
             
             const logDate = new Date(log.work_date);
@@ -150,6 +150,7 @@ export function useLaborLogsLogic() {
 
     const handleSaveLog = () => {
         if (!currentLog.worker_name) return showToast('يجب إدخال اسم العامل!', 'error');
+        if (!currentLog.job_order_id && currentLog.project_id) return showToast('يرجى تحديد أمر الشغل للموقع لربطه بالميزانية بشكل صحيح ⚠️', 'error');
 
         let finalPercentage = currentLog.completion_percentage;
         const t = parseFloat(currentLog.tareeha);
@@ -159,11 +160,12 @@ export function useLaborLogsLogic() {
             finalPercentage = Math.round((p / t) * 100);
         }
 
-        // 🛡️ تأمين البيانات وإزالة boq_budget_id
+        // 🛡️ تأمين البيانات
         const payload = {
             work_date: currentLog.work_date, 
             worker_name: currentLog.worker_name, 
             site_ref: currentLog.site_ref || null,
+            job_order_id: currentLog.job_order_id || null,
             work_item: currentLog.work_item || null, 
             unit: currentLog.unit || null,                                   
             skill_level: currentLog.skill_level || null,                     
@@ -264,7 +266,7 @@ export function useLaborLogsLogic() {
                 'الصافي الفعلي': Math.max(0, totalWage),
                 'الحضور': log.attendance_value === 1 ? 'يوم كامل' : log.attendance_value === 0.5 ? 'نصف يوم' : 'غياب',
                 'ملاحظات': log.notes || '-',
-                'الحالة': log.is_posted ? 'مرحل' : 'معلق'
+                'الحالة': log.is_posted ? 'معتمد' : 'معلق'
             }
         }));
         const wb = XLSX.utils.book_new();

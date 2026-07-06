@@ -5,6 +5,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function ProjectLaborCostsPage() {
     const logic = useLaborCostsLogic();
@@ -14,7 +15,7 @@ export default function ProjectLaborCostsPage() {
     const totalPages = Math.ceil(logic.groupedProjects.length / logic.rowsPerPage);
 
     return (
-        <MasterPage title="رادار تكاليف العمالة الميدانية" subtitle="تحليل وتجميع كشوف يوميات العمالة الفعلية مجمعة لكل فيلا ومشروع">
+        <MasterPage icon="💰" title="رادار تكاليف العمالة الميدانية" subtitle="تحليل وتجميع كشوف يوميات العمالة الفعلية مجمعة لكل فيلا ومشروع">
             
             <RawasiSidebarManager 
                 summary={
@@ -139,7 +140,7 @@ export default function ProjectLaborCostsPage() {
             `}</style>
 
             {logic.isLoading ? (
-                <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: '#94a3b8' }}>⏳ جاري تجميع كشوف الميدان وحساب التكاليف...</div>
+                <LoadingScreen message="جاري تجميع كشوف الميدان وحساب التكاليف..." fullScreen={false} />
             ) : (
                 <div className="labor-scroller cinematic-scroll">
                     <table>

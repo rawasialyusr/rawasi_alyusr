@@ -58,7 +58,10 @@ export function useCashFlowsLogic() {
             });
             
             return Array.from(uniqueDataMap.values());
-        }
+        },
+        // ⚡ تحسينات الأداء والـ Caching:
+        staleTime: 1000 * 60 * 5, // الاحتفاظ بالبيانات لمدة 5 دقائق بدون إعادة سحب من السيرفر
+        refetchOnWindowFocus: false, // منع سحب البيانات تلقائياً عند التنقل بين نوافذ المتصفح
     });
 
     return {

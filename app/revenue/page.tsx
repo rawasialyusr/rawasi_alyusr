@@ -45,7 +45,7 @@ export default function RevenuePage() {
     ];
 
     return (
-        <MasterPage title="سجل الإيرادات الصافية" subtitle="تحليل التدفقات النقدية المحققة والاستقطاعات الفنية">
+        <MasterPage icon="📈" title="سجل الإيرادات الصافية" subtitle="تحليل التدفقات النقدية المحققة والاستقطاعات الفنية">
             
             <RawasiSidebarManager 
                 summary={

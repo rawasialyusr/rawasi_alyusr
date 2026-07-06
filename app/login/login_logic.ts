@@ -22,8 +22,7 @@ export function useLoginLogic() {
       if (session) {
         // 👈 توجيه ذكي: يقرأ من الرابط، أو من الذاكرة، أو يروح للداشبورد كافتراضي
         const redirectParam = searchParams?.get('redirect');
-        const lastRoute = localStorage.getItem('last_visited_route');
-        router.replace(redirectParam || lastRoute || '/Dashboard'); 
+        router.replace(redirectParam || '/'); 
       }
     };
     checkExistingSession();
@@ -91,8 +90,7 @@ export function useLoginLogic() {
         // 👈 توجيه ذكي بعد الدخول بنجاح
         setTimeout(() => {
           const redirectParam = searchParams?.get('redirect');
-          const lastRoute = localStorage.getItem('last_visited_route');
-          router.replace(redirectParam || lastRoute || '/Dashboard'); 
+        router.replace(redirectParam || '/'); 
         }, 500);
       }
     } catch (error: any) {

@@ -3,6 +3,7 @@ import { useState, useMemo, useDeferredValue } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 export function useViolationsLogic() {
     const queryClient = useQueryClient();
@@ -28,7 +29,7 @@ export function useViolationsLogic() {
     const { data: violations = [], isLoading: isFetching } = useQuery({
         queryKey: ['violations'], 
         queryFn: async () => {
-            const { data, error } = await supabase
+            const buildQuery = () => supabase
                 .from('violations') 
                 .select(`
                     *,
@@ -38,15 +39,14 @@ export function useViolationsLogic() {
                     credit_acc:accounts!violations_credit_account_id_fkey(name)
                 `)
                 .order('created_at', { ascending: false });
-            if (error) throw error;
-            return data || [];
+            return await fetchPaginatedData(buildQuery, 'id');
         }
     });
 
     const { displayedViolations, totalSum, totalCount } = useMemo(() => {
         let result = violations;
         if (filterStatus !== 'الكل') {
-            result = result.filter(v => v.is_posted === (filterStatus === 'مرحل'));
+            result = result.filter(v => v.is_posted === (filterStatus === 'معتمد'));
         }
         if (deferredSearch) {
             const lower = deferredSearch.toLowerCase().trim();

@@ -5,6 +5,7 @@ import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import LoadingScreen from '@/components/LoadingScreen';
 
 // 🏗️ مكون داخلي لكارت المشروع (Accordion)
 const ProjectGroupCard = ({ group }: { group: any }) => {
@@ -55,10 +56,10 @@ const ProjectGroupCard = ({ group }: { group: any }) => {
                             {group.items.map((item: any, idx: number) => (
                                 <tr key={item.id || idx}>
                                     <td style={{width:'80px'}}><span className="badge-month">{item["شهر التحميل المالي"]}</span></td>
-                                    <td style={{width:'120px'}}><span className="badge-category">{item["التصنيف"]}</span></td>
-                                    <td><span style={{fontSize:'11px', color:'#334155', fontWeight:700}}>{item["البيان والوصف"]}</span></td>
-                                    <td align="center"><span style={{color: '#94a3b8', textDecoration: 'line-through', fontSize:'11px'}}>{formatCurrency(item["قيمة الفاتورة الأصلية (جنيه)"])}</span></td>
-                                    <td align="center"><strong style={{color: '#b91c1c', fontSize:'12px'}}>{formatCurrency(item["نصيب المشروع (المبلغ المحمل)"])}</strong></td>
+                                    <td style={{width:'120px'}}><span className="badge-category">{item["التصنيف الرئيسي"]}</span></td>
+                                    <td><span style={{fontSize:'11px', color:'#334155', fontWeight:700}}>{item["البيان / الوصف"]}</span></td>
+                                    <td align="center"><span style={{color: '#94a3b8', textDecoration: 'line-through', fontSize:'11px'}}>{formatCurrency(item["قيمة الفاتورة الأصلية (ر.س)"])}</span></td>
+                                    <td align="center"><strong style={{color: '#b91c1c', fontSize:'12px'}}>{formatCurrency(item["المبلغ المحمل (ر.س)"])}</strong></td>
                                     <td align="center"><span className="badge-percentage">{item["نسبة التحميل (%)"]}%</span></td>
                                     <td><span className="badge-mechanism">{item["آلية التوزيع"]}</span></td>
                                 </tr>
@@ -140,7 +141,7 @@ export default function ProjectOverheadPage() {
             `}</style>
 
             {logic.isLoading ? (
-                <div style={{textAlign:'center', padding:'100px', color:'#94a3b8', fontWeight:900}}>⏳ جاري تحليل وهندسة التكاليف...</div>
+                <LoadingScreen message="جاري تحليل وهندسة التكاليف..." fullScreen={false} />
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     {logic.paginatedGroups.map((group: any) => (

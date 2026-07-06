@@ -1,6 +1,8 @@
 "use client";
 import React, { useState } from 'react';
+import SecureAction from '@/components/SecureAction';
 import { useEmployeesLogic } from './employees_logic';
+import LoadingScreen from '@/components/LoadingScreen';
 
 // 🟢 هوية رواسي اليسر البصرية (The Royal Theme)
 const THEME = {
@@ -46,10 +48,35 @@ const ModalField = ({ label, type = "text", value, onChange, hideLabel=false, ..
 
 export default function EmployeesMasterPage() {
   const logic = useEmployeesLogic();
+
+  // 🚀 اختصار الحفظ (Ctrl + Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (logic.isModalOpen && e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (!logic.isSaving) logic.handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [logic.isModalOpen, logic.isSaving]);
+
+  // 🚀 اختصار إضافة جديد (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      if (!logic.isModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        logic.handleAddNew();
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [logic.isModalOpen]);
+
   // 🟢 حل مشكلة السايد بار: أصبح يفتح ويغلق بالضغط فقط (ليس بالمرور)
   const [isSidebarPinned, setIsSidebarPinned] = useState(true);
 
-  if (logic.isLoading) return <div style={{padding:'100px', textAlign:'center', fontWeight:900, color: THEME.primary, fontSize: '20px'}}>⏳ جاري تحميل الموارد البشرية...</div>;
+  if (logic.isLoading) return <LoadingScreen message="جاري تحميل الموارد البشرية..." fullScreen={false} />;
 
   return (
     <div style={{ direction: 'rtl', minHeight: '100vh', background: THEME.sand, display: 'flex', fontFamily: 'Cairo, sans-serif' }}>
@@ -81,15 +108,21 @@ export default function EmployeesMasterPage() {
          <div style={{ padding: '25px 15px', width: '280px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                <h3 style={{ color: 'white', fontWeight: 900, margin: 0 }}>إدارة الكوادر</h3>
-               <button onClick={() => setIsSidebarPinned(false)} style={{ background: 'transparent', border: 'none', color: THEME.accent, cursor: 'pointer', fontSize: '20px' }}>✕</button>
+               <SecureAction module="employees" action="create">
+            <SecureAction module="employees" action="edit">
+            <SecureAction module="employees" action="delete">
+            <button onClick={() => setIsSidebarPinned(false)} style={{ background: 'transparent', border: 'none', color: THEME.accent, cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
             
             <button onClick={logic.handleAddNew} style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'white', color: THEME.primary, fontWeight: 900, border: 'none', cursor: 'pointer', marginBottom: '20px' }}>➕ إضافة كادر جديد</button>
+        </SecureAction>
             <input placeholder="🔍 بحث سريع..." value={logic.globalSearch} onChange={e => logic.setGlobalSearch(e.target.value)} style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', border: 'none', outline: 'none', marginBottom: '20px' }} />
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                <button onClick={logic.handleEditSelected} disabled={logic.selectedIds.length!==1} style={{ padding: '12px', borderRadius: '10px', background: THEME.accent, color: 'white', border: 'none', cursor: logic.selectedIds.length===1 ? 'pointer':'not-allowed', fontWeight: 900, opacity: logic.selectedIds.length===1 ? 1:0.4 }}>✏️ تعديل بيانات السجل</button>
+        </SecureAction>
                <button onClick={logic.handleDelete} disabled={logic.selectedIds.length===0} style={{ padding: '12px', borderRadius: '10px', background: THEME.ruby, color: 'white', border: 'none', cursor: logic.selectedIds.length>0 ? 'pointer':'not-allowed', fontWeight: 900, opacity: logic.selectedIds.length>0 ? 1:0.4 }}>🗑️ طي قيد / حذف</button>
+        </SecureAction>
                <button onClick={logic.exportToExcel} style={{ padding: '12px', borderRadius: '10px', background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900, marginTop: '20px' }}>📊 تصدير Excel</button>
                <button onClick={() => window.print()} style={{ padding: '12px', borderRadius: '10px', background: THEME.success, color: 'white', border: 'none', cursor: 'pointer', fontWeight: 900 }}>🖨️ طباعة تقرير HR</button>
             </div>
@@ -104,7 +137,7 @@ export default function EmployeesMasterPage() {
                 <button onClick={() => setIsSidebarPinned(true)} style={{ background: THEME.primary, color: THEME.accent, border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 900, fontSize: '18px' }}>☰</button>
             )}
             <div>
-              <h1 style={{ fontSize: '32px', fontWeight: 900, color: THEME.primary, margin: 0 }}>لوحة قيادة الموارد البشرية</h1>
+              
               <p style={{ color: '#64748b', fontWeight: 900, margin: 0 }}>نظام إدارة شؤون الموظفين والعمال المتقدم</p>
             </div>
           </div>

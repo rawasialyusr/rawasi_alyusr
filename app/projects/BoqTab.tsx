@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import SecureAction from '@/components/SecureAction';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
 import RawasiSmartTable from '@/components/rawasismarttable';
@@ -41,6 +42,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
     let totalContractValue = 0, totalEstimatedCosts = 0, subItemsCount = 0;
     let totalActualLabor = 0, totalActualMaterial = 0, totalDirectExpenses = 0, totalActualOperational = 0;
     let totalRetentionValue = 0, totalNetProfit = 0, totalBudgetVariance = 0;
+    let totalAllocatedExpensesABC = 0; // 🚀 متغير لتجميع مصاريف ABC
 
     flatBoqData.forEach((item: any) => {
       const hasChildren = flatBoqData.some((child: any) => child.parent_id === item.id);
@@ -59,6 +61,9 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
         totalRetentionValue += Number(item.actual_retention_amount || 0);
         totalNetProfit += Number(item.item_net_profit || 0);
         totalBudgetVariance += Number(item.total_budget_variance || 0);
+        
+        // 🚀 تجميع التكاليف الموزعة
+        totalAllocatedExpensesABC += Number(item.allocated_expenses || 0);
       }
     });
 
@@ -76,7 +81,8 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
     return { 
       totalContractValue, totalEstimatedCosts, subItemsCount, totalAssignedContracts, 
       totalRetentionValue, totalNetProfit, profitMargin, isLoss, totalBudgetVariance,
-      totalAllocatedOverhead, totalActualLabor, totalActualMaterial, totalDirectExpenses, totalActualOperational
+      totalAllocatedOverhead, totalActualLabor, totalActualMaterial, totalDirectExpenses, totalActualOperational,
+      totalAllocatedExpensesABC // 🚀 إرجاع الإجمالي الجديد
     };
   }, [flatBoqData, assignments, expenses]);
 
@@ -95,15 +101,6 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
         render: (row: any) => <span style={{ fontWeight: 900, color: THEME.coffeeDark, fontSize: '14px' }}>{formatCurrency(row.total_contract_amount)}</span>
     },
     { 
-        header: 'ضمان الأعمال', 
-        render: (row: any) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontWeight: 900, color: '#475569' }}>{formatCurrency(row.actual_retention_amount)}</span>
-            {Number(row.retention_percentage) > 0 && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>({row.retention_percentage}%)</span>}
-          </div>
-        )
-    },
-    { 
         header: 'الميزانية المقدرة', 
         render: (row: any) => {
             const budget = Number(row.estimated_labor_cost || 0) + Number(row.estimated_material_cost || 0) + Number(row.estimated_expenses_cost || 0) + Number(row.estimated_operational_cost || 0);
@@ -111,8 +108,17 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
         }
     },
     { 
-        header: 'مصروفات فعلية', 
+        header: 'مصروفات مباشرة', 
         render: (row: any) => <span style={{ fontWeight: 900, color: '#ea580c' }}>{formatCurrency(row.actual_expenses_cost)}</span>
+    },
+    // 🚀 العمود الجديد لعرض التوزيعات الذكية
+    { 
+        header: 'مصروفات موزعة (ABC)', 
+        render: (row: any) => (
+            <span style={{ fontWeight: 900, color: '#9333EA', backgroundColor: '#F3E8FF', padding: '4px 8px', borderRadius: '6px', fontSize: '13px' }}>
+                {formatCurrency(row.allocated_expenses || 0)}
+            </span>
+        )
     },
     { 
         header: 'خامات فعلية', 
@@ -153,19 +159,20 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
         } 
     },
     { 
-        header: 'عقود باطن', 
-        render: (row: any) => {
-            const itemAssignments = assignments.filter((a: any) => a.boq_budget_id === row.id);
-            const assignedTotal = itemAssignments.reduce((sum: number, a: any) => sum + Number(a.total_contract_amount || 0), 0);
-            return <span style={{ fontWeight: 900, color: assignedTotal > 0 ? '#6B21A8' : '#94a3b8', fontSize: '14px' }}>{formatCurrency(assignedTotal)}</span>;
-        } 
+        header: 'ضمان الأعمال', 
+        render: (row: any) => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontWeight: 900, color: '#475569' }}>{formatCurrency(row.actual_retention_amount)}</span>
+            {Number(row.retention_percentage) > 0 && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>({row.retention_percentage}%)</span>}
+          </div>
+        )
     },
     {
         header: 'الإجراءات',
         render: (row: any) => (
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                <button onClick={() => { logic.setCurrentBoqRecord(row); logic.setIsBoqModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }} title="تعديل البند">✏️</button>
-                <button onClick={() => { setDeleteAlert({ isOpen: true, type: 'boq', id: row.id, title: 'حذف بند مقايسة', message: `هل أنت متأكد من حذف البند "${row.work_item}"؟` }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.8 }} title="حذف البند">🗑️</button>
+                <SecureAction module="boqbudget" action="edit"><button onClick={() => { logic.setCurrentBoqRecord(row); logic.setIsBoqModalOpen(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }} title="تعديل البند">✏️</button></SecureAction>
+                <SecureAction module="boqbudget" action="delete"><button onClick={() => { setDeleteAlert({ isOpen: true, type: 'boq', id: row.id, title: 'حذف بند مقايسة', message: `هل أنت متأكد من حذف البند "${row.work_item}"؟` }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.8 }} title="حذف البند">🗑️</button></SecureAction>
             </div>
         )
     }
@@ -186,16 +193,10 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
             <strong style={{ fontSize: '20px', color: '#1e293b', fontWeight: 900 }}>{formatCurrency(boqStats.totalEstimatedCosts)}</strong>
           </div>
 
-          {/* 🔐 الكارت الجديد: إجمالي محجوز ضمان الأعمال */}
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid #64748b`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>🔐 محجوز ضمان الأعمال الكلي</span>
-            <strong style={{ fontSize: '20px', color: '#475569', fontWeight: 900 }}>{formatCurrency(boqStats.totalRetentionValue)}</strong>
-          </div>
-
-          {/* 🏢 كارت المصروفات المحملة غير المباشرة */}
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid #0284C7`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>🏢 المصروفات المحملة (إدارة وتتشغيل)</span>
-            <strong style={{ fontSize: '20px', color: '#0284C7', fontWeight: 900 }}>{formatCurrency(boqStats.totalAllocatedOverhead)}</strong>
+          {/* 🏢 الكارت الجديد اللي بيجمع المصروفات الموزعة (ABC) كلها للفيلا */}
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '15px 20px', borderRadius: '20px', borderBottom: `4px solid #9333EA`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>🏢 التكاليف الموزعة (ABC)</span>
+            <strong style={{ fontSize: '20px', color: '#9333EA', fontWeight: 900 }}>{formatCurrency(boqStats.totalAllocatedExpensesABC)}</strong>
           </div>
 
           {/* ⚖️ كارت مؤشر انحراف الميزانية الكلي */}
@@ -205,7 +206,7 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
             borderBottom: `4px solid ${boqStats.totalBudgetVariance < 0 ? THEME.danger : '#057857'}`, 
             boxShadow: '0 4px 15px rgba(0,0,0,0.02)' 
           }}>
-            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>⚖️ انحراف الميزانية الكلي (وفر/عجز)</span>
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>⚖️ انحراف الميزانية الكلي</span>
             <strong style={{ fontSize: '20px', color: boqStats.totalBudgetVariance < 0 ? THEME.danger : '#057857', fontWeight: 900 }}>
               {boqStats.totalBudgetVariance > 0 ? '+' : ''}{formatCurrency(boqStats.totalBudgetVariance)}
             </strong>
@@ -236,22 +237,40 @@ export default function BoqTab({ logic, setDeleteAlert }: { logic: any, setDelet
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '0 10px', flexWrap: 'wrap', gap: '15px' }}>
            <h3 style={{ margin: 0, color: THEME.coffeeDark, fontWeight: 900 }}>📋 مقارنة ومتابعة الميزانيات بالتكاليف الفعلية والانحرافات</h3>
            
-           {flatBoqData.length > 0 && (
-             <button 
-               onClick={() => setIsReportOpen(true)}
-               style={{
-                 backgroundColor: THEME.primary, color: 'white', padding: '10px 20px', borderRadius: '10px',
-                 border: 'none', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                 boxShadow: '0 4px 10px rgba(0,0,0,0.1)', transition: 'all 0.3s'
-               }}
-             >
-               <span>🖨️</span> عرض التقرير للطباعة
-             </button>
-           )}
+           <div style={{ display: 'flex', gap: '10px' }}>
+             <SecureAction module="boqbudget" action="create">
+               <button 
+                 onClick={() => {
+                   logic.setCurrentBoqRecord({ item_type: 'رئيسي', contract_quantity: 1, unit_contract_price: 0, estimated_labor_cost: 0, estimated_operational_cost: 0, start_date: '', end_date: '' });
+                   logic.setIsBoqModalOpen(true);
+                 }}
+                 style={{
+                   backgroundColor: '#eab308', color: 'white', padding: '10px 20px', borderRadius: '10px',
+                   border: 'none', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                   boxShadow: '0 4px 10px rgba(0,0,0,0.1)', transition: 'all 0.3s'
+                 }}
+               >
+                 <span>➕</span> إضافة بند موازنة
+               </button>
+             </SecureAction>
+
+             {flatBoqData.length > 0 && (
+               <button 
+                 onClick={() => setIsReportOpen(true)}
+                 style={{
+                   backgroundColor: THEME.primary, color: 'white', padding: '10px 20px', borderRadius: '10px',
+                   border: 'none', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                   boxShadow: '0 4px 10px rgba(0,0,0,0.1)', transition: 'all 0.3s'
+                 }}
+               >
+                 <span>🖨️</span> عرض التقرير للطباعة
+               </button>
+             )}
+           </div>
         </div>
 
         {flatBoqData.length === 0 ? (
-            <div style={{ textalign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 900 }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontWeight: 900 }}>
                 <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
                 لا توجد بنود مقايسة مضافة لهذا المشروع بعد.<br/>
             </div>

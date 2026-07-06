@@ -5,6 +5,7 @@ import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import { useCashFlowsLogic } from './cash_flows_logic';
 import * as XLSX from 'xlsx';
+import LoadingScreen from '@/components/LoadingScreen';
 
 // =========================================================================
 // 🧩 مكون ذكي للقائمة المنسدلة متعددة الاختيارات
@@ -137,17 +138,42 @@ export default function CashFlowsPage() {
         return 'inflow';
     };
 
+    // 🚀 الفلترة المحدثة (دقيقة التواريخ وتمنع التكرار نهائياً)
     const filteredData = useMemo(() => {
-        return logic.cashFlows.filter((row: any) => {
+        // 1. منع التكرار (Deduplication) - بيشيل أي ID مكرر قبل الفلترة
+        const uniqueItems = new Map();
+        logic.cashFlows.forEach((row: any) => {
+            if (row.id) uniqueItems.set(row.id, row);
+        });
+        const cleanData = Array.from(uniqueItems.values());
+
+        // 2. تطبيق الفلاتر
+        return cleanData.filter((row: any) => {
             const searchString = `${row.description || ''} ${row.reference_number || ''} ${row.project?.Property || ''} ${row.partner?.name || ''} ${row.sub_category || ''}`.toLowerCase();
             const matchesSearch = searchString.includes(logic.searchTerm.toLowerCase());
 
             const direction = getFlowDirection(row);
             const matchesType = logic.filterType === 'all' ? true : direction === logic.filterType;
 
-            const rowDateStr = row.transaction_date ? String(row.transaction_date).substring(0, 10) : '';
-            const matchesDateFrom = logic.dateFrom ? rowDateStr >= logic.dateFrom : true;
-            const matchesDateTo = logic.dateTo ? rowDateStr <= logic.dateTo : true;
+            // 3. مقارنة التواريخ كأرقام (Timestamp) لضمان دقة 100%
+            let matchesDateFrom = true;
+            let matchesDateTo = true;
+
+            if (row.transaction_date) {
+                const rowDate = new Date(row.transaction_date).setHours(0, 0, 0, 0); // توحيد وقت التاريخ
+                
+                if (logic.dateFrom) {
+                    const fromDate = new Date(logic.dateFrom).setHours(0, 0, 0, 0);
+                    matchesDateFrom = rowDate >= fromDate;
+                }
+                
+                if (logic.dateTo) {
+                    const toDate = new Date(logic.dateTo).setHours(23, 59, 59, 999);
+                    matchesDateTo = rowDate <= toDate;
+                }
+            } else if (logic.dateFrom || logic.dateTo) {
+                return false; 
+            }
 
             const projectName = row.project?.Property;
             const matchesProject = selectedProjects.length === 0 || (projectName && selectedProjects.includes(projectName));
@@ -159,12 +185,10 @@ export default function CashFlowsPage() {
         });
     }, [logic.cashFlows, logic.searchTerm, logic.filterType, logic.dateFrom, logic.dateTo, selectedProjects, selectedPartners]);
 
-    // 🚀 الإحصائيات المحدثة (شاملة تحليل المصادر)
+    // 🚀 الإحصائيات المحدثة (بتعتمد دلوقتي على filteredData النظيفة والمفلترة)
     const summaryStats = useMemo(() => {
         let totalIn = 0;
         let totalOut = 0;
-        
-        // تفريغ المصادر
         let receiptVouchersTotal = 0;
         let paymentVouchersTotal = 0;
         let otherInflowsTotal = 0;
@@ -409,7 +433,7 @@ export default function CashFlowsPage() {
 
                 {/* 🌳 جدول الشجرة التجميعي */}
                 {logic.isLoading ? (
-                    <div style={{ textAlign: 'center', padding: '5px', fontWeight: 900, color: '#64748b' }}>⏳ جاري تحميل شجرة التدفقات النقدية...</div>
+                    <LoadingScreen message="جاري تحميل شجرة التدفقات النقدية..." fullScreen={false} />
                 ) : (
                     <table className="tree-table">
                         <thead className="tree-thead">

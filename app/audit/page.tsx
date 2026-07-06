@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import MasterPage from '@/components/MasterPage';
 import { useAdvancedAuditLogic } from './audit_logic';
 import { THEME } from '@/lib/theme';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function AccountingAuditPage() {
     const logic = useAdvancedAuditLogic();
@@ -138,7 +139,7 @@ export default function AccountingAuditPage() {
 
             {/* 📋 الأقسام المفصلة (مقطعة إلى صفحات) */}
             {logic.isLoading ? (
-                <div style={{ padding: '50px', textAlign: 'center', fontWeight: 800, color: '#64748b', fontSize: '18px' }}>⏳ جاري الفحص الشامل للدفاتر...</div>
+                <LoadingScreen message="جاري الفحص الشامل للدفاتر..." fullScreen={false} />
             ) : logic.errors.length === 0 ? (
                 <div style={{ padding: '60px', textAlign: 'center', background: 'white', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
                     <div style={{ fontSize: '60px', marginBottom: '15px' }}>🎉</div>

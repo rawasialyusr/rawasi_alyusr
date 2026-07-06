@@ -2,6 +2,8 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
+import { fetchAllSupabaseData } from '@/lib/helpers';
+import { fetchPaginatedData } from '@/lib/supabase-pagination';
 
 export function useLedgerLogic() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
@@ -10,8 +12,7 @@ export function useLedgerLogic() {
   const { data: accounts = [] } = useQuery({
     queryKey: ['ledger_accounts_list'],
     queryFn: async () => {
-      const { data } = await supabase.from('accounts').select('id, name, code').order('code');
-      return data || [];
+      return await fetchAllSupabaseData(supabase, 'accounts', 'id, name, code', 'code') || [];
     }
   });
 
@@ -20,7 +21,7 @@ export function useLedgerLogic() {
     queryKey: ['ledger_entries', selectedAccountId],
     enabled: !!selectedAccountId,
     queryFn: async () => {
-      const { data } = await supabase
+      const buildQuery = () => supabase
         .from('journal_lines')
         .select(`
           id, debit, credit, item_name, notes,
@@ -29,8 +30,8 @@ export function useLedgerLogic() {
           partners (name)
         `)
         .eq('account_id', selectedAccountId)
-        .order('journal_headers(entry_date)', { ascending: true });
-      return data || [];
+        .order('id', { ascending: true }); // better for pagination stability
+      return await fetchPaginatedData(buildQuery, 'id');
     }
   });
 

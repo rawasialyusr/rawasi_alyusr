@@ -59,13 +59,14 @@ export default function PrintStatement() {
     const finalBalance = totalCredit - totalDebit;
     const finalBalInfo = getBalanceInfo(finalBalance);
 
-    if (isLoading) return <div style={{ textAlign: 'center', padding: '100px', fontSize: '20px', fontWeight: '900', color: '#64748b' }}>⏳ جاري تحضير كشف الحساب...</div>;
+    if (isLoading) return <LoadingScreen message="جاري تحضير كشف الحساب..." fullScreen={false} />;
     if (!partner) return <div style={{ textAlign: 'center', padding: '100px', color: '#dc2626' }}>❌ خطأ: لم يتم العثور على بيانات الحساب</div>;
 
     return (
         <div className="print-wrapper">
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+import LoadingScreen from '@/components/LoadingScreen';
                 
                 body { background: white !important; margin: 0; padding: 0; font-family: 'Tajawal', sans-serif; direction: rtl; }
                 .print-wrapper { max-width: 900px; margin: 0 auto; padding: 40px; color: #000; background: white; }

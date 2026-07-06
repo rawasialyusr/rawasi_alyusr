@@ -15,6 +15,7 @@ interface SmartComboProps {
     multi?: boolean;         // الاختيار المتعدد
     selectedValues?: any[];  // القيم المختارة مسبقاً (للمتعدد)
     initialDisplay?: string; // القيمة اللي هتظهر أول ما يفتح
+    displayFormat?: (item: any) => string; // 🚀 عرض مخصص للخيارات (مثال: دمج عمودين)
     customQuery?: (queryBuilder: any) => any; // فلترة متقدمة
     icon?: string;           // أيقونة للعنوان
     
@@ -48,7 +49,7 @@ export default function SmartCombo({
     label, table, options, onSelect, placeholder, 
     searchCols = 'name,code', displayCol = 'name', 
     multi = false, selectedValues = [], initialDisplay = '',
-    customQuery, icon,
+    displayFormat, customQuery, icon,
     strict = false, isTextArea = false, disabled = false, freeText = false,
     allowAddNew = false, requiredPermission, onAddNew, isSensitive = false, showRecent = false, 
     enableClear = false, showAvatar = false, isMobileBottomSheet = false,
@@ -219,7 +220,7 @@ export default function SmartCombo({
         if (!hasFieldAccess) return;
 
         const isPrimitive = typeof item !== 'object';
-        const displayName = isPrimitive ? item : (item[displayCol] || item.Property || item.project_name || item.item_name || item.name || item.description || 'بدون اسم');
+        const displayName = isPrimitive ? item : (displayFormat ? displayFormat(item) : (item[displayCol] || item.Property || item.project_name || item.item_name || item.name || item.description || 'بدون اسم'));
         
         saveToRecent(item); 
         
@@ -238,7 +239,7 @@ export default function SmartCombo({
         if (strict && search && !multi && !freeText && hasFieldAccess) {
             const match = results.find(item => {
                 const isPrimitive = typeof item !== 'object';
-                const lbl = isPrimitive ? item : (item[displayCol] || item.Property || item.name || item.description);
+                const lbl = isPrimitive ? item : (displayFormat ? displayFormat(item) : (item[displayCol] || item.Property || item.name || item.description));
                 return normalizeText(lbl) === normalizeText(search);
             });
             if (!match) {
@@ -292,7 +293,7 @@ export default function SmartCombo({
 
     const renderListItem = (item: any, index: number, isRecent = false) => {
         const isPrimitive = typeof item !== 'object';
-        const displayName = isPrimitive ? item : (item[displayCol] || item.Property || item.project_name || item.item_name || item.name || item.description || 'بدون اسم');
+        const displayName = isPrimitive ? item : (displayFormat ? displayFormat(item) : (item[displayCol] || item.Property || item.project_name || item.item_name || item.name || item.description || 'بدون اسم'));
         const displayCode = isPrimitive ? '' : (item.project_code || item.item_code || item.code); 
         const itemId = isPrimitive ? item : item.id;
         const isSelected = multi ? selectedValues.some((v: any) => (v.id || v) === itemId) : false;

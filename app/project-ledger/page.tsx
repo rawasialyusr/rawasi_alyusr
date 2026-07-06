@@ -5,6 +5,7 @@ import RawasiSmartTable from '@/components/rawasismarttable';
 import { formatCurrency } from '@/lib/helpers';
 import { THEME } from '@/lib/theme';
 import { useLedgerLogic } from './ledger_logic';
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function HierarchicalLedgerPage() {
   const logic = useLedgerLogic();
@@ -31,10 +32,10 @@ export default function HierarchicalLedgerPage() {
 
   return (
     <div className="clean-page">
-      <MasterPage title="الدفتر المالي للتكاليف" subtitle="تحليل هرمي للتكاليف من الإجمالي العام حتى أدق التفاصيل">
+      <MasterPage icon="🏛️" title="الدفتر المالي للتكاليف" subtitle="تحليل هرمي للتكاليف من الإجمالي العام حتى أدق التفاصيل">
         
         {logic.isLoading ? (
-           <div style={{ textAlign: 'center', padding: '100px', fontWeight: 900, color: THEME.goldAccent }}>⏳ جاري بناء الهرم المالي...</div>
+           <LoadingScreen message="جاري بناء الهرم المالي..." fullScreen={false} />
         ) : (
           <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
             

@@ -8,6 +8,7 @@ export const PermissionsProvider = ({ children }: { children: React.ReactNode })
     const [permissions, setPermissions] = useState<any>(null);
     const [role, setRole] = useState<string>('client');
     const [loading, setLoading] = useState(true);
+    const [profile, setProfile] = useState<any>(null);
 
     useEffect(() => {
         let isMounted = true; // 🛡️ حماية ضد الـ Memory Leak وتحديث الواجهة وهي مقفولة
@@ -26,7 +27,7 @@ export const PermissionsProvider = ({ children }: { children: React.ReactNode })
                 if (currentUser && isMounted) {
                     const { data, error } = await supabase
                         .from('profiles')
-                        .select('role, permissions, is_admin')
+                        .select('role, permissions, is_admin, full_name, avatar_url')
                         .eq('id', currentUser.id)
                         .single();
                         
@@ -34,6 +35,7 @@ export const PermissionsProvider = ({ children }: { children: React.ReactNode })
                         const userRole = data.is_admin ? 'super_admin' : (data.role || 'client');
                         setRole(userRole);
                         setPermissions(data.permissions || {});
+                        setProfile(data);
                     }
                 } else if (isMounted) {
                      setLoading(false);
@@ -70,8 +72,8 @@ export const PermissionsProvider = ({ children }: { children: React.ReactNode })
     };
 
     const value = useMemo(() => ({
-        can, role, permissions, loading
-    }), [permissions, role, loading]);
+        can, role, permissions, loading, profile
+    }), [permissions, role, loading, profile]);
 
     // 🚨 لا تعرض شاشة سوداء طالما الصلاحيات موجودة مسبقاً
     if (loading && !permissions) {

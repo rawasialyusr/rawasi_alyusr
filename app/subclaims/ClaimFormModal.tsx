@@ -3,32 +3,154 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { THEME } from '@/lib/theme';
 import { formatCurrency } from '@/lib/helpers';
+import { supabase } from '@/lib/supabase'; 
 
 export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
     const [mounted, setMounted] = useState(false);
+    
+    // 🚀 States
+    const [enrichedAssignments, setEnrichedAssignments] = useState<any[]>([]);
+    const [realMatDed, setRealMatDed] = useState(0);
+    const [realExpDed, setRealExpDed] = useState(0);
+    const [isEnriching, setIsEnriching] = useState(true);
+    
+    const [activeProjectIds, setActiveProjectIds] = useState<string[]>([]);
+    const [activeJobOrderIds, setActiveJobOrderIds] = useState<string[]>([]);
+
+    // 🚀 States لحفظ الـ IDs الدقيقة للخامات والمصروفات
+    const [pendingExpenseIds, setPendingExpenseIds] = useState<string[]>([]);
+    const [pendingMaterialIds, setPendingMaterialIds] = useState<string[]>([]);
+
     useEffect(() => { setMounted(true); }, []);
+
+    // 🚀 المحرك الذكي المطور: يتجاوز الـ View تماماً ويقرأ من الجذور
+    useEffect(() => {
+        const enrichDataAndDeductions = async () => {
+            if (!isOpen || !logic?.currentClaim?.assignments_data) return;
+            setIsEnriching(true);
+
+            try {
+                const assignments = logic.currentClaim.assignments_data;
+                const assignmentIds = assignments.map((a:any) => a.assignment_id || a.id).filter(Boolean);
+
+                // 1. تجاوز الفيو وجلب الداتا الصحيحة (تم إصلاح Error 400 بإزالة الأعمدة غير الموجودة)
+                const { data: realAssignments, error: fetchError } = await supabase
+                    .from('contractor_assignments')
+                    .select(`
+                        id, assigned_qty, unit_price, job_order_id, project_id,
+                        job_orders ( order_number ),
+                        projects ( Property ),
+                        boq_budget ( work_item, unit )
+                    `)
+                    .in('id', assignmentIds);
+
+                if (fetchError) console.error("Fetch Error:", fetchError);
+
+                // استخراج الـ IDs الحقيقية والمؤكدة
+                const extractedJobOrderIds = Array.from(new Set(realAssignments?.map(r => r.job_order_id).filter(Boolean) || []));
+                const extractedProjectIds = Array.from(new Set(realAssignments?.map(r => r.project_id).filter(Boolean) || []));
+                
+                setActiveJobOrderIds(extractedJobOrderIds as string[]);
+                setActiveProjectIds(extractedProjectIds as string[]);
+
+                const finalProjectIds = extractedProjectIds.length > 0 ? extractedProjectIds : (logic.currentClaim.project_ids || []);
+
+                let mTotal = 0; let eTotal = 0;
+                let mIds: string[] = []; let eIds: string[] = [];
+
+                // 2. سحب الخامات بناءً على أوامر التشغيل
+                if (extractedJobOrderIds.length > 0) {
+                    const { data: materials } = await supabase
+                        .from('material_issue_lines')
+                        .select('id, total_price')
+                        .in('job_order_id', extractedJobOrderIds)
+                        .eq('is_deducted_from_contractor', true)
+                        .is('claim_id', null);
+                    
+                    mIds = (materials || []).map(m => m.id);
+                    mTotal = (materials || []).reduce((acc, curr) => acc + Number(curr.total_price || 0), 0);
+                }
+
+                // 🚀 3. سحب المصروفات بذكاء (بناءً على المقاول والمشاريع)
+                if (finalProjectIds.length > 0 && logic.selectedContractor?.id) {
+                    const { data: expenses } = await supabase
+                        .from('expenses')
+                        .select('id, total_price')
+                        .eq('payee_id', logic.selectedContractor.id) 
+                        .in('project_id', finalProjectIds)           
+                        .eq('is_deducted_from_contractor', true)     
+                        .is('claim_id', null);                       
+                    
+                    eIds = (expenses || []).map(e => e.id);
+                    eTotal = (expenses || []).reduce((acc, curr) => acc + Number(curr.total_price || 0), 0);
+                }
+
+                // 4. دمج البيانات وعرضها
+                const mapped = assignments.map((a: any) => {
+                    const real = (realAssignments || []).find(r => r.id === (a.assignment_id || a.id)) || {};
+                    const qty = Number(a.executed_qty || real.assigned_qty || a.assigned_qty || 0);
+                    const price = Number(a.contract_unit_price || real.unit_price || a.unit_price || 0);
+                    return {
+                        ...a,
+                        calc_gross: qty * price,
+                        real_project_name: real.projects?.Property || a.projects?.Property || 'عقار غير محدد',
+                        real_item_name: real.boq_budget?.work_item || a.boq_item_name || 'بند غير محدد',
+                        real_order_number: real.job_orders?.order_number || a.order_number || 'JO-XXX'
+                    };
+                });
+
+                setEnrichedAssignments(mapped);
+                setPendingMaterialIds(mIds);
+                setPendingExpenseIds(eIds);
+                
+                const viewMatDed = Number(logic.currentClaim.materials_deduction || 0);
+                const viewExpDed = Number(logic.currentClaim.other_deductions || 0);
+                setRealMatDed(viewMatDed > 0 ? viewMatDed : mTotal);
+                setRealExpDed(viewExpDed > 0 ? viewExpDed : eTotal);
+
+            } catch (e) {
+                console.error("Error enriching data:", e);
+            } finally {
+                setIsEnriching(false);
+            }
+        };
+
+        enrichDataAndDeductions();
+    }, [isOpen, logic?.currentClaim, logic?.selectedContractor]);
 
     if (!isOpen || !mounted || !logic?.currentClaim) return null;
 
-    // الحسابات المجمعة من الفيو الجاهز
-    const totalWork = logic.currentClaim.total_amount || 0;
+    // 🧮 الحسابات المجمعة
+    const totalWork = enrichedAssignments.reduce((sum, a) => sum + Number(a.calc_gross || 0), 0);
     const retentionPercent = Number(logic.currentClaim.retention_percent) || 0;
     const retentionAmount = totalWork * (retentionPercent / 100);
-    const materialsDed = Number(logic.currentClaim.materials_deduction) || 0;
-    const expensesDed = Number(logic.currentClaim.other_deductions) || 0;
     const advanceDed = Number(logic.currentClaim.advance_payment) || 0;
     
-    const totalDeductions = materialsDed + expensesDed + advanceDed;
+    const totalDeductions = realMatDed + realExpDed + advanceDed;
     const netAmount = totalWork - retentionAmount - totalDeductions;
 
+    // 🚀 استخراج أسماء الفلل المجمعة ودمجها بنص واحد للحفظ
+    const uniqueProjectNames = Array.from(new Set(enrichedAssignments.map((a: any) => a.real_project_name).filter(Boolean)));
+    const combinedProjectsText = uniqueProjectNames.join(' + ');
+
     const handleSave = () => {
-        if (!logic.currentClaim?.project_ids || logic.currentClaim.project_ids.length === 0) {
-            alert("⚠️ يرجى اختيار العقار / المشروع أولاً.");
+        const finalProjectIds = activeProjectIds.length > 0 ? activeProjectIds : logic.currentClaim.project_ids;
+        
+        if (!finalProjectIds || finalProjectIds.length === 0) {
+            alert("⚠️ يرجى التأكد من أن أوامر التشغيل مرتبطة بمشروع/فيلا بشكل سليم.");
             return;
         }
 
         logic.handleSaveClaim({
             ...logic.currentClaim,
+            project_ids: finalProjectIds,
+            project_names_text: combinedProjectsText, // 🚀 إرسال أسماء الفلل المجمعة
+            job_order_ids: activeJobOrderIds,
+            expense_ids: pendingExpenseIds,     
+            material_ids: pendingMaterialIds,   
+            total_amount: totalWork,
+            materials_deduction: realMatDed,
+            other_deductions: realExpDed,
             retention_amount: retentionAmount,
             net_amount: netAmount
         });
@@ -45,8 +167,14 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                 .btn-glass-cancel { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.8); padding: 16px; border-radius: 16px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.3s; }
             `}</style>
 
-            <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ width: '1100px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.95)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', overflowY: 'auto', direction: 'rtl' }}>
+            <div className="cinematic-scroll" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: '1100px', maxHeight: '95vh', background: 'rgba(248, 250, 252, 0.95)', backdropFilter: 'blur(30px)', borderRadius: '35px', padding: '40px', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', overflowY: 'auto', direction: 'rtl' }}>
                 
+                {isEnriching && (
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 900, color: THEME.primary, borderRadius: '35px', backdropFilter: 'blur(5px)' }}>
+                        ⏳ جاري تحليل بيانات العقارات وسحب الخصومات الدقيقة من الدفاتر...
+                    </div>
+                )}
+
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:`2px solid ${THEME.goldAccent || '#d4af37'}50`, paddingBottom:'15px'}}>
                     <div>
                         <h2 style={{ color: THEME.coffeeDark || '#2d1a11', fontWeight: 900, margin: 0, fontSize: '26px' }}>🧾 إصدار مستخلص مقاول باطن</h2>
@@ -58,40 +186,33 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                     </div>
                 </div>
 
-                {/* 🚀 قسم بيانات المستخلص وتواريخ السداد */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '20px', marginBottom: '25px', background: 'rgba(212, 175, 55, 0.05)', padding: '20px', borderRadius: '20px', border: `1px solid rgba(212, 175, 55, 0.2)` }}>
-                    
                     <div style={{ zIndex: 90 }}>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🏢 المشاريع المشمولة</label>
                         <div className="glass-input-field" style={{ background: '#f8fafc', color: THEME.coffeeDark, minHeight: '43px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 15px', border: `1px solid ${THEME.goldAccent}50` }}>
-                            {logic.currentClaim.project_ids?.length > 1 ? (
-                                <span style={{ color: THEME.coffeeDark, fontWeight: 900 }}>🚀 مستخلص مجمع لـ ({logic.currentClaim.project_ids.length}) مواقع</span>
-                            ) : (
-                                <span style={{ fontWeight: 800 }}>{logic.currentClaim.assignments_data?.[0]?.projects?.Property || 'عقار واحد'}</span>
-                            )}
+                            {/* 🚀 عرض أسماء كل الفلل المجمعة بوضوح */}
+                            <span style={{ fontWeight: 900, fontSize: uniqueProjectNames.length > 1 ? '11px' : '13px', textAlign: 'center', lineHeight: '1.6' }}>
+                                {combinedProjectsText || 'عقار غير محدد'}
+                            </span>
                         </div>
                     </div>
-                    
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>📅 تاريخ المستخلص</label>
                         <input type="date" className="glass-input-field" value={logic.currentClaim.date} onChange={e => logic.setCurrentClaim({...logic.currentClaim, date: e.target.value})} />
                     </div>
-
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>⏳ فترة السداد (يوم)</label>
                         <input type="number" min="0" className="glass-input-field" value={logic.currentClaim.payment_period_days || ''} onChange={e => logic.setCurrentClaim({...logic.currentClaim, payment_period_days: Number(e.target.value)})} />
                     </div>
-
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>🛡️ نسبة احتجاز الضمان %</label>
                         <input type="number" className="glass-input-field" value={logic.currentClaim.retention_percent} onChange={e => logic.setCurrentClaim({...logic.currentClaim, retention_percent: e.target.value})} />
                     </div>
                 </div>
 
-                {/* 🚀 قسم بيان الأعمال المعتمدة والخصومات (من الفيو الذكي) */}
                 <div style={{ marginBottom: '25px' }}>
                     <h3 style={{ color: THEME.primary, fontWeight: 900, fontSize: '16px', marginBottom: '10px' }}>📋 أوامر التشغيل المعتمدة في هذا المستخلص</h3>
-                    {logic.currentClaim.assignments_data?.length > 0 ? (
+                    {enrichedAssignments.length > 0 ? (
                         <div style={{ background: 'white', borderRadius: '15px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
                                 <thead style={{ background: '#f8fafc', color: '#64748b', fontSize: '12px' }}>
@@ -99,25 +220,29 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                                         <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>أمر التشغيل</th>
                                         <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>البند / الموقع</th>
                                         <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>قيمة الأعمال</th>
-                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>خصم الخامات</th>
-                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>خصم नثريات</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>خصم خامات</th>
+                                        <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>خصم نثريات</th>
                                         <th style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>الصافي المبدئي</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {logic.currentClaim.assignments_data.map((a: any, idx: number) => (
-                                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                            <td style={{ padding: '10px', fontSize: '12px', fontWeight: 800, color: THEME.accent }}>{a.order_number}</td>
-                                            <td style={{ padding: '10px', fontSize: '13px', fontWeight: 800, color: THEME.primary }}>
-                                                {a.boq_item_name}
-                                                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', fontWeight: 700 }}>📍 {a.projects?.Property}</div>
-                                            </td>
-                                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.success }}>{formatCurrency(a.gross_total_amount)}</td>
-                                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.danger }}>{formatCurrency(a.materials_deduction)}</td>
-                                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.danger }}>{formatCurrency(a.expenses_deduction)}</td>
-                                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.primary }}>{formatCurrency(a.net_before_financial_deductions)}</td>
-                                        </tr>
-                                    ))}
+                                    {enrichedAssignments.map((a: any, idx: number) => {
+                                        const mat = Number(a.materials_deduction || 0);
+                                        const exp = Number(a.expenses_deduction || 0);
+                                        return (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '10px', fontSize: '12px', fontWeight: 800, color: THEME.accent }}>{a.real_order_number}</td>
+                                                <td style={{ padding: '10px', fontSize: '13px', fontWeight: 800, color: THEME.primary }}>
+                                                    {a.real_item_name}
+                                                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', fontWeight: 700 }}>📍 {a.real_project_name}</div>
+                                                </td>
+                                                <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.success }}>{formatCurrency(a.calc_gross)}</td>
+                                                <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.danger }}>{formatCurrency(mat)}</td>
+                                                <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.danger }}>{formatCurrency(exp)}</td>
+                                                <td style={{ padding: '10px', textAlign: 'center', fontWeight: 900, color: THEME.primary }}>{formatCurrency(a.calc_gross - mat - exp)}</td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -126,19 +251,15 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                     )}
                 </div>
 
-                {/* 🚀 قسم تفصيل الخصومات والدفعة المقدمة */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginTop: '15px' }}>
-                    
                     <div style={{ background: 'rgba(255, 107, 107, 0.05)', padding: '15px', borderRadius: '12px', border: '1px dashed #fca5a5' }}>
-                        <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textAlign: 'center' }}>🧱 إجمالي خصم الخامات (مسحوب آلياً)</div>
-                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#dc2626', textAlign: 'center', marginTop: '10px' }}>{formatCurrency(materialsDed)}</div>
+                        <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textAlign: 'center' }}>🧱 إجمالي خصم الخامات (دقيق ومسحوب)</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#dc2626', textAlign: 'center', marginTop: '10px' }}>{formatCurrency(realMatDed)}</div>
                     </div>
-
                     <div style={{ background: 'rgba(255, 159, 67, 0.05)', padding: '15px', borderRadius: '12px', border: '1px dashed #fcd34d' }}>
-                        <div style={{ fontSize: '11px', color: '#d97706', fontWeight: 800, textAlign: 'center' }}>💸 نقدية ومصروفات (مسحوب آلياً)</div>
-                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#b45309', textAlign: 'center', marginTop: '10px' }}>{formatCurrency(expensesDed)}</div>
+                        <div style={{ fontSize: '11px', color: '#d97706', fontWeight: 800, textAlign: 'center' }}>💸 نقدية ومصروفات (دقيق ومسحوب)</div>
+                        <div style={{ fontSize: '20px', fontWeight: 900, color: '#b45309', textAlign: 'center', marginTop: '10px' }}>{formatCurrency(realExpDed)}</div>
                     </div>
-
                     <div style={{ background: 'rgba(0, 210, 211, 0.05)', padding: '15px', borderRadius: '12px', border: '1px dashed #67e8f9' }}>
                         <div style={{ fontSize: '11px', color: '#0891b2', fontWeight: 800, textAlign: 'center' }}>💰 خصم سلفة / دفعة مقدمة (يدوي)</div>
                         <input 
@@ -171,7 +292,7 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                 </div>
 
                 <div style={{ display: 'flex', gap: '20px', marginTop: '35px' }}>
-                    <button onClick={handleSave} disabled={logic.isClaimSaving} className="btn-glass-save" style={{ flex: 2 }}>
+                    <button onClick={handleSave} disabled={logic.isClaimSaving || isEnriching} className="btn-glass-save" style={{ flex: 2 }}>
                         {logic.isClaimSaving ? '⏳ جاري الاعتماد والترحيل...' : '✅ اعتماد المستخلص'}
                     </button>
                     <button onClick={onClose} className="btn-glass-cancel" style={{ flex: 1 }}>إغلاق</button>

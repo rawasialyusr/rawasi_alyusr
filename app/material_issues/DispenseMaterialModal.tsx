@@ -117,6 +117,7 @@ export default function DispenseMaterialModal({ isOpen, onClose, invoiceItem, on
             ...formData,
             boq_id: formData.boq_id || null,
             boq_item_id: formData.boq_item_id || null,
+            job_order_id: formData.job_order_id || null,
             item: invoiceItem
         };
 
@@ -182,6 +183,24 @@ export default function DispenseMaterialModal({ isOpen, onClose, invoiceItem, on
                         />
                     </div>
                     <div style={{ zIndex: 90, position: 'relative' }}>
+                        <SmartCombo 
+                            label="📝 أمر الشغل (ربط الميزانية) *" 
+                            table="job_orders" 
+                            displayCol="order_number" 
+                            searchCols="order_number,notes" 
+                            freeText={false} 
+                            strict={true} 
+                            filterColumn="project_id" 
+                            filterValue={formData.project_id}
+                            key={formData.project_id || 'empty-jo'} 
+                            initialDisplay={formData.job_order_id ? `أمر شغل مرتبط` : ''} 
+                            onSelect={(v:any) => setFormData({
+                                ...formData, 
+                                job_order_id: v?.id || null
+                            })} 
+                        />
+                    </div>
+                    <div style={{ zIndex: 85, position: 'relative' }}>
                         {/* 🚀 السحب باستخدام الكمبوننت الذكي المخصص للبند */}
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.coffeeDark, display: 'block', marginBottom: '6px' }}>
                             📋 تحميل على بند (BOQ)

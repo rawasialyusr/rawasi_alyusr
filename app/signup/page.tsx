@@ -15,13 +15,38 @@ export default function SignUpPage() {
 
     // 🧠 مصفوفة الصلاحيات الكاملة (Full Access Master Key)
     const fullAccessPermissions = {
-        invoices: { view: true, create: true, edit: true, delete: true, post: true },
-        expenses: { view: true, create: true, edit: true, delete: true, post: true },
-        emp_adv: { view: true, create: true, edit: true, delete: true, post: true },
-        projects: { view: true, create: true, edit: true, delete: true },
+        global_summary: { view: true }, dashboard: { view: true }, financial_center: { view: true }, financial_statements: { view: true },
         accounts: { view: true, create: true, edit: true, delete: true },
-        reports: { view: true, financial: true },
-        team: { view: true, create: true, edit: true }
+        journal: { view: true, create: true, edit: true, delete: true, post: true },
+        ledger: { view: true }, trialbalance: { view: true }, journal_errors: { view: true, edit: true }, cashflows: { view: true },
+        payments: { view: true, create: true, edit: true, delete: true, post: true },
+        receipts: { view: true, create: true, edit: true, delete: true, post: true },
+        revenue: { view: true, create: true, edit: true, delete: true, post: true },
+        expenses: { view: true, create: true, edit: true, delete: true, post: true },
+        invoices: { view: true, create: true, edit: true, delete: true, post: true },
+        fieldops: { view: true }, projects: { view: true, create: true, edit: true, delete: true },
+        materials: { view: true, create: true, edit: true, delete: true, post: true },
+        materialitems: { view: true, create: true, edit: true, delete: true },
+        material_issues: { view: true, create: true, edit: true, delete: true, post: true },
+        subclaims: { view: true, create: true, edit: true, delete: true, post: true },
+        subcontractor_costs: { view: true },
+        boqcatalog: { view: true, create: true, edit: true, delete: true },
+        partners: { view: true, create: true, edit: true, delete: true },
+        partner_balances: { view: true }, statement: { view: true },
+        project_overhead: { view: true, create: true, edit: true, delete: true },
+        boqbudget: { view: true, create: true, edit: true, delete: true },
+        costallocation: { view: true, create: true, edit: true, delete: true },
+        project_ledger: { view: true },
+        employees: { view: true, create: true, edit: true, delete: true },
+        team: { view: true, create: true, edit: true, delete: true },
+        labor_logs: { view: true, create: true, edit: true, delete: true, post: true },
+        laborcost: { view: true },
+        payroll: { view: true, create: true, edit: true, delete: true, post: true },
+        violations: { view: true, create: true, edit: true, delete: true },
+        reports: { view: true, financial: true, operational: true },
+        import: { view: true, create: true },
+        settings: { view: true, edit: true },
+        profile: { view: true, edit: true }
     };
 
     const [form, setForm] = useState({

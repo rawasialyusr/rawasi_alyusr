@@ -4,8 +4,10 @@ import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSmartFilter } from '@/lib/useSmartFilter'; 
+import { fetchPaginatedData } from '@/lib/supabase-pagination'; 
 import { useUniversalPosting } from '@/lib/accounting_engine'; 
 import { useToast } from '@/lib/toast-context'; 
+import { checkAdminApprovalPrivilege } from '@/lib/helpers';
 
 export function useExpensesLogic() {
     const queryClient = useQueryClient();
@@ -41,12 +43,14 @@ export function useExpensesLogic() {
 
     const [disburseProgress, setDisburseProgress] = useState({ current: 0, total: 0, isActive: false });
 
-    // 🚀 القيمة الافتراضية أصبحت "آجل" تماشياً مع التحديث المحاسبي
+    // 🚀 القيمة الافتراضية أصبحت "آجل" تماشياً مع التحديث المحاسبي، وتم إضافة حقول الربط الجديدة
     const defaultExp = { 
         exp_date: new Date().toISOString().split('T')[0], main_category: '', sub_contractor: '', site_ref: '',       
         creditor_account: '', description: '', payee_name: '', payment_method: 'آجل', payment_account: '', 
         employee_name: '', quantity: 1, unit_price: 0, vat_amount: 0, discount_amount: 0, discount_account: '', 
-        notes: '', invoice_image: null, is_auto_distributed: false 
+        notes: '', invoice_image: null, is_auto_distributed: false,
+        // 👇 الحقول الجديدة الخاصة بالربط مع أوامر التشغيل والمقاولين
+        project_id: null, payee_id: null, job_order_id: null, is_deducted_from_contractor: false 
     };
     const [currentExpense, setCurrentExpense] = useState<any>(defaultExp);
 
@@ -54,17 +58,8 @@ export function useExpensesLogic() {
     const expensesQuery = useQuery({
         queryKey: ['expenses'],
         queryFn: async () => {
-            let allData: any[] = [];
-            let from = 0; const step = 1000; let hasMore = true;
-            while (hasMore) {
-                const { data, error } = await supabase.from('expenses').select('*').order('exp_date', { ascending: false }).range(from, from + step - 1);
-                if (error) throw error;
-                if (data && data.length > 0) { 
-                    allData = [...allData, ...data]; 
-                    from += step; 
-                    if (data.length < step) hasMore = false; 
-                } else hasMore = false;
-            }
+            const buildQuery = () => supabase.from('expenses').select('*').order('exp_date', { ascending: false });
+            const allData = await fetchPaginatedData(buildQuery, 'id');
 
             return allData.map(exp => {
                 let parsedLines = [];
@@ -166,6 +161,14 @@ export function useExpensesLogic() {
         mutationFn: async (passedRecord: any) => {
             if (!passedRecord || !passedRecord.exp_date) throw new Error("حدث خطأ في استلام البيانات من النافذة، يرجى المحاولة مرة أخرى.");
             
+            // 🛡️ فحص صلاحيات التعديل للقيود المعتمدة
+            if (editingId) {
+                const existingRecord = expenses.find(e => String(e.id) === String(editingId));
+                if (existingRecord) {
+                    await checkAdminApprovalPrivilege([existingRecord], 'تعديل');
+                }
+            }
+
             let generatedDescription = passedRecord.description;
             if ((!generatedDescription || generatedDescription.trim() === '') && passedRecord.lines_data && Array.isArray(passedRecord.lines_data) && passedRecord.lines_data.length > 0) {
                 generatedDescription = passedRecord.lines_data.map((line: any) => line.description || line.item_name || line.work_item).filter(Boolean).join(' + ');
@@ -192,7 +195,13 @@ export function useExpensesLogic() {
                 p_notes: passedRecord.notes || null, 
                 p_invoice_image: passedRecord.invoice_image || null, 
                 p_lines_data: passedRecord.lines_data || [], 
-                p_is_auto_distributed: passedRecord.is_auto_distributed || false
+                p_is_auto_distributed: passedRecord.is_auto_distributed || false,
+                
+                // 👇 [التعديل هنا] إرسال الـ IDs الجديدة للـ RPC
+                p_project_id: passedRecord.project_id || null,
+                p_payee_id: passedRecord.payee_id || null,
+                p_job_order_id: passedRecord.job_order_id || null,
+                p_is_deducted_from_contractor: passedRecord.is_deducted_from_contractor || false
             };
 
             const { data, error } = await supabase.rpc('save_expense_with_settlement', payload);
@@ -234,6 +243,10 @@ export function useExpensesLogic() {
     // 🗑️ الحذف المتسلسل
     const deleteMutation = useMutation({
         mutationFn: async () => {
+            // 🛡️ فحص صلاحيات الحذف للقيود المعتمدة
+            const targetExpenses = expenses.filter(e => selectedIds.includes(String(e.id)));
+            await checkAdminApprovalPrivilege(targetExpenses, 'حذف');
+
             const { error } = await supabase.rpc('delete_expenses_bulk', { record_ids: selectedIds });
             if (error) throw error;
             return selectedIds; 
@@ -404,12 +417,12 @@ export function useExpensesLogic() {
         }
     });
 
-    const canAdd = userRole === 'admin' || userPermissions?.expenses?.add;
-    const canEdit = userRole === 'admin' || userPermissions?.expenses?.edit;
-    const canDelete = userRole === 'admin' || userPermissions?.expenses?.delete;
-    const canPost = userRole === 'admin' || userPermissions?.expenses?.post;
-    const canView = userRole === 'admin' || userPermissions?.expenses?.view;
-    const canExport = userRole === 'admin' || userPermissions?.expenses?.print;
+    const canAdd = (userRole === 'admin' || userRole === 'super_admin') || userPermissions?.expenses?.create;
+    const canEdit = (userRole === 'admin' || userRole === 'super_admin') || userPermissions?.expenses?.edit;
+    const canDelete = (userRole === 'admin' || userRole === 'super_admin') || userPermissions?.expenses?.delete;
+    const canPost = (userRole === 'admin' || userRole === 'super_admin') || userPermissions?.expenses?.post;
+    const canView = (userRole === 'admin' || userRole === 'super_admin') || userPermissions?.expenses?.view;
+    const canExport = (userRole === 'admin' || userRole === 'super_admin') || userPermissions?.expenses?.print;
 
     return {
         // 🚀 الـ إخراج المباشر وحل التعليقة النهائي
@@ -424,10 +437,10 @@ export function useExpensesLogic() {
         
         selectedIds, setSelectedIds, currentPage, setCurrentPage, rowsPerPage, setRowsPerPage, isEditModalOpen, setIsEditModalOpen, currentExpense, setCurrentExpense, editingId, projects: supportData?.projects || [], contractors: supportData?.contractors || [], payees: supportData?.payees || [], accounts: supportData?.accounts || [], boqItems: supportData?.boqItems || [], accounts_raw: supportData?.accounts_raw || [], isBulkFixModalOpen, setIsBulkFixModalOpen, bulkFixAccounts, setBulkFixAccounts, handleBulkFixSave, canAdd, canEdit, canDelete, canPost, canView, canExport, userRole,
         
-        setFilterStatus: (val: string) => setFilter('is_posted', val === 'الكل' ? null : val === 'مرحل'),
+        setFilterStatus: (val: string) => setFilter('is_posted', val === 'الكل' ? null : val === 'معتمد'),
         setFilterAccount: (val: string) => setFilter('creditor_account', val === 'الكل' ? null : val),
         filterAccount: customFilters['creditor_account'] || 'الكل',
-        filterStatus: customFilters['is_posted'] === undefined ? 'الكل' : (customFilters['is_posted'] ? 'مرحل' : 'معلق'),
+        filterStatus: customFilters['is_posted'] === undefined ? 'الكل' : (customFilters['is_posted'] ? 'معتمد' : 'معلق'),
         
         handleSaveExpense: (data: any) => {
             if (!data) return showToast("لم يتم استلام البيانات!", "error");

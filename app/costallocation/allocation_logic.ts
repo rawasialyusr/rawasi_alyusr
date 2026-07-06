@@ -29,7 +29,8 @@ export function useAllocationViewLogic() {
                 
                 if (data && data.length > 0) {
                     data.forEach((item: any) => {
-                        const uniqueKey = item.id || `${item["شهر التحميل المالي"]}-${item["اسم الفيلا المحمل عليها"]}-${item["التصنيف الرئيسي"]}-${item["وصف المصروف التلقائي"]}-${item["المبلغ المحمل (جنيه)"]}`;
+                        // 🎯 تم إضافة البند المحمل عليه للـ Unique Key عشان ميحذفش بنود نفس الفيلا
+                        const uniqueKey = item.id || `${item["شهر التحميل المالي"]}-${item["اسم الفيلا المحمل عليها"]}-${item["البند المحمل عليه"]}-${item["التصنيف الرئيسي"]}-${item["وصف المصروف التلقائي"]}-${item["المبلغ المحمل (جنيه)"]}`;
                         if (!uniqueMap.has(uniqueKey)) {
                             uniqueMap.set(uniqueKey, item);
                         }
@@ -67,8 +68,10 @@ export function useAllocationViewLogic() {
             const searchLower = deferredSearch.toLowerCase();
             result = result.filter((item: any) => 
                 item["اسم الفيلا المحمل عليها"]?.toLowerCase().includes(searchLower) ||
+                item["البند المحمل عليه"]?.toLowerCase().includes(searchLower) || // 🎯 البحث باسم البند
                 item["التصنيف الرئيسي"]?.toLowerCase().includes(searchLower) ||
-                item["وصف المصروف التلقائي"]?.toLowerCase().includes(searchLower)
+                item["وصف المصروف التلقائي"]?.toLowerCase().includes(searchLower) ||
+                item["آلية التوزيع"]?.toLowerCase().includes(searchLower) // 🎯 البحث بآلية التوزيع
             );
         }
 
@@ -81,23 +84,14 @@ export function useAllocationViewLogic() {
         return filteredData.slice(start, start + rowsPerPage);
     }, [filteredData, currentPage, rowsPerPage]);
 
-    // 💰 1. حساب إجمالي المصروفات المحملة العادية (باستبعاد الغرامات)
-    const totalExpensesAmount = useMemo(() => {
-        return filteredData
-            .filter((item: any) => item["التصنيف الرئيسي"] !== 'غرامات ومخالفات عامة')
-            .reduce((sum: number, item: any) => sum + Number(item["المبلغ المحمل (جنيه)"] || 0), 0);
-    }, [filteredData]);
-
-    // 🚨 2. حساب إجمالي الحسميات والغرامات المحملة فقط
-    const totalDeductionsAmount = useMemo(() => {
-        return filteredData
-            .filter((item: any) => item["التصنيف الرئيسي"] === 'غرامات ومخالفات عامة')
-            .reduce((sum: number, item: any) => sum + Number(item["المبلغ المحمل (جنيه)"] || 0), 0);
+    // 💰 حساب إجمالي المصروفات
+    const totalAllocatedAmount = useMemo(() => {
+        return filteredData.reduce((sum: number, item: any) => sum + Number(item["المبلغ المحمل (جنيه)"] || 0), 0);
     }, [filteredData]);
 
     return {
         filteredData, paginatedItems, uniqueMonths,
-        isLoading, totalExpensesAmount, totalDeductionsAmount,
+        isLoading, totalAllocatedAmount, 
         globalSearch, setGlobalSearch: (v: string) => { setGlobalSearch(v); setCurrentPage(1); },
         selectedMonth, setSelectedMonth: (v: string) => { setSelectedMonth(v); setCurrentPage(1); },
         currentPage, setCurrentPage,

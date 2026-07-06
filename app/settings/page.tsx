@@ -3,6 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useBackupLogic } from './backup_logic'; 
 import { useRestoreLogic } from './restore_logic'; 
+import PermissionsMatrix from './PermissionsMatrix';
+import SystemHealthRadar from './SystemHealthRadar';
 
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
 import MasterPage from '@/components/MasterPage';
@@ -16,12 +18,7 @@ const TABLE_GROUPS = [
     tables: [
       { id: 'partners', name: 'دليل الشركاء والموظفين' },
       { id: 'all_emp', name: 'سجل الموظفين الشامل' },
-      { id: 'emp_adv', name: 'سلف الموظفين' },
-      { id: 'emp_ded', name: 'خصومات الموظفين' },
-      { id: 'housing', name: 'سجل الإعاشة الأساسي' }, // 🚀 إضافة
-      { id: 'housing_services', name: 'خدمات الإعاشة والسكن' },
       { id: 'payroll_slips', name: 'مسيرات الرواتب' },
-      // 👇👇👇 السر كله في السطر ده، ضفناهولك هنا عشان يظهر في الواجهة 👇👇👇
       { id: 'violations', name: 'سجل المخالفات والجزاءات' },
     ]
   },
@@ -31,10 +28,11 @@ const TABLE_GROUPS = [
       { id: 'projects', name: 'بيانات المشاريع والمواقع' },
       { id: 'project_stages', name: 'مراحل إنجاز المشاريع' },
       { id: 'project_work_structure', name: 'هيكل أعمال المشاريع' },
+      { id: 'job_orders', name: 'أوامر الشغل' },
       { id: 'boq_items', name: 'بنود المقايسات (BOQ)' },
       { id: 'boq_budget', name: 'ميزانية المقايسات' },
-      { id: 'contractor_assignments', name: 'إسنادات مقاولي الباطن' }, // 🚀 إضافة
-      { id: 'sub_claims', name: 'مستخلصات مقاولي الباطن' }, // 🚀 إضافة
+      { id: 'contractor_assignments', name: 'إسنادات مقاولي الباطن' },
+      { id: 'sub_claims', name: 'مستخلصات مقاولي الباطن' },
       { id: 'labor_daily_logs', name: 'يوميات العمالة الميدانية' },
     ]
   },
@@ -43,24 +41,27 @@ const TABLE_GROUPS = [
     tables: [
       { id: 'accounts', name: 'دليل شجرة الحسابات' },
       { id: 'expenses', name: 'المصروفات العامة' },
-      { id: 'invoices', name: 'المستخلصات والفواتير' },
+      { id: 'invoices', name: 'فواتير ومطالبات العملاء' },
       { id: 'payment_vouchers', name: 'سندات الصرف' },
       { id: 'receipt_vouchers', name: 'سندات القبض' },
       { id: 'journal_headers', name: 'رؤوس القيود المحاسبية' },
-      { id: 'journal_lines', name: 'تفاصيل الحركة المالية' },
-      { id: 'journal_errors', name: 'سجل أخطاء القيود' }, // 🚀 إضافة
+      { id: 'journal_lines', name: 'تفاصيل القيود المحاسبية' },
+      { id: 'journal_errors', name: 'سجل أخطاء القيود' },
+      { id: 'sys_financial_reports', name: 'القوائم المالية المخبأة' },
     ]
   },
   {
     name: "🧱 المخازن والإمداد",
     tables: [
       { id: 'inventory', name: 'مخازن المواد والخامات' },
-      { id: 'material_receipts', name: 'سندات استلام المواد' }, // 🚀 إضافة
-      { id: 'material_receipt_lines', name: 'تفاصيل استلام المواد' }, // 🚀 إضافة
+      { id: 'material_receipts', name: 'سندات استلام الخامات' },
+      { id: 'material_receipt_lines', name: 'تفاصيل استلام الخامات' },
+      { id: 'material_issues', name: 'سندات صرف الخامات' },
+      { id: 'material_issue_lines', name: 'تفاصيل صرف الخامات' },
     ]
   },
   {
-    name: "⚙️ إعدادات النظام والمستخدمين", // 🚀 مجموعة جديدة كاملة
+    name: "⚙️ إعدادات النظام والمستخدمين",
     tables: [
       { id: 'profiles', name: 'حسابات وصلاحيات المستخدمين' },
       { id: 'system_settings', name: 'إعدادات النظام العامة' },
@@ -163,7 +164,7 @@ export default function SettingsPage() {
   }, [activeTab, selectedCount, selectedTables, backupToExcel, backupToJSON, isUploading]);
 
   return (
-    <MasterPage title="إعدادات النظام والنسخ الاحتياطي" hideTitleOnMobile={true}>
+    <MasterPage icon="⚙️" title="إعدادات النظام والنسخ الاحتياطي" hideTitleOnMobile={true}>
       
       <RawasiSidebarManager 
           summary={sidebarContent.summary}
@@ -184,6 +185,10 @@ export default function SettingsPage() {
             🛡️ سلامة النظام (الرادار)
           </button>
         </div>
+
+        {activeTab === 'permissions' && <PermissionsMatrix />}
+        
+        {activeTab === 'health' && <SystemHealthRadar />}
 
         {activeTab === 'backup' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 2fr) minmax(250px, 1fr)', gap: '30px', alignItems: 'start' }}>

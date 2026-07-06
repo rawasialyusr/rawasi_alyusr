@@ -5,7 +5,7 @@ import { THEME } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
-export default function MasterPage({ title, subtitle, children, headerContent }: any) {
+export default function MasterPage({ title, subtitle, children, headerContent, icon }: any) {
   const router = useRouter();
   const pathname = usePathname();
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -78,7 +78,7 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
         .master-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 30px; 
-            padding-right: 0px !important;          
+                      
             position: relative; z-index: 1000;
             animation: elegantFloat 4s ease-in-out infinite;
         }
@@ -122,6 +122,26 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
 
         .title-area h1 { font-weight: 900; fontSize: 28px; color: #0f172a; margin: 0; letterSpacing: -0.5px; }
         .title-area p { color: #64748b; fontSize: 14px; fontWeight: 600; marginTop: 4px; }
+
+        
+        .nav-btn-glass {
+            width: 40px; height: 40px; border-radius: 12px;
+            background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.8);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            color: #1e293b; font-size: 18px;
+        }
+        .nav-btn-glass:hover {
+            background: white; transform: translateY(-2px);
+            border-color: ${THEME.goldAccent};
+        }
+        .nav-group { display: flex; gap: 8px; margin-right: 20px; border-right: 1px solid rgba(0,0,0,0.05); padding-right: 20px; }
+        
+        @media (max-width: 768px) {
+            .nav-group { display: none; }
+        }
 
         .glass-container {
             background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(15px);
@@ -167,10 +187,42 @@ export default function MasterPage({ title, subtitle, children, headerContent }:
         }
       `}</style>
 
-      <header className="master-header">
-        <div className="title-area">
-          <h1>{title}</h1>
-          {subtitle && <p>{subtitle}</p>}
+      <header className="master-header" style={{
+            padding: '20px 25px', 
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: '24px',
+            border: '1px solid rgba(255,255,255,0.8)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '15px'
+      }}>
+        <div className="title-area" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ 
+            width: '45px', height: '45px', borderRadius: '14px', 
+            background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 5px 15px rgba(15, 23, 42, 0.3)'
+          }}>
+            <span style={{ fontSize: '20px', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}>{icon || '✨'}</span>
+          </div>
+          <div className="nav-group">
+            <button onClick={() => router.back()} className="nav-btn-glass" title="رجوع للخلف">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button onClick={() => router.forward()} className="nav-btn-glass" title="تقدم للأمام">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+          </div>
+          <div>
+            <h1 style={{ 
+                margin: 0, fontSize: '26px', fontWeight: 900, 
+                color: '#1e293b', letterSpacing: '-0.5px' 
+            }}>{title}</h1>
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 800 }}>{subtitle || 'نظام رواسي لإدارة الموارد المؤسسية'}</p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>

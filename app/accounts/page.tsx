@@ -7,6 +7,7 @@ import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import { usePermissions } from '@/lib/PermissionsContext'; 
 import SecureAction from '@/components/SecureAction'; 
+import LoadingScreen from '@/components/LoadingScreen';
 
 export default function HierarchicalLedgerPage() {
   const { 
@@ -22,6 +23,19 @@ export default function HierarchicalLedgerPage() {
   const { can, loading: permsLoading } = usePermissions();
 
   useEffect(() => { setMounted(true); }, []);
+
+  // 🚀 اختصار إضافة جديد (Alt + N)
+  useEffect(() => {
+    const handleAddShortcut = (e: KeyboardEvent) => {
+      if (e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+        e.preventDefault();
+        handleAdd();
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, [handleAdd]);
+
 
   // 🧮 السامري المحاسبي الدقيق (ميزان المراجعة) محمي ضد الكسور العائمة
   const summary = useMemo(() => {
@@ -217,9 +231,7 @@ export default function HierarchicalLedgerPage() {
               </div>
 
               {(isLoading || permsLoading) ? (
-                <div style={{ textAlign: 'center', marginTop: '50px', fontWeight: 900, fontSize: '16px', color: '#94a3b8' }}>
-                  ⏳ جاري معالجة البيانات المالية وبناء الشجرة...
-                </div>
+                <LoadingScreen message="جاري معالجة البيانات المالية وبناء الشجرة..." fullScreen={false} />
               ) : (
                 paginatedTree.map((node: any) => (
                   <AccountNode 
