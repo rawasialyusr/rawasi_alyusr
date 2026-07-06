@@ -32,9 +32,12 @@ export default function RawasiFilterSidebar({
 }: RawasiSidebarProps) {
   
   const [isPinned, setIsPinned] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  const isOpen = isMobile ? isPinned : (isPinned || isHovered);
 
   useEffect(() => {
     setMounted(true);
@@ -45,8 +48,6 @@ export default function RawasiFilterSidebar({
   }, []);
 
   const { summary, actions, customFilters } = useSidebar();
-
-  const isOpen = isPinned;
 
   // 🚀 إبلاغ الـ Layout بحالة السايد بار عشان يزق المحتوى
   useEffect(() => {
@@ -166,9 +167,15 @@ export default function RawasiFilterSidebar({
         <div onClick={() => setIsPinned(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
       )}
       
-      <aside className="filter-sidebar-v3 no-print">
-        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(false); }}>
-          <span style={{ fontSize: '16px', color: '#fff' }}>✕</span>
+      <aside 
+        className="filter-sidebar-v3 no-print"
+        onMouseEnter={() => !isMobile && setIsHovered(true)}
+        onMouseLeave={() => !isMobile && setIsHovered(false)}
+      >
+        <button className="pin-btn-sidebar" onClick={(e) => { e.stopPropagation(); setIsPinned(!isPinned); }}>
+          <span style={{ fontSize: '16px', color: '#fff' }}>
+            {isMobile ? '✕' : (isPinned ? '📌' : '📍')}
+          </span>
         </button>
 
         <div className="filter-content">
@@ -250,18 +257,25 @@ export default function RawasiFilterSidebar({
         </div>
       </aside>
 
-      <div className="filter-toggle-tab-v3 no-print" onClick={() => setIsPinned(true)}>
-          {!isMobile && (
-            <span className="tab-text" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, letterSpacing: '2px', fontSize: '12px' }}>
-              ◀ الفلاتر والملخص
-            </span>
-          )}
-          {isMobile && (
+      {/* Hover strip for Desktop */}
+      {!isMobile && !isOpen && (
+        <div 
+          className="no-print"
+          onMouseEnter={() => setIsHovered(true)}
+          style={{
+            position: 'fixed', top: 0, right: 0, width: '20px', height: '100vh', zIndex: 990, cursor: 'pointer'
+          }}
+        />
+      )}
+
+      {/* Toggle Knob for Mobile ONLY */}
+      {isMobile && (
+        <div className="filter-toggle-tab-v3 no-print" onClick={() => setIsPinned(true)}>
             <span className="tab-icon" style={{ fontSize: '16px' }}>
               ⚙️
             </span>
-          )}
-      </div>
+        </div>
+      )}
     </>
   );
 }
