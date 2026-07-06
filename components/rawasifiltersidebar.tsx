@@ -34,10 +34,19 @@ export default function RawasiFilterSidebar({
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [dates, setDates] = useState({ start: '', end: '' });
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const { summary, actions, customFilters } = useSidebar();
 
-  const isOpen = isHovered || isPinned;
+  const isOpen = isMobile ? isMobileOpen : (isHovered || isPinned);
 
   // 🚀 إبلاغ الـ Layout بحالة السايد بار عشان يزق المحتوى
   useEffect(() => {
@@ -61,7 +70,7 @@ export default function RawasiFilterSidebar({
       <style>{`
         /* 🚀 عرض السايد بار */
         .filter-sidebar {
-          width: ${isOpen ? '280px' : '65px'};
+          width: ${isMobile ? (isMobileOpen ? '280px' : '0px') : (isOpen ? '280px' : '65px')};
           background: linear-gradient(180deg, rgba(67, 52, 46, 0.98) 0%, rgba(140, 106, 93, 0.4) 100%);
           backdrop-filter: blur(25px) saturate(180%);
           -webkit-backdrop-filter: blur(25px) saturate(180%);
@@ -134,9 +143,33 @@ export default function RawasiFilterSidebar({
         
         /* 🚀 تنسيق التاريخ */
         .date-label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 5px; }
+
+        @media (max-width: 768px) {
+          .filter-sidebar {
+            width: 280px !important;
+            right: ${isMobileOpen ? '0' : '-300px'} !important;
+            border-left: none !important;
+          }
+          .vertical-label-container { display: none !important; }
+          .filter-content {
+            opacity: 1 !important;
+            transform: translateX(0) !important;
+            width: 100% !important;
+          }
+          .pin-btn-sidebar { display: none !important; }
+        }
       `}</style>
 
-      <aside className="filter-sidebar" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+      {isMobile && (
+        <button onClick={() => setIsMobileOpen(!isMobileOpen)} className="mobile-filter-btn no-print" style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 1001, background: accentColor, color: 'white', border: 'none', borderRadius: '50%', width: '45px', height: '45px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+          {isMobileOpen ? '✕' : '⚙️'}
+        </button>
+      )}
+      {isMobile && isMobileOpen && (
+        <div onClick={() => setIsMobileOpen(false)} className="no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(3px)' }}></div>
+      )}
+      
+      <aside className="filter-sidebar no-print" onMouseEnter={() => !isMobile && setIsHovered(true)} onMouseLeave={() => !isMobile && setIsHovered(false)}>
         <button className="pin-btn-sidebar" onClick={() => setIsPinned(!isPinned)}>
           <span style={{ fontSize: '16px', color: isPinned ? '#fff' : accentColor }}>📌</span>
         </button>

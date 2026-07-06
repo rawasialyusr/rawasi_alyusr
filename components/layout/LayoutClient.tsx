@@ -169,7 +169,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         @media (max-width: 768px) {
           main { margin-right: 0px !important; padding-right: 10px !important; padding-left: 10px !important; }
           .fab-main { width: 65px !important; height: 65px !important; bottom: 20px !important; left: 20px !important; }
-          .filter-sidebar { width: 0px !important; display: none; }
           .items-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 12px !important; }
           .nav-card { padding: 15px !important; }
         }
@@ -186,7 +185,10 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         onDateChange={(start, end) => window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }))}
       />
 
-      <div className="fab-main no-print" onMouseDown={onMouseDown} onClick={() => !isDragging && setIsOpen(!isOpen)}>
+      <div className="fab-main no-print" 
+           onMouseDown={(e) => { if(window.innerWidth > 768) onMouseDown(e); }} 
+           onTouchStart={(e) => { if(window.innerWidth <= 768) setIsOpen(!isOpen); }}
+           onClick={() => { if(window.innerWidth > 768 && !isDragging) setIsOpen(!isOpen); }}>
         <img src="/RYC_Logo.png" alt="رواسي" className="fab-logo" />
       </div>
 
