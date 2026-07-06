@@ -153,7 +153,13 @@ export default function RawasiFilterSidebar({
           .filter-content {
             width: 100% !important;
           }
-          /* pin button is visible on mobile too */
+          .filter-toggle-tab {
+            padding: 12px 6px !important;
+            top: 20% !important;
+            border-radius: 12px 0 0 12px !important;
+          }
+          .tab-text { display: none !important; }
+          .tab-icon { display: block !important; font-size: 16px; transform: none !important; writing-mode: horizontal-tb !important; }
         }
       `}</style>
 
@@ -246,8 +252,11 @@ export default function RawasiFilterSidebar({
       </aside>
 
       <div className="filter-toggle-tab no-print" onClick={() => setIsPinned(true)}>
-          <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, letterSpacing: '2px', fontSize: '12px' }}>
+          <span className="tab-text" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, letterSpacing: '2px', fontSize: '12px' }}>
             ◀ الفلاتر والملخص
+          </span>
+          <span className="tab-icon" style={{ display: 'none' }}>
+            ⚙️
           </span>
       </div>
     </>
