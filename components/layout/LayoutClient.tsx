@@ -156,35 +156,20 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         @keyframes floatPulse { 0%, 100% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.2); transform: scale(1); } 50% { box-shadow: 0 15px 35px rgba(197, 160, 89, 0.4), 0 0 25px 5px rgba(197, 160, 89, 0.3); transform: scale(1.05); } }
         .fab-main { position: fixed; bottom: ${position.y}px; left: ${position.x}px; width: 85px; height: 85px; z-index: 10000; background: linear-gradient(145deg, rgba(67, 52, 46, 0.85), rgba(26, 21, 19, 0.95)); backdrop-filter: blur(15px); border-radius: 50%; cursor: ${isDragging ? 'grabbing' : 'grab'}; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); transition: all 0.4s; animation: floatPulse 4s infinite ease-in-out; padding: 5px; }
         .fab-logo { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
-        .overlay-screen { position: fixed; inset: 0; z-index: 9000; background: radial-gradient(circle at center, rgba(40, 30, 25, 0.6) 0%, rgba(15, 12, 10, 0.9) 100%); backdrop-filter: blur(30px) saturate(200%); clip-path: circle(${isOpen ? '150%' : '0%'} at calc(${position.x + 42.5}px) calc(100% - ${position.y + 42.5}px)); transition: clip-path 0.8s; display: flex; flex-direction: column; align-items: center; padding: 60px 20px; overflow-y: auto; }
-        .command-center { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 40px; margin-top: 20px; }
-        .group-header { color: #C5A059; font-weight: 900; font-size: 16px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 12px; text-align: right; display: block; position: relative; }
-        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-top: 20px; }
-        .nav-card { background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 20px; text-align: center; color: #fff; cursor: pointer; transition: all 0.4s; opacity: 0; animation: popIn 0.6s forwards; position: relative; }
-        @keyframes popIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
-        .nav-card:hover { background: rgba(197, 160, 89, 0.2); border-color: rgba(197, 160, 89, 0.5); transform: translateY(-8px); }
+        .overlay-screen { position: fixed; top: 0; bottom: 0; right: ${isOpen ? '0' : '-350px'}; width: 320px; max-width: 85vw; z-index: 9000; background: rgba(15, 12, 10, 0.98); backdrop-filter: blur(30px) saturate(200%); transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); display: flex; flex-direction: column; padding: 40px 20px; overflow-y: auto; box-shadow: -10px 0 40px rgba(0,0,0,0.7); border-left: 1px solid rgba(255,255,255,0.05); }
+        .overlay-backdrop { position: fixed; inset: 0; z-index: 8999; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); opacity: ${isOpen ? 1 : 0}; pointer-events: ${isOpen ? 'auto' : 'none'}; transition: opacity 0.4s ease; }
+        .command-center { width: 100%; display: flex; flex-direction: column; gap: 30px; margin-top: 10px; }
+        .group-header { color: #C5A059; font-weight: 900; font-size: 14px; border-bottom: 1px solid rgba(197, 160, 89, 0.2); padding-bottom: 8px; text-align: right; display: block; position: relative; }
+        .items-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+        .nav-card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 15px 20px; border-radius: 12px; display: flex; align-items: center; gap: 15px; color: #fff; cursor: pointer; transition: all 0.3s; opacity: 0; animation: popIn 0.5s forwards; position: relative; text-decoration: none; }
+        @keyframes popIn { 0% { opacity: 0; transform: translateX(30px); } 100% { opacity: 1; transform: translateX(0); } }
+        .nav-card:hover { background: rgba(197, 160, 89, 0.2); border-color: rgba(197, 160, 89, 0.5); transform: translateX(-5px); }
         .nav-card.active { background: rgba(197, 160, 89, 0.3); border-color: #C5A059; }
-        .icon-wrapper { width: 65px; height: 65px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; background: rgba(255,255,255,0.1); }
+        .icon-wrapper { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: rgba(255,255,255,0.1); flex-shrink: 0; }
         
         @media (max-width: 768px) {
           main { margin-right: 0px !important; padding-right: 10px !important; padding-left: 10px !important; }
           .fab-main { width: 65px !important; height: 65px !important; bottom: 20px !important; left: 20px !important; }
-          .items-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; gap: 12px !important; }
-          .nav-card { padding: 15px !important; }
-          .overlay-screen {
-            right: ${isOpen ? '0' : '-100%'} !important;
-            left: auto !important;
-            width: 280px !important;
-            max-width: 85vw !important;
-            height: 100dvh !important;
-            clip-path: none !important;
-            border-radius: 20px 0 0 20px !important;
-            transition: right 0.4s ease !important;
-            background: rgba(15, 12, 10, 0.98) !important;
-            padding: 40px 15px !important;
-            align-items: flex-start !important;
-            box-shadow: -10px 0 30px rgba(0,0,0,0.5);
-          }
         }
       `}</style>
 
@@ -206,8 +191,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         <img src="/RYC_Logo.png" alt="رواسي" className="fab-logo" />
       </div>
 
-      <nav className="overlay-screen no-print" onClick={() => setIsOpen(false)} style={{ pointerEvents: isOpen ? 'auto' : 'none' }}>
-          <div className="command-center" onClick={(e) => e.stopPropagation()}>
+      <div className="overlay-backdrop no-print" onClick={() => setIsOpen(false)}></div>
+      <nav className="overlay-screen no-print" onClick={(e) => e.stopPropagation()}>
+          <div className="command-center">
             <div style={{ background: 'rgba(197, 160, 89, 0.2)', padding: '10px 20px', borderRadius: '15px', fontSize: '14px', textAlign: 'center', color: '#fff', marginBottom: '20px', fontWeight: 900 }}>
                بوابة الإدارة المركزية | {role === 'super_admin' ? '👑 سوبر أدمن' : '👤 مسؤول نظام'}
             </div>
@@ -249,8 +235,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           position: 'relative', 
           zIndex: 1,
           overflowX: 'hidden',
-          filter: isOpen ? 'blur(20px) grayscale(30%)' : 'none', 
-          transform: isOpen ? 'scale(0.97)' : 'scale(1)', 
           transition: 'margin-right 0.5s cubic-bezier(0.165, 0.84, 0.44, 1)' 
       }}>
         {children}
