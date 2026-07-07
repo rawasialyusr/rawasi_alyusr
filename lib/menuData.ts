@@ -54,7 +54,6 @@ export const menuGroups = [
     { 
         group: "العمالة والموارد البشرية", 
         items: [
-            { id: 'employees', title: 'سجل الموظفين', icon: '👔', path: '/employees' }, 
             { id: 'team', title: 'إدارة فرق العمل', icon: '👥', path: '/team' },
             { id: 'labor_logs', title: 'يوميات الميدان', icon: '👷', path: '/labor_logs' }, 
             { id: 'payroll', title: 'مسيرات الرواتب', icon: '💵', path: '/payroll' }, 

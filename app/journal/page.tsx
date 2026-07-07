@@ -139,6 +139,11 @@ function useJournalLogic() {
     const deleteHeadersMutation = useMutation({
         mutationFn: async () => {
             const selectedLines = journalMaster.filter(l => selectedIds.includes(String(l.line_id)));
+            const invalidStatusLines = selectedLines.filter(l => l.header_status !== 'مسودة');
+            if (invalidStatusLines.length > 0) {
+                 throw new Error('مرفوض ⛔: لا يمكن مسح قيد حالته "مرحل" أو "معتمد". يجب فك الترحيل أولاً.');
+            }
+
             const headerIds = [...new Set(selectedLines.map(l => l.header_id))];
 
             if (headerIds.length === 0) throw new Error('لم يتم تحديد أي قيود صالحة.');

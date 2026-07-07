@@ -38,6 +38,9 @@ export function useUniversalPosting(queryKey: string, tableName: string, postRpc
                 p_table_name: tableName 
             });
             if (error) throw new Error(error.message);
+
+            // 🚀 تصحيح: الدالة المركزية قد لا تحدث حالة السند النصية إلى مسودة، مما يجعله "معلقاً" عند التعديل
+            await supabase.from(tableName).update({ status: 'مسودة' }).in('id', selectedIds);
         },
         onSuccess: () => {
             showToast('تم فك الترحيل ومسح القيود بنجاح ⏪', 'success');
