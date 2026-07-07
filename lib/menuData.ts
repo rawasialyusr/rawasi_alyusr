@@ -10,10 +10,11 @@ export const menuGroups = [
         ] 
     },
     { 
-        group: "الحسابات والمالية", 
+        group: "الحسابات المالية", 
         items: [
-            { id: 'accounts', title: 'دليل الحسابات', icon: '🗂️', path: '/accounts' },
-            { id: 'journal', title: 'قيود اليومية', icon: '📝', path: '/journal' }, 
+            { id: 'accounts', title: 'شجرة الحسابات', icon: '🌳', path: '/accounts' },
+            { id: 'manual_journals', title: 'القيود اليدوية (تسويات)', icon: '📝', path: '/ManualJournals' },
+            { id: 'journal', title: 'دفتر اليومية', icon: '📓', path: '/journal' }, 
             { id: 'ledger', title: 'دفتر الأستاذ', icon: '📒', path: '/ledger' }, 
             { id: 'journal_errors', title: 'رادار الأخطاء', icon: '🛡️', path: '/journal-errors' }, 
             { id: 'cashflows', title: 'التدفقات النقدية', icon: '🔄', path: '/cashflows' }, 

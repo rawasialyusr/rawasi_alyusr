@@ -164,8 +164,8 @@ export function useMaterialIssuesLogic() {
     const saveIssueMutation = useMutation({
         mutationFn: async () => {
             if (editingIssueId) {
-                const { data: existing } = await supabase.from('material_issues').select('is_posted, status').eq('id', editingIssueId).single();
-                if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                const { data: existing } = await supabase.from('material_issues').select('is_posted').eq('id', editingIssueId).single();
+                if (existing && existing.is_posted) {
                     throw new Error("لا يمكن تعديل إذن صرف مرحل. يرجى فك الترحيل أولاً.");
                 }
             }
@@ -254,8 +254,8 @@ export function useMaterialIssuesLogic() {
             
             if (action === 'delete') {
                 for (const uId of uniqueIssueIds) {
-                    const { data: existing } = await supabase.from('material_issues').select('is_posted, status').eq('id', uId).single();
-                    if (existing && (existing.is_posted || existing.status === 'مرحل' || existing.status === 'معتمد')) {
+                    const { data: existing } = await supabase.from('material_issues').select('is_posted').eq('id', uId).single();
+                    if (existing && existing.is_posted) {
                         throw new Error("لا يمكن حذف إذن صرف مرحل. يرجى فك الترحيل أولاً.");
                     }
                 }

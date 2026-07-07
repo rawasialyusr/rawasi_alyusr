@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect, useDeferredValue } from 'react'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; 
 import { supabase } from '@/lib/supabase';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { fetchAllSupabaseData, formatCurrency, formatDate } from '@/lib/helpers'; 
 import { useToast } from '@/lib/toast-context'; 
 
@@ -260,7 +260,7 @@ export function useLaborLogsLogic() {
     });
 
     const exportToExcel = () => {
-        const ws = XLSX.utils.json_to_sheet(allFiltered.map(log => {
+        const data = allFiltered.map(log => {
             const totalWage = Number(log.daily_wage || 0);
             return {
                 'التاريخ': log.work_date,
@@ -272,17 +272,77 @@ export function useLaborLogsLogic() {
                 'الطريحة': log.tareeha || '-',
                 'الإنتاجية': log.productivity || '-',
                 'الإنجاز': log.completion_percentage ? `${log.completion_percentage}%` : '-',
-                'اليومية': log.daily_wage,
+                'اليومية': totalWage,
                 'الصافي الفعلي': Math.max(0, totalWage),
                 'الحضور': log.attendance_value === 1 ? 'يوم كامل' : log.attendance_value === 0.5 ? 'نصف يوم' : 'غياب',
                 'ملاحظات': log.notes || '-',
                 'الحالة': log.is_posted ? 'معتمد' : 'معلق'
             }
-        }));
+        });
+
+        // Add Totals Row
+        const totalAmount = data.reduce((sum, row) => sum + (Number(row['الصافي الفعلي']) || 0), 0);
+        data.push({
+            'التاريخ': 'الإجمالي الكلي',
+            'اسم العامل': '-',
+            'الموقع': '-',
+            'البند': '-',
+            'الوحدة': '-',
+            'مستوى المهارة': '-',
+            'الطريحة': '-',
+            'الإنتاجية': '-',
+            'الإنجاز': '-',
+            'اليومية': totalAmount,
+            'الصافي الفعلي': totalAmount,
+            'الحضور': '-',
+            'ملاحظات': '-',
+            'الحالة': '-'
+        });
+
+        const ws = XLSX.utils.json_to_sheet(data);
+
+        // Styling
+        const range = XLSX.utils.decode_range(ws['!ref'] || '');
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const address = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[address]) continue;
+                
+                const isHeader = R === 0;
+                const isTotal = R === range.e.r;
+
+                ws[address].s = {
+                    font: { 
+                        bold: isHeader || isTotal,
+                        color: { rgb: isHeader ? "FFFFFF" : (isTotal ? "000000" : "333333") }
+                    },
+                    fill: { 
+                        fgColor: { rgb: isHeader ? "1E293B" : (isTotal ? "E2E8F0" : "FFFFFF") } 
+                    },
+                    alignment: { horizontal: "center", vertical: "center" },
+                    border: {
+                        top: { style: "thin", color: { auto: 1 } },
+                        bottom: { style: "thin", color: { auto: 1 } },
+                        left: { style: "thin", color: { auto: 1 } },
+                        right: { style: "thin", color: { auto: 1 } }
+                    }
+                };
+            }
+        }
+
+        ws['!cols'] = [
+            { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 15 },
+            { wch: 10 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
+            { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+            { wch: 25 }, { wch: 10 }
+        ];
+
+        ws['!dir'] = 'rtl';
+
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "يوميات_العمالة");
+        XLSX.utils.book_append_sheet(wb, ws, "يوميات_العمالة_كشف_حساب");
         XLSX.writeFile(wb, "يوميات_العمالة.xlsx");
-        showToast('تم تصدير الإكسل 📊', 'success');
+        showToast('تم تصدير الإكسل بتنسيق جديد 📊', 'success');
     };
 
     const getAttendanceStyle = (status: string) => {

@@ -649,9 +649,9 @@ export default function MaterialsPage() {
                                                                             <td className="no-print" style={{ textAlign: 'center' }}>
                                                                                 <input 
                                                                                     type="checkbox" 
-                                                                                    disabled={!group.is_posted || (item.available_qty <= 0)}
+                                                                                    
                                                                                     checked={!!logic.selectedLineItems?.find((i:any)=>i.id===item.id)}
-                                                                                    onChange={() => logic.handleToggleLineSelection(item)}
+                                                                                    onChange={(e) => { if (!group.is_posted) { e.preventDefault(); alert('عفواً، الفاتورة غير مرحلة. يجب ترحيل الفاتورة أولاً لتتمكن من الصرف منها.'); return; } if (item.available_qty <= 0) { e.preventDefault(); alert('عفواً، الكمية المتاحة صفر.'); return; } logic.handleToggleLineSelection(item); }}
                                                                                     style={{ transform: 'scale(1.3)', cursor: (!group.is_posted || item.available_qty <= 0) ? 'not-allowed' : 'pointer', accentColor: '#0284c7' }}
                                                                                 />
                                                                             </td>
@@ -675,7 +675,7 @@ export default function MaterialsPage() {
                                                                                         e.stopPropagation(); 
                                                                                         logic.handleOpenDispense(item); 
                                                                                     }}
-                                                                                    disabled={!group.is_posted || (item.available_qty <= 0)}
+                                                                                    
                                                                                     title={!group.is_posted ? "يجب ترحيل الفاتورة أولاً لصرف الخامات" : ""}
                                                                                     style={{ 
                                                                                         background: (group.is_posted && item.available_qty > 0) ? '#3b82f6' : '#cbd5e1', 
