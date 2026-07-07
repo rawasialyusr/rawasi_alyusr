@@ -10,7 +10,7 @@
  */
 export async function fetchPaginatedData(
     buildQuery: () => any, 
-    primaryKey: string = 'id',
+    primaryKey: string | ((row: any, index: number) => string) = 'id',
     maxRows: number = 50000,
     step: number = 1000
 ) {
@@ -31,12 +31,14 @@ export async function fetchPaginatedData(
         if (error) throw new Error(error.message);
 
         if (data && data.length > 0) {
+            let rowIndex = from;
             for (const row of data) {
-                const id = String(row[primaryKey]);
+                const id = typeof primaryKey === 'function' ? primaryKey(row, rowIndex) : String(row[primaryKey]);
                 if (!seenIds.has(id)) {
                     seenIds.add(id);
                     allData.push(row);
                 }
+                rowIndex++;
             }
             from += step;
             if (data.length < step) hasMore = false;

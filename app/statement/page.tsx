@@ -11,7 +11,9 @@ import { formatCurrency, formatDate } from '@/lib/helpers';
 import StatementPrintModal from './StatementPrintModal'; 
 import ExportLoadingModal from '@/components/ExportLoadingModal'; 
 
-export default function PartnerStatementPage() {
+import { Suspense } from 'react';
+
+function PartnerStatementContent() {
     const logic = useStatementLogic();
     const [mounted, setMounted] = useState(false);
     
@@ -245,5 +247,13 @@ export default function PartnerStatementPage() {
                 .table-wrapper-glass { background: rgba(255, 255, 255, 0.95); border-radius: 20px; overflow: hidden; padding: 10px; border: 1px solid rgba(197, 160, 89, 0.2); box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
             `}</style>
         </div>
+    );
+}
+
+export default function PartnerStatementPage() {
+    return (
+        <Suspense fallback={<div style={{ padding: '50px', textAlign: 'center' }}>جاري التحميل...</div>}>
+            <PartnerStatementContent />
+        </Suspense>
     );
 }

@@ -58,8 +58,14 @@ export function useStatementLogic() {
         queryFn: async () => {
             if (!partnerId) return [];
             const buildQuery = () => supabase.from('partner_statement_ledger') 
-                .select('*').eq('partner_id', partnerId).order('transaction_date', { ascending: true });
-            return await fetchPaginatedData(buildQuery, 'id');
+                .select('*').eq('partner_id', partnerId)
+                .order('transaction_date', { ascending: true })
+                .order('debit', { ascending: true })
+                .order('credit', { ascending: true })
+                .order('main_description', { ascending: true });
+            
+            // استخدمنا دالة توليد ID لعدم وجود Primary Key في الـ View
+            return await fetchPaginatedData(buildQuery, (row, index) => `${row.transaction_date}-${row.debit}-${row.credit}-${row.main_description}-${index}`);
         },
         enabled: !!partnerId, staleTime: 1000 * 60 * 5, 
     });
