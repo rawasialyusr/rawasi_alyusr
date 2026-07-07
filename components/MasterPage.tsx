@@ -231,6 +231,7 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
                  </Link>
              </div>
              
+             
              {/* Bottom: Back & Forward */}
              <div className="nav-group" style={{ display: 'flex', gap: '8px', margin: 0, padding: 0, border: 'none' }}>
                 <button onClick={() => router.forward()} className="nav-btn-glass" title="تقدم للأمام" style={{ width: '45px', height: '35px', borderRadius: '10px', fontSize: '20px' }}>
@@ -241,6 +242,21 @@ export default function MasterPage({ title, subtitle, children, headerContent, i
                 </button>
              </div>
           </div>
+          
+          {/* Avatar Card Restored */}
+          <div className="imperial-trigger" ref={triggerRef} onClick={toggleMenu} style={{ flexShrink: 0 }}>
+            <div className="u-info-text">
+              <span className="u-name">{userProfile?.full_name || 'جاري التحميل...'}</span>
+              <span className="u-role">
+                {userProfile?.role === 'super_admin' ? 'مدير عام 👑' : 'مسؤول نظام 🛡️'}
+              </span>
+            </div>
+            <div className="avatar-frame">
+              <img src={userProfile?.avatar_url || `https://ui-avatars.com/api/?name=${userProfile?.full_name || 'U'}&background=C5A059&color=fff&bold=true`} alt="Avatar" />
+              <div className="active-dot"></div>
+            </div>
+          </div>
+
         </div>
       </header>
 
