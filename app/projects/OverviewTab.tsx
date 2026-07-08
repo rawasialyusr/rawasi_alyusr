@@ -95,7 +95,7 @@ export default function OverviewTab({ logic }: { logic: any }) {
         <KpiCard title="المصروفات الموزعة (ABC)" value={projectFinancials.totalAllocatedABC} color="#9333EA" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '25px', marginBottom: '25px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px', marginBottom: '25px' }}>
         <div className="glass-card">
           <h3 style={{ margin: '0 0 20px 0', color: THEME.coffeeDark, fontWeight: 900 }}>👷 تقرير العمالة الميدانية</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>

@@ -142,6 +142,9 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                             <option value="مسودة">📄 مسودة</option>
                             <option value="جاري التنفيذ">⏳ جاري التنفيذ</option>
                             <option value="موقوف">⏸️ موقوف</option>
+                            <option value="جاري التسليم">🚚 جاري التسليم</option>
+                            <option value="مفوتر">🧾 مفوتر</option>
+                            <option value="تم التحصيل">💰 تم التحصيل</option>
                             <option value="مكتمل">✅ مكتمل</option>
                         </select>
                     </div>

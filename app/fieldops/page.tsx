@@ -37,7 +37,7 @@ export default function FieldOperationsPage() {
                 />
 
                 <style>{`
-                    .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 25px; padding: 10px; }
+                    .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding: 10px; }
                     .site-card { background: rgba(255,255,255,0.7); backdrop-filter: blur(15px); border-radius: 28px; padding: 25px; border: 1px solid rgba(255,255,255,0.8); transition: 0.3s; position: relative; overflow: hidden; }
                     .site-card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.1); }
                     .stat-badge { background: #f1f5f9; padding: 10px 15px; borderRadius: 16px; textAlign: center; }

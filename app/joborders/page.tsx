@@ -134,6 +134,12 @@ export default function JobOrdersPage() {
                         <option value="جاري التنفيذ">⏳ جاري التنفيذ</option>
                         <option value="مكتمل">✅ مكتمل</option>
                         <option value="موقوف">⏸️ موقوف</option>
+                        <option value="جاري التسليم">🚚 جاري التسليم</option>
+                        <option value="مفوتر">🧾 مفوتر</option>
+                        <option value="تم التحصيل">💰 تم التحصيل</option>
+                        <option value="جاري التسليم">🚚 جاري التسليم</option>
+                        <option value="مفوتر">🧾 مفوتر</option>
+                        <option value="تم التحصيل">💰 تم التحصيل</option>
                     </select>
                 </div>
 
@@ -173,7 +179,7 @@ export default function JobOrdersPage() {
         <LoadingScreen message="جاري تحميل أوامر التشغيل..." fullScreen={false} />
       ) : (
         <div style={{ padding: '10px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
             {logic.allFiltered.slice((logic.currentPage - 1) * logic.rowsPerPage, logic.currentPage * logic.rowsPerPage).map((row: any) => {
               const isSelected = logic.selectedIds.includes(String(row.id));
               const isSelf = row.executor_type === 'تنفيذ ذاتي';
@@ -210,6 +216,9 @@ export default function JobOrdersPage() {
               if (row.status === 'جاري التنفيذ') badgeStyle = { bg: '#dbeafe', color: '#2563eb', dot: '#3b82f6', icon: '⏳' };
               if (row.status === 'مكتمل') badgeStyle = { bg: '#dcfce3', color: '#10b981', dot: '#22c55e', icon: '✅' };
               if (row.status === 'موقوف') badgeStyle = { bg: '#fee2e2', color: '#dc2626', dot: '#ef4444', icon: '⏸️' };
+              if (row.status === 'جاري التسليم') badgeStyle = { bg: '#fef08a', color: '#a16207', dot: '#eab308', icon: '🚚' };
+              if (row.status === 'مفوتر') badgeStyle = { bg: '#e0e7ff', color: '#4338ca', dot: '#6366f1', icon: '🧾' };
+              if (row.status === 'تم التحصيل') badgeStyle = { bg: '#d1fae5', color: '#047857', dot: '#10b981', icon: '💰' };
 
               return (
                 <div 
@@ -327,6 +336,20 @@ export default function JobOrdersPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <select 
+                        value={row.status}
+                        onChange={(e) => { e.stopPropagation(); logic.handleUpdateSingleStatus(row.id, e.target.value); }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ flex: 1, padding: '8px', background: 'rgba(255, 255, 255, 0.8)', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '16px', fontWeight: 800, cursor: 'pointer', outline: 'none' }}
+                    >
+                        <option value="مسودة">📝 مسودة</option>
+                        <option value="جاري التنفيذ">⏳ جاري التنفيذ</option>
+                        <option value="مكتمل">✅ مكتمل</option>
+                        <option value="موقوف">⏸️ موقوف</option>
+                        <option value="جاري التسليم">🚚 جاري التسليم</option>
+                        <option value="مفوتر">🧾 مفوتر</option>
+                        <option value="تم التحصيل">💰 تم التحصيل</option>
+                    </select>
                     <button onClick={(e) => { e.stopPropagation(); logic.handleEdit(row); }} className="btn-main-glass" style={{ flex: 1, padding: '8px', background: 'rgba(59, 130, 246, 0.05)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                       📝 تعديل
                     </button>

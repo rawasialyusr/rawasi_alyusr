@@ -309,7 +309,7 @@ export default function DashboardPage() {
         .section-title { font-size: 20px; color: ${THEME.coffeeDark}; font-weight: 900; margin: 0 0 20px 0; display: flex; align-items: center; gap: 10px; }
         
         /* Grids */
-        .premium-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; }
+        .premium-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; }
         .premium-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 25px; }
         .premium-grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
         .health-rings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
