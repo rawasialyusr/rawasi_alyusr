@@ -200,9 +200,9 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
         <div className="modal-overlay" onClick={onClose}>
             <style>{`
                 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(15px); display: flex; align-items: center; justify-content: center; z-index: 999999; }
-                .modal-content { width: 1100px; max-height: 90vh; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; animation: slideUp 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); box-shadow: 0 30px 60px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.5); direction: rtl; }
+                .modal-content { width: 95vw; max-width: 1100px; max-height: 90vh; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; animation: slideUp 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); box-shadow: 0 30px 60px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.5); direction: rtl; }
                 @keyframes slideUp { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-                .tab-btn { padding: 18px 25px; border: none; background: transparent; font-weight: 900; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; transition: all 0.3s ease; font-size: 15px; flex: 1; position: relative; }
+                .tab-btn { min-width: 120px; white-space: nowrap; padding: 18px 25px; border: none; background: transparent; font-weight: 900; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; transition: all 0.3s ease; font-size: 15px; flex: 1; position: relative; }
                 .tab-btn::after { content: ''; position: absolute; bottom: -1px; left: 50%; width: 0; height: 3px; background: #C5A059; transition: all 0.3s ease; transform: translateX(-50%); }
                 .tab-btn.active { color: #1e293b; background: linear-gradient(0deg, rgba(197, 160, 89, 0.05) 0%, transparent 100%); }
                 .tab-btn.active::after { width: 100%; }
@@ -213,11 +213,11 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                 {/* Header */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98))', padding: '30px 40px', color: 'white', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #C5A059, #fcd34d, #C5A059)' }}></div>
-                    <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(197, 160, 89, 0.15) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }}></div>
+                    <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '150px', height: '150px', background: 'radial-gradient(circle, rgba(197, 160, 89, 0.15) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }}></div>
                     
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '15px', position: 'relative', zIndex: 1 }}>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: '26px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <h2 style={{ margin: 0, fontSize: 'clamp(18px, 4vw, 26px)', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
                                 {isSubcontractor ? '🤝 كشف حساب مقاول الباطن' : '📊 دفتر أستاذ التشغيل'}
                                 <span style={{ fontSize: '14px', background: 'rgba(255,255,255,0.1)', padding: '6px 15px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', backdropFilter: 'blur(5px)', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
                                     أمر رقم: <span style={{ color: '#C5A059' }}>{jobOrder?.order_number}</span>
@@ -233,7 +233,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '35px', position: 'relative', zIndex: 1 }}>
                         {/* الصف الأول: التفاصيل والمصروفات */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+                        <div className="responsive-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
                             <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>خامات منصرفة</div>
                                 <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(materialsTotal)}</div>
@@ -263,7 +263,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                         </div>
 
                         {/* الصف الثاني: المؤشرات الرئيسية */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                        <div className="responsive-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
                             <div style={{ background: 'rgba(255,255,255,0.04)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>{isSubcontractor ? 'قيمة الإسناد المقدرة' : 'الميزانية المعتمدة'}</div>
                                 <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#C5A059' }}>{formatCurrency(isSubcontractor ? totalWorkValue : (jobOrder?.boq_total_budget || 0))}</div>
