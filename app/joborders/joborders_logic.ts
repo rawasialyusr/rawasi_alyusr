@@ -266,6 +266,17 @@ export function useJobOrdersLogic() {
         },
         onError: (err: any) => showToast(`خطأ في تحديث الحالة: ${err.message}`, "error")
     });
+    const changeSingleStatusMutation = useMutation({
+        mutationFn: async ({ id, newStatus }: { id: string, newStatus: string }) => {
+            const { error } = await supabase.from('job_orders').update({ status: newStatus }).eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: (_, variables) => {
+            showToast(`تم تغيير الحالة إلى ${variables.newStatus} بنجاح ✅`, "success");
+            queryClient.invalidateQueries({ queryKey: ['job_orders'] });
+        },
+        onError: (err: any) => showToast(`خطأ في تحديث الحالة: ${err.message}`, "error")
+    });
 
     const deleteMutation = useMutation({
         mutationFn: async () => {
@@ -311,6 +322,7 @@ export function useJobOrdersLogic() {
             }
             saveMutation.mutate(record);
         },
+        handleUpdateSingleStatus: (id: string, newStatus: string) => changeSingleStatusMutation.mutate({ id, newStatus }),
         handleCompleteSelected: () => changeStatusMutation.mutate('مكتمل'), 
         handleSuspendSelected: () => changeStatusMutation.mutate('موقوف'), 
         handleDeleteSelected: () => {
