@@ -275,7 +275,6 @@ export default function RawasiSmartTable({
                         )}
                     </motion.tbody>
                 </table>
-          </div>
             </div>
 
             {enablePagination && totalItems > 0 && (
