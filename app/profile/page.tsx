@@ -98,7 +98,7 @@ export default function EmployeeProfilePage() {
                             <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8', fontWeight: 900 }}>أيام العمل</p>
                             <h4 style={{ margin: '5px 0 0 0', color: THEME.goldAccent, fontSize: '20px' }}>{workDays}</h4>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                             <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '10px', borderRadius: '15px', textAlign: 'center' }}>
                                 <p style={{ margin: 0, fontSize: '10px', color: THEME.success, fontWeight: 900 }}>مستحقات</p>
                                 <div style={{ margin: '5px 0 0 0', color: 'white', fontSize: '13px', fontWeight: 900 }}>{formatCurrency(totalWages)}</div>
@@ -311,7 +311,7 @@ export default function EmployeeProfilePage() {
 
                 <div style={{ padding: '35px' }}>
                     {activeTab === 'tasks' && !isKpiOnly && (
-                        <div className="animate-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '35px' }}>
+                        <div className="animate-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '35px' }}>
                             <div>
                                 <h3 style={{ color: THEME.danger || '#be123c', borderRight: `6px solid ${THEME.danger || '#be123c'}`, paddingRight: '15px', marginBottom: '25px' }}>⏳ مهام قيد التنفيذ</h3>
                                 {(tasks || []).filter((t:any) => t.status !== 'completed').map((task: any) => (
@@ -437,7 +437,7 @@ export default function EmployeeProfilePage() {
                                 <div className="animate-fade-in" style={{ background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', padding: '40px', borderRadius: '30px', border: `1px solid rgba(255,255,255,0.8)`, maxWidth: '700px', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.05)' }}>
                                     <h3 style={{marginTop:0, marginBottom:'25px', color: THEME.primary, fontWeight: 900, textAlign: 'center'}}>📝 تعبئة بيانات الطلب</h3>
                                     
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                                         {/* 🧠 استخدام السمارت كومبو بدلًا من الـ Select العادي */}
                                         <SmartCombo 
                                             label="نوع الطلب"
@@ -688,7 +688,7 @@ export default function EmployeeProfilePage() {
                                 )}
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#64748b', marginBottom: '8px' }}>الاسم المسجل (للقراءة فقط)</label>
                                     <input className="sidebar-input" style={{color:'#94a3b8', border:'2px solid #f1f5f9', background:'#f8fafc', marginBottom:0, cursor:'not-allowed', fontWeight: 800}} value={displayName} readOnly title="لتعديل الاسم، تواصل مع الإدارة" />

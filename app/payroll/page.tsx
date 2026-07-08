@@ -299,7 +299,7 @@ export default function PayrollPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginBottom: '25px' }}>
             <div style={{ background: 'white', padding: '20px', borderRadius: '12px', borderBottom: `4px solid ${THEME.primary}`, boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
               <div style={{ fontSize: '13px', color: THEME.textMuted, fontWeight: 'bold' }}>الكوادر المعروضة</div>
               <div style={{ fontSize: '24px', fontWeight: '900', color: THEME.primary }}>{logic.filteredRecords.length}</div>

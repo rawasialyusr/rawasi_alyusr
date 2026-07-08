@@ -151,7 +151,7 @@ export default function FinancialStatementsPage() {
 
            <div className="theatre-main-stage">
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', alignItems: 'start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '30px', alignItems: 'start' }}>
                 
                 {/* قائمة الدخل */}
                 <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>

@@ -251,7 +251,7 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                     )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginTop: '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginTop: '15px' }}>
                     <div style={{ background: 'rgba(255, 107, 107, 0.05)', padding: '15px', borderRadius: '12px', border: '1px dashed #fca5a5' }}>
                         <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textAlign: 'center' }}>🧱 إجمالي خصم الخامات (دقيق ومسحوب)</div>
                         <div style={{ fontSize: '20px', fontWeight: 900, color: '#dc2626', textAlign: 'center', marginTop: '10px' }}>{formatCurrency(realMatDed)}</div>
@@ -272,7 +272,7 @@ export default function ClaimFormModal({ isOpen, onClose, logic }: any) {
                     </div>
                 </div>
 
-                <div style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                <div style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>إجمالي الأعمال المنجزة</div>
                         <div style={{ fontSize: '20px', fontWeight: 900, color: '#60a5fa' }}>{formatCurrency(totalWork)}</div>

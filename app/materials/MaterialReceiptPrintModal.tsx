@@ -96,7 +96,7 @@ export default function MaterialReceiptPrintModal({ isOpen, onClose, logic, rece
                     </div>
 
                     {/* بيانات الفاتورة المتقدمة */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '35px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '35px' }}>
                         <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                             <p style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: 900, color: '#64748b', textTransform: 'uppercase' }}>🏢 المشروع الموجه له الخامات</p>
                             <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1e293b' }}>{masterData.project?.Property || '---'}</h3>
@@ -148,7 +148,7 @@ export default function MaterialReceiptPrintModal({ isOpen, onClose, logic, rece
                     </div>
 
                     {/* التوقيعات (بتصميم هادي) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '30px', textAlign: 'center', marginTop: 'auto', paddingTop: '40px', borderTop: '2px dashed #e2e8f0' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '30px', textAlign: 'center', marginTop: 'auto', paddingTop: '40px', borderTop: '2px dashed #e2e8f0' }}>
                         <div>
                             <p style={{ fontWeight: 900, color: '#64748b', marginBottom: '50px', fontSize: '14px' }}>أمين المخزن (المستلم)</p>
                             <div style={{ borderBottom: '2px solid #cbd5e1', width: '70%', margin: '0 auto' }}></div>

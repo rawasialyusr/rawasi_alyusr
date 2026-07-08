@@ -324,7 +324,7 @@ export default function AuditLogs() {
                         </div>
 
                         <div style={{ padding: '25px', overflowY: 'auto', flex: 1 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px', background: '#f1f5f9', padding: '15px', borderRadius: '16px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginBottom: '25px', background: '#f1f5f9', padding: '15px', borderRadius: '16px' }}>
                                 <div><span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>الجدول:</span><span style={{ fontWeight: 900 }}>{selectedLog.table_name}</span></div>
                                 <div><span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>العملية:</span><span style={{ fontWeight: 900 }}>{selectedLog.action}</span></div>
                                 <div><span style={{ display: 'block', fontSize: '11px', color: '#64748b', fontWeight: 800 }}>الوقت:</span><span style={{ fontWeight: 900, direction: 'ltr', display: 'inline-block' }}>{formatDate(selectedLog.created_at, true)}</span></div>

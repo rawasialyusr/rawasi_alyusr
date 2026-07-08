@@ -284,7 +284,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     💰 {record.id ? 'تعديل سند قبض' : 'إصدار سند قبض جديد'}
                 </h2>
                 
-                <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+                <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
                     
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ السند *</label>
@@ -354,7 +354,7 @@ export default function ReceiptVoucherModal({ isOpen, onClose, record, setRecord
                     {/* --- التوجيه المحاسبي --- */}
                     <div style={{ gridColumn: '1 / -1', background: 'rgba(255, 255, 255, 0.5)', padding: '25px', borderRadius: '20px', border: '1px solid rgba(0,0,0,0.05)', zIndex: 40 }}>
                         <h4 style={{ color: THEME.primary, margin: '0 0 15px 0', fontSize: '14px', fontWeight: 900 }}>🏦 التوجيه المحاسبي</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                             <div style={{ zIndex: 30 }}>
                                 <SmartCombo tabIndex={10} label="حساب الصندوق/البنك (مدين)" table="accounts" initialDisplay={record.safe_bank_acc_name} onSelect={(a: any) => setRecord({...record, safe_bank_acc_id: a.id, safe_bank_acc_name: a.name})} />
                             </div>

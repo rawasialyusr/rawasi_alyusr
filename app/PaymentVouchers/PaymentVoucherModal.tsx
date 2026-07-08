@@ -84,7 +84,7 @@ export default function PaymentVoucherModal({
                         <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>يمكن إضافتها لاحقاً للتوجيه المجمع</span>
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                         <div style={{ zIndex: 60, position: 'relative' }}>
                             {/* 1. الحساب المدين */}
                             <SmartCombo 
@@ -181,7 +181,7 @@ export default function PaymentVoucherModal({
                 )}
 
                 {/* 📅 التاريخ والمبلغ */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '25px' }}>
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>📅 تاريخ السداد *</label>
                         <input 
@@ -205,7 +205,7 @@ export default function PaymentVoucherModal({
                 </div>
 
                 {/* 📝 المشروع، طريقة الدفع، والبيان */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                     <div style={{ zIndex: 30, position: 'relative' }}>
                         <SmartCombo 
                             label="🏢 المشروع (اختياري / مركز تكلفة)" 
@@ -229,7 +229,7 @@ export default function PaymentVoucherModal({
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '25px' }}>
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: '#64748b', display: 'block', marginBottom: '8px' }}>🔢 رقم المرجع (حوالة / شيك)</label>
                         <input 

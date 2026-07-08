@@ -87,7 +87,7 @@ export default function BulkDispenseModal({ isOpen, onClose, selectedLines, onSa
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                     <div style={{ zIndex: 100, position: 'relative' }}>
                         <SmartCombo 
                             label="🏢 المشروع المستفيد من كل الخامات *" 

@@ -223,7 +223,7 @@ export default function ReceiptVouchersPage() {
                         <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>إجمالي التحصيلات 💰</span>
                         <div style={{fontSize:'22px', fontWeight:900, color: THEME.brand.gold}}>{formatCurrency(logic.kpis.totalAmount)}</div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                         <div className="summary-glass-card" style={{ borderColor: THEME.success, padding: '10px', textAlign: 'center' }}>
                             <span style={{fontSize:'10px', fontWeight:800, color:'#64748b'}}>مُرحّل ✅</span>
                             <div style={{fontSize:'16px', fontWeight:900, color: THEME.success}}>{logic.kpis.posted}</div>

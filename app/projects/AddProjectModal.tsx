@@ -53,7 +53,7 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
              </div>
            </div>
 
-           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', background: '#fffbeb', padding: '20px', borderRadius: '20px', border: '1px solid #fef3c7' }}>
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', background: '#fffbeb', padding: '20px', borderRadius: '20px', border: '1px solid #fef3c7' }}>
              <div>
                 <label className="modal-label" style={{ color: '#b45309' }}>🏠 نوع النموذج (Type)</label>
                 <input type="text" className="glass-input-field" placeholder="مثال: Type A, فيلا مزدوجة..." value={logic.currentProjectRecord.unit_type || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, unit_type: e.target.value})} />
@@ -64,7 +64,7 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
              </div>
            </div>
 
-           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
              <div>
                 <label className="modal-label">👤 العميل المالك</label>
                 <select className="glass-input-field" value={logic.currentProjectRecord.client_id || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, client_id: e.target.value})}>
@@ -79,7 +79,7 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
            </div>
 
            {/* 🚀 الحقول الجديدة: المهندس المسئول */}
-           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px dashed #cbd5e1' }}>
              <div>
                 <label className="modal-label" style={{ color: '#0f172a' }}>👨‍🔧 المهندس المسئول (بالموقع)</label>
                 <input type="text" className="glass-input-field" placeholder="اسم المهندس المشرف" value={logic.currentProjectRecord.engineer_in_charge || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, engineer_in_charge: e.target.value})} />
@@ -90,7 +90,7 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
              </div>
            </div>
 
-           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
              <div>
                 <label className="modal-label">📅 تاريخ البدء</label>
                 <input type="date" className="glass-input-field" value={logic.currentProjectRecord.start_date || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, start_date: e.target.value})} />
@@ -101,7 +101,7 @@ export default function AddProjectModal({ logic, mounted }: { logic: any, mounte
              </div>
            </div>
 
-           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
              <div>
                 <label className="modal-label" style={{ color: '#0369a1' }}>💰 قيمة التعاقد</label>
                 <input type="number" className="glass-input-field" placeholder="0.00" value={logic.currentProjectRecord.contract_value || ''} onChange={e => logic.setCurrentProjectRecord({...logic.currentProjectRecord, contract_value: e.target.value})} />

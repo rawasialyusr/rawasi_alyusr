@@ -80,7 +80,7 @@ export default function RevenuePage() {
                             value={logic.globalSearch} 
                             onChange={(e) => logic.setGlobalSearch(e.target.value)} 
                         />
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '5px' }}>
                             <input type="date" className="glass-input" value={logic.dateFrom} onChange={(e) => logic.setDateFrom(e.target.value)} />
                             <input type="date" className="glass-input" value={logic.dateTo} onChange={(e) => logic.setDateTo(e.target.value)} />
                         </div>

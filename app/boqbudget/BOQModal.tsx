@@ -56,7 +56,7 @@ export default function BOQModal({ isOpen, onClose, record, setRecord, onSave, i
                     </h2>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
                     
                     {/* --- الأساسيات --- */}
                     <div style={{ gridColumn: 'span 4' }}><span className="section-title" style={{color: THEME.accent}}>البيانات الأساسية والتصنيفات للربط التلقائي</span></div>
@@ -121,7 +121,7 @@ export default function BOQModal({ isOpen, onClose, record, setRecord, onSave, i
                     {/* --- الموازنة والتكاليف --- */}
                     <div style={{ gridColumn: 'span 2', marginTop: '15px', background: '#fffbeb', padding: '15px', borderRadius: '16px', border: '1px solid #fde68a' }}>
                         <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#b45309', marginBottom: '15px', borderBottom: '1px solid #fde68a', paddingBottom:'8px' }}>التكاليف التقديرية (الموازنة)</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                             <div><label style={{ fontSize: '11px', fontWeight: 900, color: '#b45309', display: 'block', marginBottom: '4px' }}>الخامات</label><input type="number" value={record.estimated_material_cost ?? ''} onChange={(e) => setRecord({...record, estimated_material_cost: e.target.value})} className="glass-input-field" /></div>
                             <div><label style={{ fontSize: '11px', fontWeight: 900, color: '#b45309', display: 'block', marginBottom: '4px' }}>العمالة</label><input type="number" value={record.estimated_labor_cost ?? ''} onChange={(e) => setRecord({...record, estimated_labor_cost: e.target.value})} className="glass-input-field" /></div>
                             <div><label style={{ fontSize: '11px', fontWeight: 900, color: '#b45309', display: 'block', marginBottom: '4px' }}>التشغيل</label><input type="number" value={record.estimated_operational_cost ?? ''} onChange={(e) => setRecord({...record, estimated_operational_cost: e.target.value})} className="glass-input-field" /></div>
@@ -131,7 +131,7 @@ export default function BOQModal({ isOpen, onClose, record, setRecord, onSave, i
 
                     <div style={{ gridColumn: 'span 2', marginTop: '15px', background: '#f0fdf4', padding: '15px', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
                         <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#15803d', marginBottom: '15px', borderBottom: '1px solid #bbf7d0', paddingBottom:'8px' }}>التكاليف والإيرادات الفعلية</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                             
                             {/* 🔒 مقفل - يسحب تلقائياً من حركات صرف الخامات (material_issue_lines) */}
                             <div>

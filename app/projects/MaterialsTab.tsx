@@ -80,7 +80,7 @@ export default function MaterialsTab({ logic }: { logic: any }) {
   return (
     <div>
       {/* 📊 أولاً: كروت السامري الإحصائي المتغير مع الفلتر */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '25px' }}>
         <div style={{ backgroundColor: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: '20px', borderRadius: '20px', borderBottom: `4px solid ${THEME.goldAccent}`, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
           <span style={{ display: 'block', fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: '5px' }}>🏗️ تكلفة الخامات (للبند المحدد حالياً)</span>
           <strong style={{ fontSize: '24px', color: THEME.coffeeDark, fontWeight: 900 }}>{formatCurrency(summaryStats.totalCost)}</strong>

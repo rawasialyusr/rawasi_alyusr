@@ -123,7 +123,7 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                 </div>
 
                 {/* Grid 2 Columns for better flow */}
-                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '25px' }}>
                     
                     {/* التواريخ والحالة */}
                     <div style={{ display: 'flex', gap: '15px' }}>
@@ -248,7 +248,7 @@ export default function JobOrderModal({ isOpen, onClose, record, setRecord, onSa
                 </div>
 
                 {/* Summary Grid */}
-                <div style={{ marginTop: '35px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                <div style={{ marginTop: '35px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>الكمية المسندة</div>
                         <div style={{ fontSize: '20px', fontWeight: 900 }}>{Number(record.assigned_qty || 0).toLocaleString('en-US')}</div>

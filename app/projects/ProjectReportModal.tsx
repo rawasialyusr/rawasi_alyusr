@@ -61,7 +61,7 @@ export default function ProjectReportModal({ isOpen, onClose, logic, boqStats, f
           </div>
 
           {/* بيانات المشروع */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px', backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px', backgroundColor: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
             <div><strong style={{ color: '#64748b' }}>اسم المشروع / العقار:</strong> <span style={{ fontWeight: 900, fontSize: '16px' }}>{project.Property}</span></div>
             <div><strong style={{ color: '#64748b' }}>العميل المالك:</strong> <span style={{ fontWeight: 900 }}>{project.client?.name || 'غير محدد'}</span></div>
             <div><strong style={{ color: '#64748b' }}>حالة المشروع:</strong> <span style={{ fontWeight: 900 }}>{project.status}</span></div>

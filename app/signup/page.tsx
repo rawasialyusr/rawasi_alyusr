@@ -211,7 +211,7 @@ export default function SignUpPage() {
                         />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                         <div>
                             <label className="input-label">كلمة المرور</label>
                             <input 

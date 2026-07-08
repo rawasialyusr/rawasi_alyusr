@@ -134,7 +134,7 @@ export default function MaterialCatalogPage() {
                   <div><label style={{ fontSize: '12px', fontWeight: 900 }}>اسم الخامة / الصنف الموحد</label><input type="text" className="glass-input-field" placeholder="مثال: حديد تسليح عز 16 مم" value={logic.currentRecord.item_name || ''} onChange={e => logic.setCurrentRecord({...logic.currentRecord, item_name: e.target.value})} /></div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                   <div><label style={{ fontSize: '12px', fontWeight: 900 }}>التصنيف (النوع)</label><input type="text" className="glass-input-field" placeholder="مثال: حديد، أسمنت، دهانات" value={logic.currentRecord.main_category || ''} onChange={e => logic.setCurrentRecord({...logic.currentRecord, main_category: e.target.value})} /></div>
                   <div><label style={{ fontSize: '12px', fontWeight: 900 }}>الوحدة الافتراضية</label><input type="text" className="glass-input-field" placeholder="طن، متر، كيس، حبة" value={logic.currentRecord.default_unit || ''} onChange={e => logic.setCurrentRecord({...logic.currentRecord, default_unit: e.target.value})} /></div>
                 </div>

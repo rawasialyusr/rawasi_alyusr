@@ -63,7 +63,7 @@ export default function FieldOperationsPage() {
                                 </div>
 
                                 {/* عدادات اليوم */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
                                     <div className="stat-badge">
                                         <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 800 }}>العمالة اليوم</div>
                                         <div style={{ fontSize: '20px', fontWeight: 900, color: THEME.primary }}>{site.todayWorkers}</div>

@@ -472,7 +472,7 @@ export default function MaterialsPage() {
                         </select>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
                         <div>
                             <label style={{ fontSize: '11px', color: '#475569', marginBottom: '6px', display: 'block', fontWeight: 900 }}>من تاريخ</label>
                             <input type="date" className="glass-input-field" style={{ height: '45px', padding: '0 10px' }} value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} />

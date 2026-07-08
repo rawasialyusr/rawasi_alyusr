@@ -180,7 +180,7 @@ function PartnerStatementContent() {
                                 </div>
                             </div>
                             <hr className="glass-divider" />
-                            <div className="dashboard-stats-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                            <div className="dashboard-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                                 <div className="stat-box cyan-outline"><small>🗓️ عدد أيام الحضور</small><span style={{ fontSize: '24px' }}>{logic.attendanceCount} <small style={{fontSize:'14px', opacity:0.8}}>يوم</small></span></div>
                                 <div className="stat-box dark-red"><small>⚠️ إجمالي الغرامات (عليه)</small><span style={{ fontSize: '24px', color: '#fca5a5' }}>{formatCurrency(logic.totalViolations)}</span></div>
                             </div>

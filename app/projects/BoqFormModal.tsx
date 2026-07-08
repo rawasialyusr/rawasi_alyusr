@@ -105,7 +105,7 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                         <h3 style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 900 }}>
                             📅 النطاق والجدول الزمني للتنفيذ (Time Schedule)
                         </h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                             <div>
                                 <label style={{ fontSize: '12px', fontWeight: 900, color: '#14532d', display: 'block', marginBottom: '8px' }}>تاريخ البدء المتوقع</label>
                                 <input type="date" style={{ width: '100%', padding: '12px', borderRadius: '12px', border: `1px solid #86efac`, outline: 'none', fontWeight: 900, color: '#14532d' }} 
@@ -144,7 +144,7 @@ export default function BoqFormModal({ isOpen, onClose, record, setRecord, onSav
                     </div>
 
                     {/* 📊 هيكلة الموازنة التقديرية (WBS Baseline) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
                         <div>
                             <label style={{ fontSize: '12px', fontWeight: 900, color: '#0369A1', display: 'block', marginBottom: '8px' }}>ميزانية العمالة</label>
                             <input type="number" style={{ width: '100%', padding: '12px', borderRadius: '12px', border: `2px solid #0369A140`, outline: 'none', fontWeight: 900, textAlign: 'center', color: '#0369A1' }} 

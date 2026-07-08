@@ -69,7 +69,7 @@ export default function AddDailyReportPage() {
           <p style={{ color: '#64748b', fontWeight: 'bold' }}>تعبئة بيانات التقرير اليومي</p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
           <div style={fld}> <label style={lbl}>التاريخ</label> <input type="date" name="Date" value={formData.Date} onChange={handleChange} required style={inp} /> </div>
           <div style={fld}> <label style={lbl}>المقاول الرئيسي</label> <input type="text" name="Main_Cont" value={formData.Main_Cont} onChange={handleChange} placeholder="اسم المقاول" style={inp} /> </div>
           <div style={fld}> <label style={lbl}>اسم الموظف</label> <input type="text" name="Emp_Name" value={formData.Emp_Name} onChange={handleChange} required placeholder="الاسم" style={inp} /> </div>

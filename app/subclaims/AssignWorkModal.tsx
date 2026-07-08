@@ -83,7 +83,7 @@ export default function AssignWorkModal({ isOpen, onClose, record, setRecord, on
                         </select>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '10px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '10px', background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
                         <div>
                             <label style={{ fontSize: '13px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '10px' }}>📦 الكمية (قابلة للتعديل)</label>
                             <input 

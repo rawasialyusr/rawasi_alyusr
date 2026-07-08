@@ -233,7 +233,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '35px', position: 'relative', zIndex: 1 }}>
                         {/* الصف الأول: التفاصيل والمصروفات */}
-                        <div className="responsive-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+                        <div className="responsive-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
                             <div style={{ background: 'rgba(255,255,255,0.06)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>خامات منصرفة</div>
                                 <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#f8fafc' }}>{formatCurrency(materialsTotal)}</div>
@@ -263,7 +263,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                         </div>
 
                         {/* الصف الثاني: المؤشرات الرئيسية */}
-                        <div className="responsive-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                        <div className="responsive-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
                             <div style={{ background: 'rgba(255,255,255,0.04)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
                                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>{isSubcontractor ? 'قيمة الإسناد المقدرة' : 'الميزانية المعتمدة'}</div>
                                 <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '8px', color: '#C5A059' }}>{formatCurrency(isSubcontractor ? totalWorkValue : (jobOrder?.boq_total_budget || 0))}</div>

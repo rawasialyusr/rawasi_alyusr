@@ -144,7 +144,7 @@ export default function MasterDashboard() {
 
                     <GlassContainer>
                         <h3>⚡ وصول سريع</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '15px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '15px' }}>
                             <QuickAction icon="📝" label="قيد جديد" />
                             <QuickAction icon="👷" label="تحضير عمال" />
                             <QuickAction icon="📂" label="التقارير" />

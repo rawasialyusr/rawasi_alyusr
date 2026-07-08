@@ -257,7 +257,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
                     </div>
                 </div>
 
-                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px' }}>
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '25px' }}>
                     
                     <div>
                         <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, display: 'block', marginBottom: '6px' }}>تاريخ الفاتورة</label>
@@ -490,7 +490,7 @@ export default function InvoiceFormModal({ isOpen, onClose, record, setRecord, o
 
                 </div>
 
-                <div className="responsive-summary-grid" style={{ marginTop: '35px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                <div className="responsive-summary-grid" style={{ marginTop: '35px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>خاضع للضريبة</div>
                         <div style={{ fontSize: '20px', fontWeight: 900 }}>{formatCurrency(record.taxable_amount ?? 0)}</div>

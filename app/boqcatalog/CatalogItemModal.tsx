@@ -46,7 +46,7 @@ export default function CatalogItemModal({ isOpen, onClose, record, setRecord, o
                                value={record.item_name || ''} onChange={e => setRecord({...record, item_name: e.target.value})} />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                         <div>
                             <label style={{ fontSize: '12px', fontWeight: 900 }}>الكود الذكي (اتركه فارغاً للتوليد الآلي)</label>
                             <input type="text" style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', textAlign: 'center', background: '#f8fafc' }} 

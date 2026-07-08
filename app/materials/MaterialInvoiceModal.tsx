@@ -113,7 +113,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                 </div>
 
                 {/* 📋 البيانات الأساسية (Master Data) */}
-                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
+                <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '25px', marginBottom: '25px' }}>
                     <div style={{ zIndex: 100, position: 'relative' }}>
                         <SmartCombo 
                             label="🏢 المشروع المستفيد (مركز التكلفة) *" 
@@ -253,7 +253,7 @@ export default function MaterialInvoiceModal({ isOpen, onClose, logic }: any) {
                 <input type="file" ref={fileInputRef} hidden accept="image/*,.pdf" onChange={(e) => { const file = e.target.files?.[0]; if(file) { const r = new FileReader(); r.onload = () => { setImagePreview(r.result as string); logic.setInvoiceData({ ...logic.invoiceData, attachments: [r.result] }); }; r.readAsDataURL(file); } }} />
 
                 {/* 🚀 الملخص المالي السفلي */}
-                <div className="responsive-summary-grid" style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                <div className="responsive-summary-grid" style={{ marginTop: '30px', padding: '25px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderRadius: '24px', color: 'white', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>عدد الأصناف المُسجلة</div>
                         <div style={{ fontSize: '24px', fontWeight: 900 }}>{logic.invoiceData.items.length}</div>
