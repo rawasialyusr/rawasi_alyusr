@@ -200,7 +200,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
         <div className="modal-overlay" onClick={onClose}>
             <style>{`
                 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(15px); display: flex; align-items: center; justify-content: center; z-index: 999999; }
-                .modal-content { width: 95vw; max-width: 1100px; max-height: 90vh; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; animation: slideUp 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); box-shadow: 0 30px 60px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.5); direction: rtl; }
+                .modal-content { width: 95vw; max-width: 1100px; max-height: 90vh; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 30px; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; animation: slideUp 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); box-shadow: 0 30px 60px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.5); direction: rtl; }
                 @keyframes slideUp { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
                 .tab-btn { min-width: 120px; white-space: nowrap; padding: 18px 25px; border: none; background: transparent; font-weight: 900; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; transition: all 0.3s ease; font-size: 15px; flex: 1; position: relative; }
                 .tab-btn::after { content: ''; position: absolute; bottom: -1px; left: 50%; width: 0; height: 3px; background: #C5A059; transition: all 0.3s ease; transform: translateX(-50%); }
@@ -211,7 +211,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
 
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98))', padding: '30px 40px', color: 'white', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98))', padding: '30px 20px', color: 'white', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, #C5A059, #fcd34d, #C5A059)' }}></div>
                     <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '150px', height: '150px', background: 'radial-gradient(circle, rgba(197, 160, 89, 0.15) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }}></div>
                     
@@ -285,7 +285,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                 </div>
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', background: 'rgba(248, 250, 252, 0.8)', padding: '0 20px', borderBottom: '1px solid #e2e8f0', overflowX: 'auto', backdropFilter: 'blur(10px)' }}>
+                <div style={{ display: 'flex', background: 'rgba(248, 250, 252, 0.8)', padding: '0 20px', borderBottom: '1px solid #e2e8f0', overflowX: 'auto', backdropFilter: 'blur(10px)', flexShrink: 0 }}>
                     {tabs.map(tab => (
                         <button key={tab.id} className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
                             {tab.label}
@@ -294,7 +294,7 @@ export default function JobOrderLedgerModal({ isOpen, onClose, jobOrder }: any) 
                 </div>
 
                 {/* Table Data */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+                <div style={{ padding: '20px', flexShrink: 0 }}>
                     {activeTab === 'مؤشرات الأداء' ? (
                         <div style={{ height: '450px', width: '100%', padding: '30px', background: 'rgba(255, 255, 255, 0.7)', borderRadius: '24px', border: '1px solid rgba(255, 255, 255, 0.8)', boxShadow: '0 10px 30px rgba(0,0,0,0.03)', backdropFilter: 'blur(20px)' }}>
                             <h3 style={{ textAlign: 'center', marginBottom: '30px', color: '#1e293b', fontWeight: 900, fontSize: '20px' }}>تحليل ميزانية أمر التشغيل</h3>
