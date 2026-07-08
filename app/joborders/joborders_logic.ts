@@ -17,6 +17,10 @@ export function useJobOrdersLogic() {
     const [statusFilter, setStatusFilter] = useState('');
     const [executorFilter, setExecutorFilter] = useState('');
     const [workitemFilter, setWorkitemFilter] = useState('');
+    const [projectFilter, setProjectFilter] = useState('');
+    const [partnerFilter, setPartnerFilter] = useState('');
+    const [financialFilter, setFinancialFilter] = useState('');
+    
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
@@ -176,9 +180,27 @@ export function useJobOrdersLogic() {
             let matchesWorkitem = true;
             if (workitemFilter && jo.boq_budget?.work_item !== workitemFilter) matchesWorkitem = false;
 
-            return matchesSearch && matchesDate && matchesStatus && matchesExecutor && matchesWorkitem;
+            let matchesProject = true;
+            if (projectFilter && jo.project_id !== projectFilter) matchesProject = false;
+
+            let matchesPartner = true;
+            if (partnerFilter && jo.contractor_id !== partnerFilter) matchesPartner = false;
+
+            let matchesFinancial = true;
+            if (financialFilter) {
+                const targetBudget = Number(jo.boq_budget?.total_price || jo.boq_total_budget || 0); 
+                const finalCost = Number(jo.final_effective_cost || 0);
+                const calculatedProfit = targetBudget - finalCost;
+
+                if (financialFilter === 'رابح' && (calculatedProfit <= 0 || targetBudget === 0)) matchesFinancial = false;
+                if (financialFilter === 'خاسر' && calculatedProfit >= 0) matchesFinancial = false;
+                if (financialFilter === 'تعادل' && (calculatedProfit !== 0 || finalCost === 0)) matchesFinancial = false;
+                if (financialFilter === 'لم يبدأ' && (calculatedProfit !== 0 || finalCost > 0)) matchesFinancial = false;
+            }
+
+            return matchesSearch && matchesDate && matchesStatus && matchesExecutor && matchesWorkitem && matchesProject && matchesPartner && matchesFinancial;
         });
-    }, [mergedJobOrders, deferredSearch, dateFrom, dateTo, statusFilter, executorFilter, workitemFilter]);
+    }, [mergedJobOrders, deferredSearch, dateFrom, dateTo, statusFilter, executorFilter, workitemFilter, projectFilter, partnerFilter, financialFilter]);
 
     const paginatedJobOrders = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -307,6 +329,9 @@ export function useJobOrdersLogic() {
         statusFilter, setStatusFilter: (v: string) => { setStatusFilter(v); setCurrentPage(1); },
         executorFilter, setExecutorFilter: (v: string) => { setExecutorFilter(v); setCurrentPage(1); },
         workitemFilter, setWorkitemFilter: (v: string) => { setWorkitemFilter(v); setCurrentPage(1); },
+        projectFilter, setProjectFilter: (v: string) => { setProjectFilter(v); setCurrentPage(1); },
+        partnerFilter, setPartnerFilter: (v: string) => { setPartnerFilter(v); setCurrentPage(1); },
+        financialFilter, setFinancialFilter: (v: string) => { setFinancialFilter(v); setCurrentPage(1); },
         selectedIds, setSelectedIds,
         currentPage, setCurrentPage,
         rowsPerPage, setRowsPerPage: (v: number) => { setRowsPerPage(v); setCurrentPage(1); },
